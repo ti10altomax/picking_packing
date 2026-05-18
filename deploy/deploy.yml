@@ -1,0 +1,175 @@
+---
+- name: Deploy Separa para a VM de produção
+  hosts: separa_prod
+  gather_facts: true
+  vars_files:
+    - group_vars/separa_prod/vars.yml
+
+  tasks:
+    # -------------------------------------------------------------------------
+    # Pré-checagens
+    # -------------------------------------------------------------------------
+    - name: Verifica se Docker está instalado
+      ansible.builtin.command: docker --version
+      register: docker_check
+      changed_when: false
+      failed_when: docker_check.rc != 0
+
+    - name: Verifica se docker compose v2 está disponível
+      ansible.builtin.command: docker compose version
+      register: compose_check
+      changed_when: false
+      failed_when: compose_check.rc != 0
+
+    - name: Garante diretório de deploy
+      ansible.builtin.file:
+        path: "{{ deploy_path }}"
+        state: directory
+        mode: '0755'
+
+    # -------------------------------------------------------------------------
+    # Sincronização do código
+    # -------------------------------------------------------------------------
+    - name: Sincroniza projeto (rsync, exclui pastas locais)
+      ansible.posix.synchronize:
+        src: "{{ playbook_dir }}/../"
+        dest: "{{ deploy_path }}/"
+        delete: false
+        recursive: true
+        checksum: true   # compara por hash, não mtime — evita problemas com WSL/Windows
+        rsync_opts:
+          - "--exclude=.git"
+          - "--exclude=node_modules"
+          - "--exclude=.next"
+          - "--exclude=__pycache__"
+          - "--exclude=*.pyc"
+          - "--exclude=postgres_data"
+          - "--exclude=certs"
+          - "--exclude=.env"
+          - "--exclude=.env.prod"
+          - "--exclude=staticfiles"
+          - "--exclude=deploy/inventory.yml"
+          - "--exclude=deploy/group_vars/*/vars.yml"
+          # Caches de build do app mobile — locks com mmap quebram o rsync via WSL
+          - "--exclude=.gradle"
+          - "--exclude=mobile/android/.gradle"
+          - "--exclude=mobile/android/build"
+          - "--exclude=mobile/android/app/build"
+          - "--exclude=mobile/.expo"
+          - "--exclude=mobile/dist"
+          - "--exclude=*.apk"
+          - "--exclude=*.aab"
+
+    # Cópia explícita de configs críticas (Caddyfile, etc.) — backup caso o rsync
+    # ainda erre. ansible.builtin.copy compara por conteúdo, sempre confiável.
+    - name: Garante Caddyfile atualizado
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../caddy/Caddyfile"
+        dest: "{{ deploy_path }}/caddy/Caddyfile"
+        mode: '0644'
+      register: caddyfile_changed
+
+    - name: Reinicia Caddy se Caddyfile mudou
+      ansible.builtin.command:
+        cmd: docker compose -f docker-compose.prod.yml restart caddy
+        chdir: "{{ deploy_path }}"
+      when: caddyfile_changed.changed
+
+    # -------------------------------------------------------------------------
+    # .env.prod renderizado a partir do template
+    # -------------------------------------------------------------------------
+    - name: Renderiza .env.prod
+      ansible.builtin.template:
+        src: templates/env.prod.j2
+        dest: "{{ deploy_path }}/.env.prod"
+        mode: '0600'
+
+    # -------------------------------------------------------------------------
+    # Certs HTTPS (mkcert) — copiados explicitamente porque certs/ está
+    # excluído do rsync por segurança
+    # -------------------------------------------------------------------------
+    - name: Garante diretório de certs na VM
+      ansible.builtin.file:
+        path: "{{ deploy_path }}/certs"
+        state: directory
+        mode: '0700'
+
+    - name: Copia certificado HTTPS
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../certs/cert.pem"
+        dest: "{{ deploy_path }}/certs/cert.pem"
+        mode: '0644'
+
+    - name: Copia chave privada HTTPS
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../certs/key.pem"
+        dest: "{{ deploy_path }}/certs/key.pem"
+        mode: '0600'
+
+    # -------------------------------------------------------------------------
+    # Bootstrap do banco — idempotente. Usa um postgres-alpine efêmero como
+    # cliente psql, falando com o Postgres exposto na 5432 do host.
+    # -------------------------------------------------------------------------
+    - name: Cria banco '{{ postgres_db }}' se não existir
+      ansible.builtin.shell: |
+        docker run --rm --network host postgres:16-alpine sh -c \
+          "PGPASSWORD={{ postgres_admin_password }} psql -h 127.0.0.1 -U {{ postgres_admin_user }} -tc \"SELECT 1 FROM pg_database WHERE datname = '{{ postgres_db }}'\" | grep -q 1 || \
+           PGPASSWORD={{ postgres_admin_password }} psql -h 127.0.0.1 -U {{ postgres_admin_user }} -c \"CREATE DATABASE {{ postgres_db }};\""
+      register: db_creation
+      changed_when: "'CREATE DATABASE' in db_creation.stdout"
+
+    - name: Cria usuário '{{ postgres_user }}' se não existir
+      ansible.builtin.shell: |
+        docker run --rm --network host postgres:16-alpine sh -c \
+          "PGPASSWORD={{ postgres_admin_password }} psql -h 127.0.0.1 -U {{ postgres_admin_user }} -tc \"SELECT 1 FROM pg_roles WHERE rolname = '{{ postgres_user }}'\" | grep -q 1 || \
+           PGPASSWORD={{ postgres_admin_password }} psql -h 127.0.0.1 -U {{ postgres_admin_user }} -c \"CREATE USER {{ postgres_user }} WITH ENCRYPTED PASSWORD '{{ postgres_password }}';\""
+      register: user_creation
+      changed_when: "'CREATE ROLE' in user_creation.stdout"
+
+    - name: Garante privilégios e ownership do banco
+      ansible.builtin.shell: |
+        docker run --rm --network host postgres:16-alpine sh -c \
+          "PGPASSWORD={{ postgres_admin_password }} psql -h 127.0.0.1 -U {{ postgres_admin_user }} -c \"ALTER DATABASE {{ postgres_db }} OWNER TO {{ postgres_user }};\" && \
+           PGPASSWORD={{ postgres_admin_password }} psql -h 127.0.0.1 -U {{ postgres_admin_user }} -c \"GRANT ALL PRIVILEGES ON DATABASE {{ postgres_db }} TO {{ postgres_user }};\" && \
+           PGPASSWORD={{ postgres_admin_password }} psql -h 127.0.0.1 -U {{ postgres_admin_user }} -d {{ postgres_db }} -c \"GRANT ALL ON SCHEMA public TO {{ postgres_user }};\""
+      changed_when: false
+
+    # -------------------------------------------------------------------------
+    # Build + start (recreate sempre — garante que pega novas variáveis e código)
+    # -------------------------------------------------------------------------
+    - name: Build das imagens
+      ansible.builtin.command:
+        cmd: docker compose -f docker-compose.prod.yml --env-file .env.prod build
+        chdir: "{{ deploy_path }}"
+      register: build_result
+      changed_when: build_result.rc == 0
+
+    - name: Sobe os containers
+      ansible.builtin.command:
+        cmd: docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --remove-orphans
+        chdir: "{{ deploy_path }}"
+      register: up_result
+      changed_when: "'Started' in up_result.stdout or 'Recreated' in up_result.stdout or 'Created' in up_result.stdout"
+
+    # -------------------------------------------------------------------------
+    # Status — mostra os containers de pé
+    # -------------------------------------------------------------------------
+    - name: Lista containers ativos
+      ansible.builtin.command:
+        cmd: docker compose -f docker-compose.prod.yml ps
+        chdir: "{{ deploy_path }}"
+      changed_when: false
+      register: ps_result
+
+    - name: Output do compose ps
+      ansible.builtin.debug:
+        var: ps_result.stdout_lines
+
+    - name: Resumo de URLs
+      ansible.builtin.debug:
+        msg:
+          - "App (HTTPS)             → https://{{ ansible_host }}"
+          - "Admin do Separa (HTTPS) → https://{{ ansible_host }}/admin/"
+          - "Django admin (HTTPS)    → https://{{ ansible_host }}/django-admin/"
+          - "Frontend (HTTP)         → http://{{ ansible_host }}:3003   (debug, sem cert)"
+          - "Backend (HTTP)          → http://{{ ansible_host }}:8003   (debug, sem cert)"

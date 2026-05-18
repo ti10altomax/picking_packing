@@ -1,0 +1,33 @@
+# Caddy — reverse proxy HTTPS pro Separa em produção.
+#
+# - Termina HTTPS com cert do mkcert (montado em /certs read-only)
+# - Roteia /api/*, /admin/* e /static/* pro backend Django
+# - Resto vai pro frontend Next.js
+# - Listener `:443` aceita qualquer SNI/host (cliente acessando por IP não manda
+#   SNI literal, então um site block tipo `https://IP { }` falha — catch-all evita)
+# - Não escuta na 80 (ocupada por outro stack na VM)
+{
+	# Sem ACME automático — usamos cert mkcert local
+	auto_https off
+	admin off
+}
+
+:443 {
+	tls /certs/cert.pem /certs/key.pem
+
+	encode gzip zstd
+
+	# Caminhos do backend Django (API, admin do Django em /django-admin/, static)
+	# /admin (sem /django-) é do frontend (tela admin do Separa).
+	@backend {
+		path /api/* /django-admin /django-admin/* /static/*
+	}
+	handle @backend {
+		reverse_proxy backend:8000
+	}
+
+	# Resto vai pro frontend Next.js
+	handle {
+		reverse_proxy frontend:3000
+	}
+}

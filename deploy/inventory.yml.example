@@ -1,0 +1,11 @@
+# Copie pra inventory.yml e ajuste se necessário (inventory.yml está no .gitignore).
+all:
+  children:
+    separa_prod:
+      hosts:
+        separa-vm:
+          ansible_host: 192.168.1.199
+          ansible_user: administrador
+          # Caso use senha em vez de chave SSH:
+          # ansible_password: "trocar-aqui"
+          # ansible_become_password: "trocar-aqui"

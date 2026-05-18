@@ -1,0 +1,63 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =========================================================================
+   Theme tokens — light + dark
+   Light: zinc clean. Dark: zinc-950 com camadas e acentos saturados.
+   ========================================================================= */
+
+:root {
+  --surface-bg: 249 250 251;       /* gray-50 */
+  --surface-card: 255 255 255;     /* white */
+  --surface-elev: 244 244 245;     /* zinc-100 */
+  --surface-border: 228 228 231;   /* zinc-200 */
+  --ink-default: 24 24 27;         /* zinc-900 */
+  --ink-muted: 82 82 91;           /* zinc-600 */
+  --ink-subtle: 161 161 170;       /* zinc-400 */
+}
+
+.dark {
+  --surface-bg: 9 9 11;            /* zinc-950 */
+  --surface-card: 24 24 27;        /* zinc-900 */
+  --surface-elev: 39 39 42;        /* zinc-800 */
+  --surface-border: 39 39 42;      /* zinc-800 */
+  --ink-default: 244 244 245;      /* zinc-100 */
+  --ink-muted: 161 161 170;        /* zinc-400 */
+  --ink-subtle: 113 113 122;       /* zinc-500 */
+  color-scheme: dark;
+}
+
+html, body {
+  background-color: rgb(var(--surface-bg));
+  color: rgb(var(--ink-default));
+}
+
+/* Scrollbar discreta no dark */
+.dark ::-webkit-scrollbar { width: 10px; height: 10px; }
+.dark ::-webkit-scrollbar-track { background: transparent; }
+.dark ::-webkit-scrollbar-thumb { background: rgb(63 63 70 / 0.6); border-radius: 6px; }
+.dark ::-webkit-scrollbar-thumb:hover { background: rgb(82 82 91 / 0.8); }
+
+/* Selection mais sutil no dark */
+.dark ::selection { background: rgb(59 130 246 / 0.4); }
+
+/* Inputs nativos seguem o color-scheme automaticamente,
+   mas autofill do Chrome insiste no fundo branco — overrideamos */
+.dark input:-webkit-autofill,
+.dark input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px rgb(24 24 27) inset !important;
+  -webkit-text-fill-color: rgb(244 244 245) !important;
+  caret-color: rgb(244 244 245) !important;
+}
+
+/* Inputs "vidro" — usados sobre wallpapers escuros (login, etc.).
+   Neutralizam o autofill amarelo do Chrome e mantêm o look translúcido. */
+.input-glass:-webkit-autofill,
+.input-glass:-webkit-autofill:hover,
+.input-glass:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px rgba(255, 255, 255, 0.06) inset !important;
+  -webkit-text-fill-color: white !important;
+  caret-color: white !important;
+  transition: background-color 5000s ease-in-out 0s;
+}

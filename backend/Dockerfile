@@ -1,0 +1,33 @@
+FROM python:3.12-slim
+
+ENV ORACLE_HOME=/opt/oracle/instantclient_21_13
+ENV LD_LIBRARY_PATH=/opt/oracle/instantclient_21_13:/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH}
+ENV PATH=${ORACLE_HOME}:${PATH}
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        build-essential gcc libpq-dev python3-dev \
+        curl wget unzip ca-certificates libaio-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN if [ ! -f /usr/lib/x86_64-linux-gnu/libaio.so.1 ]; then \
+        ln -s /usr/lib/x86_64-linux-gnu/libaio.so /usr/lib/x86_64-linux-gnu/libaio.so.1 2>/dev/null || true; \
+    fi && ldconfig
+
+RUN mkdir -p /opt/oracle && \
+    cd /tmp && \
+    wget -q https://download.oracle.com/otn_software/linux/instantclient/2113000/instantclient-basic-linux.x64-21.13.0.0.0dbru.zip && \
+    unzip -q instantclient-basic-linux.x64-21.13.0.0.0dbru.zip && \
+    mv instantclient_21_13 /opt/oracle/ && \
+    rm instantclient-basic-linux.x64-21.13.0.0.0dbru.zip && \
+    echo /opt/oracle/instantclient_21_13 > /etc/ld.so.conf.d/oracle-instantclient.conf && \
+    ldconfig
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+EXPOSE 8000

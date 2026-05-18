@@ -1,0 +1,217 @@
+from django.contrib import admin
+from django.utils.html import format_html
+from unfold.admin import ModelAdmin, TabularInline
+from unfold.contrib.filters.admin import (
+    ChoicesDropdownFilter,
+    RangeDateFilter,
+)
+from unfold.decorators import display
+
+from .models import (
+    Pedido, PedidoItem, Marketplace, Impressora, Lote,
+    PrintAgent, PrintJob, Volume, VolumeItem, PedidoLog,
+)
+
+
+# -----------------------------------------------------------------------------
+# Pedido — destaque no painel
+# -----------------------------------------------------------------------------
+
+# Mapeamento status → cor do badge no estilo "tailwind" do unfold
+STATUS_BADGES = {
+    "pendente":             ("Pendente",        "warning"),
+    "selecionado":          ("Selecionado",     "warning"),
+    "atribuido":            ("Atribuído",       "info"),
+    "separando":            ("Em separação",    "info"),
+    "separado":             ("Separado",        "success"),
+    "nao_conforme":         ("Não conforme",    "danger"),
+    "cancelado":            ("Cancelado",       "secondary"),
+    # Estados antigos (escopo congelado) — cinza
+    "faturado":             ("Faturado",        "secondary"),
+    "aguardando_etiquetar": ("Aguard. etiq.",   "secondary"),
+    "concluido":            ("Concluído",       "success"),
+}
+
+
+class PedidoItemInline(TabularInline):
+    model = PedidoItem
+    extra = 0
+    fields = ('sku', 'descricao', 'ean', 'qtd_pedida', 'qtd_separada', 'status')
+    readonly_fields = ('sku', 'descricao', 'ean', 'qtd_pedida')
+    can_delete = False
+    show_change_link = True
+
+
+@admin.register(Pedido)
+class PedidoAdmin(ModelAdmin):
+    list_display = (
+        'numero_externo', 'cliente_curto', 'status_badge',
+        'criado_em', 'separador',
+    )
+    list_filter = (
+        ('status', ChoicesDropdownFilter),
+        ('criado_em', RangeDateFilter),
+        ('separador', admin.RelatedOnlyFieldListFilter),
+    )
+    list_filter_submit = True       # botão "Aplicar" — não recarrega a cada clique
+    list_per_page = 50
+    search_fields = ('numero_externo', 'cliente')
+    date_hierarchy = 'criado_em'
+    readonly_fields = (
+        'criado_em', 'selecionado_em', 'atribuido_em',
+        'separacao_iniciada_em', 'separado_em',
+        'embalagem_enviada_em', 'embalagem_tentativas', 'embalagem_ultimo_erro',
+        'senior_atualizado_em', 'senior_tentativas', 'senior_ultimo_erro',
+    )
+    inlines = [PedidoItemInline]
+
+    fieldsets = (
+        ("Pedido", {
+            "fields": ("numero_externo", "cliente", "marketplace", "status"),
+        }),
+        ("Atribuição", {
+            "fields": (
+                "selecionado_em", "selecionado_por",
+                "atribuido_em", "atribuido_por",
+                "separador",
+            ),
+            "classes": ("tab",),
+        }),
+        ("Separação", {
+            "fields": (
+                "separacao_iniciada_em", "separado_em",
+                "endereco_fisico", "ordem_pilha",
+            ),
+            "classes": ("tab",),
+        }),
+        ("Não conforme", {
+            "fields": ("nao_conforme_em", "nao_conforme_motivo", "nao_conforme_detalhe"),
+            "classes": ("tab", "collapse"),
+        }),
+        ("Senior — escopo atual (volumes)", {
+            "fields": ("senior_atualizado_em", "senior_tentativas", "senior_ultimo_erro"),
+            "classes": ("tab", "collapse"),
+        }),
+        ("Senior — escopo antigo (embalagempfa, congelado)", {
+            "fields": (
+                "embalagem_enviada_em", "embalagem_tentativas", "embalagem_ultimo_erro",
+                "etiqueta_impressa_em",
+            ),
+            "classes": ("tab", "collapse"),
+        }),
+        ("Datas", {
+            "fields": ("criado_em", "faturado_em"),
+            "classes": ("tab", "collapse"),
+        }),
+    )
+
+    @display(description="Cliente", ordering="cliente")
+    def cliente_curto(self, obj):
+        if not obj.cliente:
+            return "—"
+        return obj.cliente if len(obj.cliente) <= 35 else obj.cliente[:32] + "…"
+
+    @display(
+        description="Status",
+        label={
+            "Pendente":        "warning",
+            "Selecionado":     "warning",
+            "Atribuído":       "info",
+            "Em separação":    "info",
+            "Separado":        "success",
+            "Não conforme":    "danger",
+            "Cancelado":       "secondary",
+            "Faturado":        "secondary",
+            "Aguard. etiq.":   "secondary",
+            "Concluído":       "success",
+        },
+    )
+    def status_badge(self, obj):
+        label, _ = STATUS_BADGES.get(obj.status, (obj.status, "secondary"))
+        return label
+
+
+# -----------------------------------------------------------------------------
+# Volume + items
+# -----------------------------------------------------------------------------
+
+class VolumeItemInline(TabularInline):
+    model = VolumeItem
+    extra = 0
+    fields = ('pedido_item', 'qtd', 'criado_em')
+    readonly_fields = ('criado_em',)
+
+
+@admin.register(Volume)
+class VolumeAdmin(ModelAdmin):
+    list_display = ('id', 'pedido', 'tipo', 'identificador', 'qtd_unidades', 'criado_em', 'fechado_em')
+    list_filter = (('tipo', ChoicesDropdownFilter),)
+    list_per_page = 50
+    search_fields = ('pedido__numero_externo', 'identificador')
+    inlines = [VolumeItemInline]
+    autocomplete_fields = ('pedido',)
+    readonly_fields = ('criado_em', 'criado_por')
+
+    @display(description="Unidades")
+    def qtd_unidades(self, obj):
+        return sum(i.qtd for i in obj.itens.all())
+
+
+# -----------------------------------------------------------------------------
+# Logs do pedido (auditoria)
+# -----------------------------------------------------------------------------
+
+@admin.register(PedidoLog)
+class PedidoLogAdmin(ModelAdmin):
+    list_display = ('criado_em', 'pedido', 'acao', 'usuario')
+    list_filter = (('acao', ChoicesDropdownFilter), ('criado_em', RangeDateFilter))
+    list_filter_submit = True
+    search_fields = ('pedido__numero_externo', 'acao', 'usuario__username')
+    readonly_fields = ('pedido', 'usuario', 'acao', 'payload', 'criado_em')
+    list_per_page = 100
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+# -----------------------------------------------------------------------------
+# Marketplace (congelado, mas registrado)
+# -----------------------------------------------------------------------------
+
+@admin.register(Marketplace)
+class MarketplaceAdmin(ModelAdmin):
+    list_display = ('slug', 'nome', 'ativo')
+    list_filter = ('ativo',)
+
+
+# -----------------------------------------------------------------------------
+# Etiquetagem — escopo congelado, registros mantidos
+# -----------------------------------------------------------------------------
+
+@admin.register(Impressora)
+class ImpressoraAdmin(ModelAdmin):
+    list_display = ('nome', 'modelo', 'tipo_conexao', 'formato_preferido', 'mesa', 'ativa', 'ultimo_heartbeat')
+    list_filter = (('tipo_conexao', ChoicesDropdownFilter), 'ativa')
+    search_fields = ('nome', 'modelo', 'mesa')
+
+
+@admin.register(PrintAgent)
+class PrintAgentAdmin(ModelAdmin):
+    list_display = ('hostname', 'versao', 'criado_em', 'ultimo_heartbeat')
+    readonly_fields = ('token', 'criado_em')
+    search_fields = ('hostname',)
+
+
+@admin.register(PrintJob)
+class PrintJobAdmin(ModelAdmin):
+    list_display = ('id', 'impressora', 'status', 'criado_em', 'retirado_em')
+    list_filter = (('status', ChoicesDropdownFilter), 'impressora')
+
+
+@admin.register(Lote)
+class LoteAdmin(ModelAdmin):
+    list_display = ('id', 'etiquetador', 'mesa', 'qtd_pedidos', 'criado_em', 'finalizado_em')
+    list_filter = ('mesa',)

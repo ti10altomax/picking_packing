@@ -1,0 +1,50 @@
+# Copie pra deploy/group_vars/separa_prod/vars.yml e preencha (gitignored).
+# Esses valores viram o .env.prod renderizado pelo Ansible na VM.
+
+deploy_path: /home/administrador/separa
+
+# --- Django ---
+django_secret_key: "TROCAR_POR_UMA_STRING_GRANDE_E_ALEATORIA"
+django_debug: "False"
+# separa.srv ainda não resolve no DNS interno — está aqui pré-configurado
+# pra quando rolar. Sem efeito enquanto ninguém resolver pra cá.
+django_allowed_hosts: "separa.srv,192.168.1.199,localhost,127.0.0.1,backend"
+cors_allowed_origins: "https://separa.srv,https://192.168.1.199,http://192.168.1.199:3003"
+
+# --- Postgres (na VM, fora do Docker do separa) ---
+postgres_db: separa
+postgres_user: separa
+postgres_password: "TROCAR"
+postgres_host: host.docker.internal
+postgres_port: "5432"
+
+# Credenciais admin pra criar o banco/usuário no primeiro deploy.
+# Usadas só no bootstrap (idempotente — não recria se já existir).
+postgres_admin_user: postgres
+postgres_admin_password: "TROCAR"
+
+# --- Redis (container dedicado dentro do compose do separa) ---
+# Resolvido via Docker DNS — não bate no Redis compartilhado da VM.
+redis_url: "redis://redis:6379/0"
+
+# --- Oracle Senior ---
+oracle_db: ORCL
+oracle_user: reports
+oracle_password: "TROCAR"
+oracle_host: 192.168.1.101
+oracle_port: "1521"
+oracle_schema: ERP_PROD
+
+# --- Senior SOAP ---
+senior_wsdl_embalagem: "http://192.168.1.210:8080/g5-senior-services/sapiens_Synccom_senior_g5_co_mcm_ven_embalagempfa?wsdl"
+senior_ws_user: ""
+senior_ws_password: ""
+
+# --- VTEX (congelado, mas mantido pra compatibilidade do .env) ---
+vtex_account_name: ""
+vtex_app_key: ""
+vtex_app_token: ""
+
+# --- JWT ---
+jwt_access_token_lifetime_minutes: "60"
+jwt_refresh_token_lifetime_days: "7"

@@ -1,0 +1,8 @@
+{
+  "pythonVersion": "3.12",
+  "extraPaths": ["backend"],
+  "exclude": ["**/node_modules", "**/__pycache__", "frontend/.next"],
+  "reportMissingImports": "none",
+  "reportMissingModuleSource": "none",
+  "reportUndefinedVariable": "warning"
+}

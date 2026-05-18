@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <!-- Linhas decorativas que afilam nas pontas -->
+    <linearGradient id="taper" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="white" stop-opacity="0"/>
+      <stop offset="15%" stop-color="white" stop-opacity="1"/>
+      <stop offset="85%" stop-color="white" stop-opacity="1"/>
+      <stop offset="100%" stop-color="white" stop-opacity="0"/>
+    </linearGradient>
+    <!-- Vinheta sutil pra ambientar -->
+    <radialGradient id="vinheta" cx="50%" cy="50%" r="70%">
+      <stop offset="60%" stop-color="black" stop-opacity="0"/>
+      <stop offset="100%" stop-color="black" stop-opacity="0.6"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1920" height="1080" fill="#000000"/>
+
+  <!-- Linha de cima -->
+  <rect x="430" y="382" width="1060" height="3" fill="url(#taper)"/>
+
+  <!-- PICKMAX -->
+  <text x="960" y="600"
+        text-anchor="middle"
+        font-family="Georgia, 'Times New Roman', Times, serif"
+        font-size="240"
+        font-weight="400"
+        fill="white"
+        letter-spacing="22">SEPARAMAX</text>
+
+  <!-- Linha de baixo -->
+  <rect x="430" y="660" width="1060" height="3" fill="url(#taper)"/>
+
+  <!-- Vinheta -->
+  <rect width="1920" height="1080" fill="url(#vinheta)"/>
+</svg>

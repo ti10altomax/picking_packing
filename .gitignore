@@ -1,0 +1,22 @@
+.env
+.env.prod
+__pycache__
+*.pyc
+.next
+node_modules
+postgres_data
+*.log
+.DS_Store
+dist
+certs/
+staticfiles/
+
+# Ansible — segredos do deploy
+deploy/inventory.yml
+deploy/group_vars/*/vars.yml
+deploy/*.retry
+
+# Binários do app mobile — não versionar
+*.apk
+*.aab
+.gradle/

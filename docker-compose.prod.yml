@@ -1,0 +1,104 @@
+# Produção (VM 192.168.1.199) — usa Postgres e Redis já existentes na máquina.
+# Requer .env.prod ao lado deste arquivo (gerado pelo Ansible).
+# Subir:
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+
+services:
+  # Caddy — reverse proxy HTTPS na frente de tudo.
+  # Cert vem de /certs (montado read-only) — reaproveita o mkcert do dev.
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      # Porta 80 da VM ocupada por outro stack (metas_nginx).
+      # Sem redirect HTTP→HTTPS — usuário acessa direto https://...
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./certs:/certs:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+      - backend
+
+  # Redis dedicado pro Separa — não exposto ao host (só Docker DNS interno).
+  # Mantém isolamento de memória/processo dos outros sistemas que rodam na VM.
+  #
+  # Defesa em profundidade contra "Redis come toda a VM":
+  #   1. maxmemory 256mb + allkeys-lru — Redis faz auto-eviction quando enche
+  #   2. mem_limit 320M no Docker — se escapar, OOM mata só o container, não a VM
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - allkeys-lru
+      - --save
+      - ""              # desliga snapshots em disco (só usamos como cache/broker)
+      - --appendonly
+      - "no"
+    mem_limit: 320m
+    # Sem `ports:` — fica interno à rede Docker do projeto
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    image: separa-backend:prod
+    restart: unless-stopped
+    env_file: .env.prod
+    ports:
+      - "8003:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - redis
+    command:
+      - sh
+      - -c
+      - "python manage.py migrate --noinput && python manage.py collectstatic --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 60 --access-logfile - --error-logfile -"
+
+  celery:
+    image: separa-backend:prod
+    restart: unless-stopped
+    env_file: .env.prod
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - backend
+      - redis
+    command: celery -A config worker -l info
+
+  celery-beat:
+    image: separa-backend:prod
+    restart: unless-stopped
+    env_file: .env.prod
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - backend
+      - redis
+    command: celery -A config beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    image: separa-frontend:prod
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - NEXT_TELEMETRY_DISABLED=1
+      - BACKEND_INTERNAL_URL=http://backend:8000
+    ports:
+      - "3003:3000"
+    depends_on:
+      - backend
+
+volumes:
+  caddy_data:
+  caddy_config:
