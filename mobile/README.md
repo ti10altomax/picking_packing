@@ -4,8 +4,8 @@ App nativo Android/iOS do Separa. Compartilha o backend Django com o frontend we
 
 ## Stack
 
-- **Expo SDK 51** — toolchain managed (sem Android Studio/Xcode pra começar)
-- **Expo Router 3** — file-based routing (igual Next App Router)
+- **Expo SDK 54** — com pasta `android/` nativa (prebuild) pro build local
+- **Expo Router 6** — file-based routing (igual Next App Router)
 - **NativeWind 4** — Tailwind CSS pra RN (sintaxe `className="..."`)
 - **Zustand** — state global (mesmo lib do web)
 - **axios** — HTTP client (mesmo lib do web)
@@ -27,8 +27,30 @@ O `EXPO_PUBLIC_API_URL` precisa ser um endereço **acessível pelo celular pela 
 - ❌ `http://localhost:8000` — só funciona em emulador no PC
 - ❌ `http://172.18.18.123:8000` — IP do WSL, celular não alcança
 - ✅ `http://192.168.1.50:8000` — IP do Windows na LAN da empresa
-- ✅ `https://192.168.1.199` — backend de produção (via Caddy)
-- ✅ `https://separa.srv` — quando o DNS interno subir
+- ✅ `http://192.168.1.199:8003` — backend na VM de produção
+
+#### Por que 8000 no dev e 8003 na VM
+
+O Django **sempre** escuta na 8000 *dentro do container* — o que muda é a porta
+publicada no host:
+
+| Onde | Compose | Porta do host |
+|---|---|---|
+| Dev (sua máquina) | `docker-compose.yml` → `8000:8000` | `:8000` |
+| VM de produção | `docker-compose.prod.yml` → `8003:8000` | `:8003` |
+
+Na VM a 8000 já está ocupada por outra aplicação, daí a 8003. Os dois estão certos
+no seu contexto — `:8000` aqui no dev **não** é engano.
+
+#### E o Caddy (`https://192.168.1.199`)?
+
+Serve o **web**, não o app. O APK chama a 8003 em HTTP direto e **não passa pelo
+Caddy**: o cert é mkcert, cuja root CA não é confiada pelo Android, e o HTTPS morre
+com `ERR_NETWORK`. Por isso `usesCleartextTraffic` está ligado (`app.json` e
+`AndroidManifest.xml`) — sem ele o Android 9+ bloqueia HTTP em build release.
+
+Quando houver cert válido (DNS interno tipo `separa.altomax.local`), dá pra tirar o
+cleartext e voltar pra HTTPS.
 
 Pra descobrir o IP do Windows na LAN: `ipconfig` (Windows) ou no painel de rede.
 
@@ -71,16 +93,51 @@ mobile/
 
 ## Build de produção (APK)
 
-Quando estiver pronto, usar **EAS Build** (cloud-based, sem Android Studio):
+Build **local** com Gradle — é o caminho padrão.
 
-```bash
-npm install -g eas-cli
-eas login
-eas build:configure
-eas build --platform android --profile preview
+**1. Confira o `.env` antes de buildar.** O `EXPO_PUBLIC_API_URL` é embutido no
+bundle em tempo de build; trocar o `.env` depois não muda o APK já gerado.
+
+```
+EXPO_PUBLIC_API_URL=http://192.168.1.199:8003
 ```
 
-Resultado: APK pra sideload nos coletores do galpão.
+**2. Rode o Gradle:**
+
+```powershell
+cd mobile\android
+.\gradlew.bat assembleRelease
+```
+
+**3. O APK sai em:**
+
+```
+mobile/android/app/build/outputs/apk/release/app-release.apk
+```
+
+Daí é sideload nos coletores do galpão.
+
+### Assinatura
+
+O `release` é assinado com a **`app/debug.keystore`** (padrão do template Expo,
+ver `app/build.gradle`). Serve pro sideload interno, mas tem uma consequência
+prática: se essa keystore for regenerada ou perdida, o Android recusa atualizar
+o app instalado (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`) e é preciso **desinstalar
+antes de instalar o novo APK** — o que apaga a sessão salva no SecureStore.
+
+Enquanto a `debug.keystore` do repo continuar a mesma, a atualização por cima funciona.
+
+### EAS Build (emergência)
+
+Fica configurado (`eas.json`, scripts `build:preview` / `build:production`) como
+alternativa cloud caso o build local quebre. Não é o caminho padrão.
+
+```bash
+npx eas build --platform android --profile preview
+```
+
+Atenção: os perfis do `eas.json` têm o `EXPO_PUBLIC_API_URL` **próprio**, separado
+do `.env` local.
 
 ## Próximos passos
 
@@ -89,4 +146,4 @@ Resultado: APK pra sideload nos coletores do galpão.
 - [ ] Câmera scanner com `expo-camera` ou `react-native-vision-camera`
 - [ ] Telas dos supervisores (vendas, pátio, separados, não conformes)
 - [ ] Dialog reutilizável estilo SweetAlert (Modal nativo)
-- [ ] Build APK via EAS
+- [ ] Keystore de release própria (hoje o release usa a `debug.keystore`)
