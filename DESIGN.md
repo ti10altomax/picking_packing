@@ -2,7 +2,7 @@
 
 > Decisões fechadas em **2026-08-25/26** com direção e supervisão.
 > **Espec fechada** — todas as pendências resolvidas (histórico em [Pendências](#pendências-de-definição)).
-> **Fase 1 (rename) implementada em 2026-08-27** na branch `develop`; Fases 2+ pendentes.
+> **Fases 1 (rename) e 2 (cadastro de Separador) implementadas em 2026-08-27** na branch `develop`; Fases 3+ pendentes.
 
 ---
 
@@ -175,7 +175,7 @@ Tabela de configuração nova (não existe ainda), editável pelo admin — nasc
 ## Roadmap
 
 1. **Rename** separador → conferente — ✅ implementado 2026-08-27
-2. **Cadastro de Separador** + liberação diária + apontamento na conferência
+2. **Cadastro de Separador** + liberação diária + apontamento na conferência — ✅ implementado 2026-08-27
 3. **Sequências** + tela nova do Sup. Pátio
 4. **Divergência de barra + erro de separação + relatório agrupado**
 5. **Paridade mobile + APK novo** (re-sideload nos coletores)

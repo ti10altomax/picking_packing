@@ -13,24 +13,20 @@ import { SupervisorNav } from '@/components/SupervisorNav'
 import { useDialog } from '@/components/Dialog'
 import { supervisorApi } from '@/lib/api'
 
+// Contrato real de GET /api/nao-conformes/ — todos os itens estão em Não Conforme
 type NaoConforme = {
   id: number
-  pedido_id: number
-  pedido_numero_externo: string
-  pedido_cliente: string
-  conferente_username: string | null
-  motivo: string
-  detalhe: string
-  status: 'aberto' | 'cancelado' | 'retornado'
+  numero_externo: string
+  cliente: string
   criado_em: string
-  resolvido_em: string | null
-}
-
-const MOTIVOS: Record<string, string> = {
-  produto_avariado: 'Produto avariado',
-  produto_em_falta: 'Produto em falta',
-  endereco_incorreto: 'Endereço incorreto',
-  outro: 'Outro',
+  nao_conforme_em: string
+  motivo: string
+  motivo_label: string
+  detalhe: string
+  conferente: string | null
+  atribuido_por: string | null
+  separado_por: string | null
+  separador_nao_identificado: boolean
 }
 
 function formatarData(iso: string): string {
@@ -63,7 +59,7 @@ export default function NaoConformes() {
     const ok = await dialog.confirm({
       variant: 'danger',
       title: 'Cancelar pedido?',
-      message: `O pedido ${nc.pedido_numero_externo} será cancelado definitivamente e não voltará para a fila.`,
+      message: `O pedido ${nc.numero_externo} será cancelado definitivamente e não voltará para a fila.`,
       confirmText: 'Cancelar pedido',
       cancelText: 'Voltar',
     })
@@ -85,7 +81,7 @@ export default function NaoConformes() {
     const ok = await dialog.confirm({
       variant: 'info',
       title: 'Retornar para fila?',
-      message: `O pedido ${nc.pedido_numero_externo} voltará a ficar pendente de atribuição.`,
+      message: `O pedido ${nc.numero_externo} voltará a ficar pendente de atribuição.`,
       confirmText: 'Retornar',
     })
     if (!ok) return
@@ -134,83 +130,60 @@ export default function NaoConformes() {
               <Text className="text-ink-subtle text-xs mt-1">Tudo limpo por aqui</Text>
             </View>
           }
-          renderItem={({ item: nc }) => {
-            const aberto = nc.status === 'aberto'
-            const cor =
-              nc.status === 'aberto' ? 'border-red-500/40 bg-red-500/10' :
-              nc.status === 'cancelado' ? 'border-surface-border bg-surface-card opacity-60' :
-              'border-surface-border bg-surface-card opacity-70'
-
-            return (
-              <View className={`border rounded-xl p-4 ${cor}`}>
-                <View className="flex-row items-start justify-between gap-2 mb-2">
-                  <View className="flex-1">
-                    <Text className="font-bold text-ink">{nc.pedido_numero_externo}</Text>
-                    <Text className="text-sm text-ink-muted" numberOfLines={1}>
-                      {nc.pedido_cliente || '—'}
-                    </Text>
-                  </View>
-                  <View className={`px-2 py-1 rounded-full ${
-                    nc.status === 'aberto' ? 'bg-red-500/20' :
-                    nc.status === 'cancelado' ? 'bg-zinc-500/20' :
-                    'bg-emerald-500/20'
-                  }`}>
-                    <Text className={`text-xs font-bold ${
-                      nc.status === 'aberto' ? 'text-red-300' :
-                      nc.status === 'cancelado' ? 'text-zinc-400' :
-                      'text-emerald-300'
-                    }`}>
-                      {nc.status === 'aberto' ? 'aberto' :
-                       nc.status === 'cancelado' ? 'cancelado' :
-                       'retornado'}
-                    </Text>
-                  </View>
-                </View>
-
-                <View className="bg-surface-bg/50 rounded-lg p-3 mb-3">
-                  <Text className="text-xs text-ink-subtle mb-0.5">Motivo</Text>
-                  <Text className="text-sm font-medium text-ink">
-                    {MOTIVOS[nc.motivo] ?? nc.motivo}
+          renderItem={({ item: nc }) => (
+            <View className="border rounded-xl p-4 border-red-500/40 bg-red-500/10">
+              <View className="flex-row items-start justify-between gap-2 mb-2">
+                <View className="flex-1">
+                  <Text className="font-bold text-ink">{nc.numero_externo}</Text>
+                  <Text className="text-sm text-ink-muted" numberOfLines={1}>
+                    {nc.cliente || '—'}
                   </Text>
-                  {nc.detalhe ? (
-                    <>
-                      <Text className="text-xs text-ink-subtle mt-2 mb-0.5">Detalhe</Text>
-                      <Text className="text-sm text-ink-muted">{nc.detalhe}</Text>
-                    </>
-                  ) : null}
                 </View>
-
-                <Text className="text-xs text-ink-subtle mb-3">
-                  Aberto em {formatarData(nc.criado_em)}
-                  {nc.conferente_username ? ` por ${nc.conferente_username}` : ''}
-                  {nc.resolvido_em ? ` · resolvido em ${formatarData(nc.resolvido_em)}` : ''}
-                </Text>
-
-                {aberto ? (
-                  <View className="flex-row gap-2">
-                    <Pressable
-                      onPress={() => cancelar(nc)}
-                      disabled={acaoEm === nc.id}
-                      className="flex-1 bg-red-500/20 active:bg-red-500/30 border border-red-500/40 rounded-lg py-2.5 items-center"
-                    >
-                      <Text className="text-red-300 font-semibold text-sm">
-                        {acaoEm === nc.id ? '…' : 'Cancelar pedido'}
-                      </Text>
-                    </Pressable>
-                    <Pressable
-                      onPress={() => retornar(nc)}
-                      disabled={acaoEm === nc.id}
-                      className="flex-1 bg-blue-500 active:bg-blue-400 rounded-lg py-2.5 items-center"
-                    >
-                      <Text className="text-white font-semibold text-sm">
-                        {acaoEm === nc.id ? '…' : 'Retornar à fila'}
-                      </Text>
-                    </Pressable>
-                  </View>
-                ) : null}
+                <View className="px-2 py-1 rounded-full bg-red-500/20">
+                  <Text className="text-xs font-bold text-red-300">{nc.motivo_label}</Text>
+                </View>
               </View>
-            )
-          }}
+
+              {nc.detalhe ? (
+                <View className="bg-surface-bg/50 rounded-lg p-3 mb-3">
+                  <Text className="text-xs text-ink-subtle mb-0.5">Detalhe</Text>
+                  <Text className="text-sm text-ink-muted">{nc.detalhe}</Text>
+                </View>
+              ) : null}
+
+              <Text className="text-xs text-ink-subtle mb-1">
+                Marcado em {formatarData(nc.nao_conforme_em)}
+                {nc.conferente ? ` · conferente: ${nc.conferente}` : ''}
+                {nc.separado_por ? ` · separado por: ${nc.separado_por}` : ''}
+              </Text>
+              {nc.separador_nao_identificado ? (
+                <View className="self-start px-2 py-1 rounded-full bg-amber-500/15 mb-2">
+                  <Text className="text-xs font-semibold text-amber-300">⚠ Separador não identificado</Text>
+                </View>
+              ) : null}
+
+              <View className="flex-row gap-2 mt-2">
+                <Pressable
+                  onPress={() => cancelar(nc)}
+                  disabled={acaoEm === nc.id}
+                  className="flex-1 bg-red-500/20 active:bg-red-500/30 border border-red-500/40 rounded-lg py-2.5 items-center"
+                >
+                  <Text className="text-red-300 font-semibold text-sm">
+                    {acaoEm === nc.id ? '…' : 'Cancelar pedido'}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => retornar(nc)}
+                  disabled={acaoEm === nc.id}
+                  className="flex-1 bg-blue-500 active:bg-blue-400 rounded-lg py-2.5 items-center"
+                >
+                  <Text className="text-white font-semibold text-sm">
+                    {acaoEm === nc.id ? '…' : 'Retornar à fila'}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
         />
       )}
     </SafeAreaView>

@@ -13,7 +13,7 @@ import {
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { conferenciaApi } from '@/lib/api'
+import { conferenciaApi, separadoresApi, SeparadorLiberado } from '@/lib/api'
 import { CameraScanner } from '@/components/CameraScanner'
 import { useDialog } from '@/components/Dialog'
 
@@ -51,6 +51,8 @@ type Pedido = {
   cliente: string
   status: 'atribuido' | 'conferindo' | 'conferido' | 'nao_conforme'
   qtd_itens: number
+  separado_por: { id: number; nome: string; apelido: string } | null
+  separador_nao_identificado: boolean
   itens: ItemPedido[]
   volumes: Volume[]
 }
@@ -82,6 +84,11 @@ export default function ConferenciaDetalhe() {
   const [codigoInicial, setCodigoInicial] = useState('')
   const [cameraGlobalAberta, setCameraGlobalAberta] = useState(false)
 
+  // Apontamento "separado por" (DESIGN.md §2)
+  const [liberados, setLiberados] = useState<SeparadorLiberado[]>([])
+  const [apontamento, setApontamento] = useState<number | 'nao_identificado' | null>(null)
+  const [modalSeparadoPor, setModalSeparadoPor] = useState(false)
+
   const carregar = useCallback(async () => {
     try {
       const data: Pedido = await conferenciaApi.detalhe(pedidoId)
@@ -99,6 +106,13 @@ export default function ConferenciaDetalhe() {
     const t = setInterval(() => setSegundos((s) => s + 1), 1000)
     return () => clearInterval(t)
   }, [])
+
+  // Lista de separadores liberados hoje — usada no iniciar e no modal de troca
+  useEffect(() => {
+    if (pedido?.status === 'atribuido' || modalSeparadoPor) {
+      separadoresApi.liberados().then(setLiberados).catch(() => setLiberados([]))
+    }
+  }, [pedido?.status, modalSeparadoPor])
 
   const volumes = pedido?.volumes ?? []
   const [ativoIdManual, setAtivoIdManual] = useState<number | null>(null)
@@ -125,11 +139,33 @@ export default function ConferenciaDetalhe() {
   // -------------------------------------------------------------------------
 
   async function iniciar() {
+    if (apontamento === null) return
     try {
-      await conferenciaApi.iniciar(pedidoId)
+      await conferenciaApi.iniciar(
+        pedidoId,
+        apontamento === 'nao_identificado'
+          ? { nao_identificado: true }
+          : { separado_por: apontamento },
+      )
+      setErro('')
       await carregar()
-    } catch {
-      setErro('Erro ao iniciar conferência')
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { erro?: string } } })?.response?.data?.erro
+      setErro(msg ?? 'Erro ao iniciar conferência')
+    }
+  }
+
+  async function aoAlterarSeparadoPor(valor: number | 'nao_identificado') {
+    setModalSeparadoPor(false)
+    try {
+      await conferenciaApi.alterarSeparadoPor(
+        pedidoId,
+        valor === 'nao_identificado' ? { nao_identificado: true } : { separado_por: valor },
+      )
+      await carregar()
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { erro?: string } } })?.response?.data?.erro
+      setErro(msg ?? 'Erro ao alterar o apontamento')
     }
   }
 
@@ -270,18 +306,34 @@ export default function ConferenciaDetalhe() {
     return (
       <SafeAreaView edges={['top']} className="flex-1 bg-surface-bg">
         <CabecalhoSimples pedido={pedido} percent={0} segundos={segundos} onBack={() => router.back()} />
-        <View className="flex-1 items-center justify-center px-8">
-          <Text className="text-lg font-semibold text-ink mb-1">Pronto para iniciar</Text>
-          <Text className="text-sm text-ink-subtle mb-8">
+        <ScrollView
+          className="flex-1"
+          contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 24 }}
+        >
+          <Text className="text-lg font-semibold text-ink mb-1 text-center">Pronto para iniciar</Text>
+          <Text className="text-sm text-ink-subtle mb-6 text-center">
             {pedido.qtd_itens} {pedido.qtd_itens === 1 ? 'item' : 'itens'} · {totalPedido} unidade(s)
           </Text>
+
+          <Text className="text-sm font-semibold text-ink mb-2">Quem separou este pedido? *</Text>
+          <SeletorSeparadoPor liberados={liberados} valor={apontamento} onChange={setApontamento} />
+
+          {!!erro && (
+            <Text className="text-sm text-red-400 mt-4 text-center">{erro}</Text>
+          )}
+
           <Pressable
             onPress={iniciar}
-            className="bg-blue-500 active:bg-blue-400 px-8 h-14 rounded-2xl items-center justify-center"
+            disabled={apontamento === null}
+            className={`mt-6 px-8 h-14 rounded-2xl items-center justify-center ${
+              apontamento === null ? 'bg-surface-elev' : 'bg-blue-500 active:bg-blue-400'
+            }`}
           >
-            <Text className="text-white font-bold text-base">Iniciar conferência</Text>
+            <Text className={`font-bold text-base ${apontamento === null ? 'text-ink-subtle' : 'text-white'}`}>
+              Iniciar conferência
+            </Text>
           </Pressable>
-        </View>
+        </ScrollView>
       </SafeAreaView>
     )
   }
@@ -301,6 +353,23 @@ export default function ConferenciaDetalhe() {
         <Text className="text-xs text-ink-subtle mt-1">
           {totalConferido} / {totalPedido} unidades · {volumes.length} volume(s)
         </Text>
+        <View className="flex-row items-center gap-1 mt-0.5">
+          <Text className="text-xs text-ink-subtle">
+            Separado por:{' '}
+            {pedido.separador_nao_identificado ? (
+              <Text className="font-semibold text-amber-400">Não identificado</Text>
+            ) : pedido.separado_por ? (
+              <Text className="font-semibold">{pedido.separado_por.apelido || pedido.separado_por.nome}</Text>
+            ) : (
+              '—'
+            )}
+          </Text>
+          {pedido.status === 'conferindo' && (
+            <Pressable onPress={() => setModalSeparadoPor(true)} className="px-1.5 py-1">
+              <Text className="text-xs text-blue-400">trocar</Text>
+            </Pressable>
+          )}
+        </View>
       </View>
 
       {/* Volume atual + botão novo volume */}
@@ -485,7 +554,113 @@ export default function ConferenciaDetalhe() {
           onConfirmar={aoMarcarNaoConforme}
         />
       ) : null}
+
+      {modalSeparadoPor ? (
+        <ModalSeparadoPor
+          liberados={liberados}
+          atual={pedido.separador_nao_identificado ? 'nao_identificado' : pedido.separado_por?.id ?? null}
+          onCancelar={() => setModalSeparadoPor(false)}
+          onConfirmar={aoAlterarSeparadoPor}
+        />
+      ) : null}
     </SafeAreaView>
+  )
+}
+
+// -----------------------------------------------------------------------------
+// Apontamento "separado por" — seletor + modal de troca
+// -----------------------------------------------------------------------------
+
+function SeletorSeparadoPor({ liberados, valor, onChange }: {
+  liberados: SeparadorLiberado[]
+  valor: number | 'nao_identificado' | null
+  onChange: (v: number | 'nao_identificado') => void
+}) {
+  return (
+    <View className="gap-2">
+      {liberados.length === 0 ? (
+        <Text className="text-sm text-ink-subtle bg-surface-elev rounded-xl p-3">
+          Nenhum separador liberado hoje — peça ao Supervisor de Pátio.
+        </Text>
+      ) : (
+        <View className="flex-row flex-wrap gap-2">
+          {liberados.map((s) => (
+            <Pressable
+              key={s.id}
+              onPress={() => onChange(s.id)}
+              className={`h-12 px-4 rounded-xl border-2 items-center justify-center ${
+                valor === s.id
+                  ? 'border-blue-500 bg-blue-500/15'
+                  : 'border-surface-border bg-surface-card'
+              }`}
+              style={{ minWidth: '47%' }}
+            >
+              <Text
+                numberOfLines={1}
+                className={`text-sm font-semibold ${valor === s.id ? 'text-blue-300' : 'text-ink-muted'}`}
+              >
+                {s.apelido || s.nome}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
+      <Pressable
+        onPress={() => onChange('nao_identificado')}
+        className={`h-11 rounded-xl border-2 items-center justify-center ${
+          valor === 'nao_identificado'
+            ? 'border-amber-500 bg-amber-500/15'
+            : 'border-surface-border border-dashed'
+        }`}
+      >
+        <Text className={`text-sm font-semibold ${
+          valor === 'nao_identificado' ? 'text-amber-300' : 'text-ink-subtle'
+        }`}>
+          ⚠ Não identificado
+        </Text>
+      </Pressable>
+    </View>
+  )
+}
+
+function ModalSeparadoPor({ liberados, atual, onCancelar, onConfirmar }: {
+  liberados: SeparadorLiberado[]
+  atual: number | 'nao_identificado' | null
+  onCancelar: () => void
+  onConfirmar: (v: number | 'nao_identificado') => void
+}) {
+  const insets = useSafeAreaInsets()
+  const [valor, setValor] = useState<number | 'nao_identificado' | null>(atual)
+  return (
+    <Modal visible animationType="slide" transparent onRequestClose={onCancelar}>
+      <Pressable className="flex-1 bg-black/60 justify-end" onPress={onCancelar}>
+        <Pressable
+          className="bg-surface-card border-t border-surface-border rounded-t-2xl px-6 pt-6"
+          style={{ paddingBottom: Math.max(insets.bottom, 16) + 16 }}
+          onPress={(e) => e.stopPropagation()}
+        >
+          <Text className="font-bold text-lg text-ink mb-4">Quem separou este pedido?</Text>
+          <SeletorSeparadoPor liberados={liberados} valor={valor} onChange={setValor} />
+          <View className="flex-row gap-3 mt-5">
+            <Pressable
+              onPress={onCancelar}
+              className="flex-1 h-12 bg-surface-elev rounded-xl items-center justify-center"
+            >
+              <Text className="text-ink font-medium">Cancelar</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => valor !== null && onConfirmar(valor)}
+              disabled={valor === null}
+              className={`flex-1 h-12 rounded-xl items-center justify-center ${
+                valor === null ? 'bg-surface-elev' : 'bg-blue-500 active:bg-blue-400'
+              }`}
+            >
+              <Text className={`font-bold ${valor === null ? 'text-ink-subtle' : 'text-white'}`}>Salvar</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
   )
 }
 

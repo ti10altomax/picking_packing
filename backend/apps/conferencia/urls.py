@@ -5,6 +5,7 @@ urlpatterns = [
     path('conferencia/pedidos/', views.listar_atribuidos, name='conferencia_listar_atribuidos'),
     path('conferencia/pedidos/<int:pk>/', views.detalhe, name='conferencia_detalhe'),
     path('conferencia/pedidos/<int:pk>/iniciar/', views.iniciar, name='conferencia_iniciar'),
+    path('conferencia/pedidos/<int:pk>/separado_por/', views.alterar_separado_por, name='conferencia_separado_por'),
     path('conferencia/pedidos/<int:pk>/volumes/', views.criar_volume, name='conferencia_criar_volume'),
     path('conferencia/pedidos/<int:pk>/volumes/<int:volume_id>/',
          views.remover_volume, name='conferencia_remover_volume'),

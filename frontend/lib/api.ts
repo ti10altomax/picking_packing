@@ -79,8 +79,10 @@ export const conferenciaApi = {
     api.get('/api/conferencia/pedidos/').then((r) => r.data),
   detalhe: (id: number) =>
     api.get(`/api/conferencia/pedidos/${id}/`).then((r) => r.data),
-  iniciar: (id: number) =>
-    api.post(`/api/conferencia/pedidos/${id}/iniciar/`).then((r) => r.data),
+  iniciar: (id: number, apontamento: { separado_por?: number; nao_identificado?: boolean }) =>
+    api.post(`/api/conferencia/pedidos/${id}/iniciar/`, apontamento).then((r) => r.data),
+  alterarSeparadoPor: (id: number, apontamento: { separado_por?: number; nao_identificado?: boolean }) =>
+    api.post(`/api/conferencia/pedidos/${id}/separado_por/`, apontamento).then((r) => r.data),
   criarVolume: (id: number, tipo: 'caixa' | 'fardo' | 'outro', identificador?: string) =>
     api.post(`/api/conferencia/pedidos/${id}/volumes/`, { tipo, identificador }).then((r) => r.data),
   bipar: (id: number, body: { item_id: number; qtd: number; codigo: string; volume_id: number }) =>
@@ -94,6 +96,35 @@ export const conferenciaApi = {
       .then((r) => r.data),
   removerVolume: (pedidoId: number, volumeId: number) =>
     api.delete(`/api/conferencia/pedidos/${pedidoId}/volumes/${volumeId}/`).then((r) => r.data),
+}
+
+export type SeparadorCadastro = {
+  id: number
+  nome: string
+  apelido: string
+  documento: string
+  tipo: 'extra' | 'funcionario'
+  ativo: boolean
+  criado_em: string
+  liberado_hoje?: boolean
+}
+
+export type SeparadorLiberado = { id: number; nome: string; apelido: string }
+
+export const separadoresApi = {
+  listar: (params: { search?: string; ativos?: '1' } = {}) =>
+    api.get('/api/separadores/', { params }).then((r) => r.data as SeparadorCadastro[]),
+  criar: (dados: { nome: string; apelido?: string; documento?: string; tipo?: string }) =>
+    api.post('/api/separadores/', dados).then((r) => r.data as SeparadorCadastro),
+  atualizar: (id: number, dados: Partial<Pick<SeparadorCadastro, 'nome' | 'apelido' | 'documento' | 'tipo' | 'ativo'>>) =>
+    api.patch(`/api/separadores/${id}/`, dados).then((r) => r.data as SeparadorCadastro),
+  liberar: (separadorIds: number[], data?: string) =>
+    api.post('/api/separadores/liberar/', { separador_ids: separadorIds, data }).then((r) => r.data),
+  desliberar: (separadorIds: number[], data?: string) =>
+    api.post('/api/separadores/desliberar/', { separador_ids: separadorIds, data }).then((r) => r.data),
+  liberados: (data?: string) =>
+    api.get('/api/separadores/liberados/', { params: data ? { data } : {} })
+      .then((r) => r.data as SeparadorLiberado[]),
 }
 
 export type Paginado<T> = {

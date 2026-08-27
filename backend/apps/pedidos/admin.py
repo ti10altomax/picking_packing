@@ -10,6 +10,7 @@ from unfold.decorators import display
 from .models import (
     Pedido, PedidoItem, Marketplace, Impressora, Lote,
     PrintAgent, PrintJob, Volume, VolumeItem, PedidoLog,
+    Separador, SeparadorLiberacao,
 )
 
 
@@ -80,6 +81,7 @@ class PedidoAdmin(ModelAdmin):
         ("Conferência", {
             "fields": (
                 "conferencia_iniciada_em", "conferido_em",
+                "separado_por", "separador_nao_identificado",
                 "endereco_fisico", "ordem_pilha",
             ),
             "classes": ("tab",),
@@ -155,6 +157,37 @@ class VolumeAdmin(ModelAdmin):
     @display(description="Unidades")
     def qtd_unidades(self, obj):
         return sum(i.qtd for i in obj.itens.all())
+
+
+# -----------------------------------------------------------------------------
+# Separadores físicos + liberação diária (DESIGN.md §2)
+# -----------------------------------------------------------------------------
+
+class SeparadorLiberacaoInline(TabularInline):
+    model = SeparadorLiberacao
+    extra = 0
+    fields = ('data', 'liberado_por', 'criado_em')
+    readonly_fields = ('liberado_por', 'criado_em')
+    ordering = ('-data',)
+
+
+@admin.register(Separador)
+class SeparadorAdmin(ModelAdmin):
+    list_display = ('nome', 'apelido', 'tipo', 'documento', 'ativo', 'user', 'criado_em')
+    list_filter = (('tipo', ChoicesDropdownFilter), 'ativo')
+    search_fields = ('nome', 'apelido', 'documento')
+    autocomplete_fields = ('user',)
+    readonly_fields = ('criado_em',)
+    inlines = [SeparadorLiberacaoInline]
+
+
+@admin.register(SeparadorLiberacao)
+class SeparadorLiberacaoAdmin(ModelAdmin):
+    list_display = ('data', 'separador', 'liberado_por', 'criado_em')
+    list_filter = (('data', RangeDateFilter),)
+    search_fields = ('separador__nome', 'separador__apelido')
+    autocomplete_fields = ('separador',)
+    readonly_fields = ('criado_em',)
 
 
 # -----------------------------------------------------------------------------

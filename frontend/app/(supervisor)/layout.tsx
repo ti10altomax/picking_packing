@@ -53,6 +53,11 @@ export default function SupervisorLayout({ children }: { children: React.ReactNo
                 Pátio
               </NavLink>
             )}
+            {podePatio && (
+              <NavLink href="/supervisor/separadores" ativo={pathname?.startsWith('/supervisor/separadores')}>
+                Separadores
+              </NavLink>
+            )}
             {podeNaoConformes && (
               <NavLink
                 href="/supervisor/nao-conformes"

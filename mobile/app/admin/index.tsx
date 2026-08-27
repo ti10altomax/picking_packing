@@ -35,6 +35,13 @@ const CARDS: Card[] = [
     cor: 'bg-amber-500/15 border-amber-500/30',
   },
   {
+    href: '/supervisor/separadores',
+    titulo: 'Separadores',
+    descricao: 'Cadastro e liberação do dia',
+    emoji: '🧤',
+    cor: 'bg-violet-500/15 border-violet-500/30',
+  },
+  {
     href: '/supervisor/conferidos',
     titulo: 'Conferidos',
     descricao: 'Histórico de pedidos concluídos',

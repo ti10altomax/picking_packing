@@ -11,6 +11,7 @@ type Aba = {
 const ABAS: Aba[] = [
   { href: '/supervisor/vendas', label: 'Vendas', perfis: ['supervisor_vendas', 'admin'] },
   { href: '/supervisor/patio', label: 'Pátio', perfis: ['supervisor_patio', 'admin'] },
+  { href: '/supervisor/separadores', label: 'Separadores', perfis: ['supervisor_patio', 'admin'] },
   { href: '/supervisor/conferidos', label: 'Conferidos' },
   { href: '/supervisor/nao-conformes', label: 'Não conformes' },
 ]

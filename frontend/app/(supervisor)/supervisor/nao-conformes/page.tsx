@@ -14,6 +14,8 @@ type NaoConforme = {
   detalhe: string
   conferente: string | null
   atribuido_por: string | null
+  separado_por: string | null
+  separador_nao_identificado: boolean
 }
 
 type Item = {
@@ -186,7 +188,15 @@ export default function NaoConformesPage() {
                           day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
                         })}
                         {p.conferente && ` · conferente: ${p.conferente}`}
+                        {p.separado_por && ` · separado por: ${p.separado_por}`}
                       </p>
+                      {p.separador_nao_identificado && (
+                        <p className="text-xs mt-1">
+                          <span className="bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300 px-2 py-0.5 rounded-full font-medium">
+                            ⚠ Separador não identificado
+                          </span>
+                        </p>
+                      )}
                       {p.detalhe && (
                         <p className="text-sm text-ink mt-2 p-2 bg-surface-elev rounded-lg italic">
                           "{p.detalhe}"

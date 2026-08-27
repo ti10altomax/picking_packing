@@ -7,7 +7,7 @@ from rest_framework.generics import get_object_or_404
 from rest_framework.response import Response
 
 from apps.pedidos.models import (
-    Pedido, PedidoItem, PedidoLog, Volume, VolumeItem,
+    Pedido, PedidoItem, PedidoLog, Separador, Volume, VolumeItem,
 )
 
 logger = logging.getLogger(__name__)
@@ -29,6 +29,43 @@ def _exige_supervisor_ou_admin(request):
             status=http_status.HTTP_403_FORBIDDEN,
         )
     return None
+
+
+def _resolver_apontamento(request):
+    """Valida o "separado por" do body → (separador, nao_identificado, erro).
+
+    Obrigatório: ou `separado_por` (id de Separador ativo e liberado hoje) ou
+    `nao_identificado: true` — a opção "Não identificado" fica destacada nos
+    relatórios (DESIGN.md §2).
+    """
+    separado_por_id = request.data.get('separado_por')
+    nao_identificado = bool(request.data.get('nao_identificado'))
+
+    if nao_identificado and separado_por_id:
+        return None, False, Response(
+            {'erro': 'informe separado_por OU nao_identificado, não os dois'},
+            status=http_status.HTTP_400_BAD_REQUEST,
+        )
+    if not nao_identificado and not separado_por_id:
+        return None, False, Response(
+            {'erro': 'informe quem separou o pedido (separado_por ou nao_identificado)'},
+            status=http_status.HTTP_400_BAD_REQUEST,
+        )
+    if nao_identificado:
+        return None, True, None
+
+    separador = Separador.objects.filter(pk=separado_por_id, ativo=True).first()
+    if not separador:
+        return None, False, Response(
+            {'erro': 'separador inválido ou inativo'},
+            status=http_status.HTTP_400_BAD_REQUEST,
+        )
+    if not separador.liberacoes.filter(data=timezone.localdate()).exists():
+        return None, False, Response(
+            {'erro': f'separador "{separador}" não está liberado hoje — peça ao Sup. Pátio'},
+            status=http_status.HTTP_400_BAD_REQUEST,
+        )
+    return separador, False, None
 
 
 def _serializar_volume(v: Volume) -> dict:
@@ -64,6 +101,11 @@ def _serializar_pedido(p: Pedido, com_volumes: bool = False) -> dict:
         'criado_em': p.criado_em,
         'atribuido_em': p.atribuido_em,
         'conferencia_iniciada_em': p.conferencia_iniciada_em,
+        'separado_por': (
+            {'id': p.separado_por.id, 'nome': p.separado_por.nome, 'apelido': p.separado_por.apelido}
+            if p.separado_por else None
+        ),
+        'separador_nao_identificado': p.separador_nao_identificado,
         'qtd_itens': len(itens),
         'percent_conferido': percent,
         'itens': [
@@ -96,6 +138,7 @@ def listar_atribuidos(request):
             conferente=request.user,
             status__in=[Pedido.Status.ATRIBUIDO, Pedido.Status.CONFERINDO],
         )
+        .select_related('separado_por')
         .prefetch_related('itens')
         .order_by('-atribuido_em', '-criado_em')
     )
@@ -113,7 +156,7 @@ def detalhe(request, pk):
         return err
 
     pedido = get_object_or_404(
-        Pedido.objects.prefetch_related('itens', 'volumes__itens'),
+        Pedido.objects.select_related('separado_por').prefetch_related('itens', 'volumes__itens'),
         pk=pk,
     )
     if pedido.conferente_id != request.user.id and request.user.perfil != 'admin':
@@ -144,14 +187,78 @@ def iniciar(request, pk):
             status=http_status.HTTP_400_BAD_REQUEST,
         )
 
+    separador, nao_identificado, err = _resolver_apontamento(request)
+    if err:
+        return err
+
     pedido.status = Pedido.Status.CONFERINDO
     pedido.conferencia_iniciada_em = timezone.now()
-    pedido.save(update_fields=['status', 'conferencia_iniciada_em'])
+    pedido.separado_por = separador
+    pedido.separador_nao_identificado = nao_identificado
+    pedido.save(update_fields=[
+        'status', 'conferencia_iniciada_em', 'separado_por', 'separador_nao_identificado',
+    ])
     PedidoLog.objects.create(
         pedido=pedido, usuario=request.user,
-        acao='conferencia_iniciada', payload={},
+        acao='conferencia_iniciada',
+        payload={
+            'separado_por_id': separador.id if separador else None,
+            'separado_por': str(separador) if separador else None,
+            'nao_identificado': nao_identificado,
+        },
     )
     return Response({'ok': True, 'conferencia_iniciada_em': pedido.conferencia_iniciada_em})
+
+
+# ---------------------------------------------------------------------------
+# Alterar o apontamento "separado por" (editável até concluir)
+# ---------------------------------------------------------------------------
+
+@api_view(['POST'])
+def alterar_separado_por(request, pk):
+    err = _exige_conferente(request)
+    if err:
+        return err
+
+    pedido = get_object_or_404(Pedido, pk=pk)
+    if pedido.conferente_id != request.user.id and request.user.perfil != 'admin':
+        return Response({'erro': 'pedido não atribuído a você'}, status=http_status.HTTP_403_FORBIDDEN)
+
+    if pedido.status != Pedido.Status.CONFERINDO:
+        return Response(
+            {'erro': f'pedido em status "{pedido.status}" — apontamento só pode ser alterado durante a conferência'},
+            status=http_status.HTTP_400_BAD_REQUEST,
+        )
+
+    separador, nao_identificado, err = _resolver_apontamento(request)
+    if err:
+        return err
+
+    anterior = (
+        str(pedido.separado_por) if pedido.separado_por
+        else ('nao_identificado' if pedido.separador_nao_identificado else None)
+    )
+    pedido.separado_por = separador
+    pedido.separador_nao_identificado = nao_identificado
+    pedido.save(update_fields=['separado_por', 'separador_nao_identificado'])
+    PedidoLog.objects.create(
+        pedido=pedido, usuario=request.user,
+        acao='separado_por_alterado',
+        payload={
+            'anterior': anterior,
+            'separado_por_id': separador.id if separador else None,
+            'separado_por': str(separador) if separador else None,
+            'nao_identificado': nao_identificado,
+        },
+    )
+    return Response({
+        'ok': True,
+        'separado_por': (
+            {'id': separador.id, 'nome': separador.nome, 'apelido': separador.apelido}
+            if separador else None
+        ),
+        'separador_nao_identificado': nao_identificado,
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -168,9 +275,10 @@ def criar_volume(request, pk):
     if pedido.conferente_id != request.user.id and request.user.perfil != 'admin':
         return Response({'erro': 'pedido não atribuído a você'}, status=http_status.HTTP_403_FORBIDDEN)
 
-    if pedido.status not in (Pedido.Status.ATRIBUIDO, Pedido.Status.CONFERINDO):
+    if pedido.status != Pedido.Status.CONFERINDO:
+        # A conferência precisa ser iniciada antes (apontando quem separou).
         return Response(
-            {'erro': f'pedido em status "{pedido.status}" não permite criar volume'},
+            {'erro': f'pedido em status "{pedido.status}" não permite criar volume — inicie a conferência primeiro'},
             status=http_status.HTTP_400_BAD_REQUEST,
         )
 
@@ -181,11 +289,6 @@ def criar_volume(request, pk):
     identificador = (request.data.get('identificador') or '').strip()
 
     with transaction.atomic():
-        if pedido.status == Pedido.Status.ATRIBUIDO:
-            pedido.status = Pedido.Status.CONFERINDO
-            pedido.conferencia_iniciada_em = timezone.now()
-            pedido.save(update_fields=['status', 'conferencia_iniciada_em'])
-
         volume = Volume.objects.create(
             pedido=pedido, tipo=tipo, identificador=identificador,
             criado_por=request.user,
@@ -539,7 +642,7 @@ def listar_nao_conformes(request):
     qs = (
         Pedido.objects
         .filter(status=Pedido.Status.NAO_CONFORME)
-        .select_related('conferente', 'atribuido_por')
+        .select_related('conferente', 'atribuido_por', 'separado_por')
         .order_by('-nao_conforme_em')
     )
     motivos_label = dict(Pedido.MotivoNaoConforme.choices)
@@ -555,6 +658,8 @@ def listar_nao_conformes(request):
             'detalhe': p.nao_conforme_detalhe,
             'conferente': p.conferente.username if p.conferente else None,
             'atribuido_por': p.atribuido_por.username if p.atribuido_por else None,
+            'separado_por': str(p.separado_por) if p.separado_por else None,
+            'separador_nao_identificado': p.separador_nao_identificado,
         }
         for p in qs
     ])
@@ -608,12 +713,15 @@ def retornar_nao_conforme(request, pk):
     pedido.atribuido_por = None
     pedido.conferente = None
     pedido.conferencia_iniciada_em = None
+    pedido.separado_por = None
+    pedido.separador_nao_identificado = False
     pedido.nao_conforme_em = None
     pedido.nao_conforme_motivo = ''
     pedido.nao_conforme_detalhe = ''
     pedido.save(update_fields=[
         'status', 'selecionado_em', 'selecionado_por',
         'atribuido_em', 'atribuido_por', 'conferente', 'conferencia_iniciada_em',
+        'separado_por', 'separador_nao_identificado',
         'nao_conforme_em', 'nao_conforme_motivo', 'nao_conforme_detalhe',
     ])
     PedidoLog.objects.create(

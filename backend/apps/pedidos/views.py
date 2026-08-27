@@ -22,9 +22,9 @@ class PedidoViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         if self.action == 'list':
             # Listagem slim — sem prefetch de itens, com qtd_itens anotada
-            qs = Pedido.objects.annotate(qtd_itens=Count('itens'))
+            qs = Pedido.objects.select_related('conferente', 'separado_por').annotate(qtd_itens=Count('itens'))
         else:
-            qs = Pedido.objects.select_related('marketplace').prefetch_related('itens')
+            qs = Pedido.objects.select_related('marketplace', 'conferente', 'separado_por').prefetch_related('itens')
 
         status_filter = self.request.query_params.get('status')
         marketplace = self.request.query_params.get('marketplace')

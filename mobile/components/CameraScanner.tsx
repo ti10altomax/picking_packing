@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { View, Text, Pressable, Modal, Vibration, ActivityIndicator } from 'react-native'
-import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera'
+import { CameraView, useCameraPermissions, type BarcodeScanningResult, type BarcodeType } from 'expo-camera'
 
 type Props = {
   onResultado: (codigo: string) => void
   onFechar: () => void
 }
 
-const FORMATOS_SUPORTADOS: BarcodeScanningResult['type'][] = [
+const FORMATOS_SUPORTADOS: BarcodeType[] = [
   'ean13',
   'ean8',
   'upc_a',

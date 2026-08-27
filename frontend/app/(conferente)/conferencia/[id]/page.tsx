@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { conferenciaApi } from '@/lib/api'
+import { conferenciaApi, separadoresApi, SeparadorLiberado } from '@/lib/api'
 import { CameraScanner } from '@/components/CameraScanner'
 import { useDialog } from '@/components/Dialog'
 
@@ -42,6 +42,8 @@ type Pedido = {
   status: 'atribuido' | 'conferindo' | 'conferido' | 'nao_conforme'
   qtd_itens: number
   percent_conferido: number
+  separado_por: { id: number; nome: string; apelido: string } | null
+  separador_nao_identificado: boolean
   itens: ItemPedido[]
   volumes: Volume[]
 }
@@ -106,6 +108,11 @@ export default function ConferenciaPedidoPage() {
   const [scanMsg, setScanMsg] = useState('')
   const [cameraAberta, setCameraAberta] = useState(false)
 
+  // Apontamento "separado por" (DESIGN.md §2)
+  const [liberados, setLiberados] = useState<SeparadorLiberado[]>([])
+  const [apontamento, setApontamento] = useState<number | 'nao_identificado' | null>(null)
+  const [modalSeparadoPor, setModalSeparadoPor] = useState(false)
+
   // -------------------------------------------------------------------------
   // Carregamento e timer
   // -------------------------------------------------------------------------
@@ -127,6 +134,13 @@ export default function ConferenciaPedidoPage() {
     const t = setInterval(() => setSegundos((s) => s + 1), 1000)
     return () => clearInterval(t)
   }, [])
+
+  // Lista de separadores liberados hoje — usada no iniciar e no modal de troca
+  useEffect(() => {
+    if (pedido?.status === 'atribuido' || modalSeparadoPor) {
+      separadoresApi.liberados().then(setLiberados).catch(() => setLiberados([]))
+    }
+  }, [pedido?.status, modalSeparadoPor])
 
   // -------------------------------------------------------------------------
   // Volume ativo = último volume criado e não fechado
@@ -157,11 +171,33 @@ export default function ConferenciaPedidoPage() {
   // -------------------------------------------------------------------------
 
   const iniciar = async () => {
+    if (apontamento === null) return
     try {
-      await conferenciaApi.iniciar(pedidoId)
+      await conferenciaApi.iniciar(
+        pedidoId,
+        apontamento === 'nao_identificado'
+          ? { nao_identificado: true }
+          : { separado_por: apontamento },
+      )
+      setErroGlobal('')
       await carregar()
-    } catch {
-      setErroGlobal('Erro ao iniciar conferência')
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { erro?: string } } })?.response?.data?.erro
+      setErroGlobal(msg ?? 'Erro ao iniciar conferência')
+    }
+  }
+
+  const aoAlterarSeparadoPor = async (valor: number | 'nao_identificado') => {
+    setModalSeparadoPor(false)
+    try {
+      await conferenciaApi.alterarSeparadoPor(
+        pedidoId,
+        valor === 'nao_identificado' ? { nao_identificado: true } : { separado_por: valor },
+      )
+      await carregar()
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { erro?: string } } })?.response?.data?.erro
+      setErroGlobal(msg ?? 'Erro ao alterar o apontamento')
     }
   }
 
@@ -295,7 +331,7 @@ export default function ConferenciaPedidoPage() {
   // Re-foca o scanner principal sempre que sair de modal/iniciar
   useEffect(() => {
     if (loading) return
-    const algumModal = itemSelecionado || modalNovoVolume || modalNaoConforme
+    const algumModal = itemSelecionado || modalNovoVolume || modalNaoConforme || modalSeparadoPor
     if (!algumModal && pedido?.status === 'conferindo') {
       setTimeout(() => scanRef.current?.focus(), 100)
     }
@@ -321,14 +357,33 @@ export default function ConferenciaPedidoPage() {
     return (
       <div className="min-h-screen bg-surface-bg text-ink flex flex-col">
         <Header pedido={pedido} percent={0} segundos={segundos} onBack={() => router.back()} />
-        <div className="flex-1 flex flex-col items-center justify-center px-4 py-12 text-center">
+        <div className="flex-1 flex flex-col items-center justify-center px-4 py-8 text-center">
           <p className="text-lg font-semibold text-ink mb-1">Pronto para iniciar</p>
-          <p className="text-sm text-ink-muted mb-8">
+          <p className="text-sm text-ink-muted mb-6">
             {pedido.qtd_itens} {pedido.qtd_itens === 1 ? 'item' : 'itens'} · {totalPedido} unidade(s)
           </p>
+
+          <div className="w-full max-w-md text-left mb-6">
+            <p className="text-sm font-semibold text-ink mb-2">Quem separou este pedido? *</p>
+            <SeletorSeparadoPor
+              liberados={liberados}
+              valor={apontamento}
+              onChange={setApontamento}
+            />
+          </div>
+
+          {erroGlobal && (
+            <p className="text-sm text-red-600 dark:text-red-400 mb-4">{erroGlobal}</p>
+          )}
+
           <button
             onClick={iniciar}
-            className="bg-blue-600 hover:bg-blue-500 dark:bg-blue-500 dark:hover:bg-blue-400 text-white px-8 h-14 rounded-2xl font-bold text-base active:scale-[0.98] transition-all shadow-lg shadow-blue-500/30 dark:shadow-blue-500/20"
+            disabled={apontamento === null}
+            className={`px-8 h-14 rounded-2xl font-bold text-base active:scale-[0.98] transition-all ${
+              apontamento === null
+                ? 'bg-surface-elev text-ink-subtle cursor-not-allowed'
+                : 'bg-blue-600 hover:bg-blue-500 dark:bg-blue-500 dark:hover:bg-blue-400 text-white shadow-lg shadow-blue-500/30 dark:shadow-blue-500/20'
+            }`}
           >
             Iniciar conferência
           </button>
@@ -361,6 +416,26 @@ export default function ConferenciaPedidoPage() {
         <p className="text-xs text-ink-subtle mt-1">
           {totalConferido} / {totalPedido} unidades · {volumes.length} volume(s)
         </p>
+        <div className="flex items-center gap-1 mt-0.5">
+          <p className="text-xs text-ink-subtle">
+            Separado por:{' '}
+            {pedido.separador_nao_identificado ? (
+              <span className="font-semibold text-amber-600 dark:text-amber-400">Não identificado</span>
+            ) : pedido.separado_por ? (
+              <span className="font-semibold">{pedido.separado_por.apelido || pedido.separado_por.nome}</span>
+            ) : (
+              '—'
+            )}
+          </p>
+          {pedido.status === 'conferindo' && (
+            <button
+              onClick={() => setModalSeparadoPor(true)}
+              className="text-xs text-blue-600 dark:text-blue-400 px-1.5 min-h-[28px]"
+            >
+              trocar
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Volumes — botão de novo volume + lista expansível */}
@@ -420,7 +495,7 @@ export default function ConferenciaPedidoPage() {
               onChange={(e) => setScanValue(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleScan() }}
               onBlur={() => setTimeout(() => {
-                const algumModal = itemSelecionado || modalNovoVolume || modalNaoConforme
+                const algumModal = itemSelecionado || modalNovoVolume || modalNaoConforme || modalSeparadoPor
                 if (!algumModal) scanRef.current?.focus()
               }, 80)}
               className={`flex-1 min-w-0 outline-none bg-transparent text-base font-mono tracking-wider ${
@@ -576,6 +651,15 @@ export default function ConferenciaPedidoPage() {
           onConfirmar={aoMarcarNaoConforme}
         />
       )}
+
+      {modalSeparadoPor && (
+        <ModalSeparadoPor
+          liberados={liberados}
+          atual={pedido.separador_nao_identificado ? 'nao_identificado' : pedido.separado_por?.id ?? null}
+          onCancelar={() => setModalSeparadoPor(false)}
+          onConfirmar={aoAlterarSeparadoPor}
+        />
+      )}
     </div>
   )
 }
@@ -717,6 +801,85 @@ function ListaVolumes({
 // -----------------------------------------------------------------------------
 // Modal — Novo volume
 // -----------------------------------------------------------------------------
+
+// -----------------------------------------------------------------------------
+// Apontamento "separado por" — seletor + modal de troca
+// -----------------------------------------------------------------------------
+
+function SeletorSeparadoPor({ liberados, valor, onChange }: {
+  liberados: SeparadorLiberado[]
+  valor: number | 'nao_identificado' | null
+  onChange: (v: number | 'nao_identificado') => void
+}) {
+  return (
+    <div className="space-y-2">
+      {liberados.length === 0 ? (
+        <p className="text-sm text-ink-subtle bg-surface-elev rounded-xl p-3">
+          Nenhum separador liberado hoje — peça ao Supervisor de Pátio.
+        </p>
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          {liberados.map((s) => (
+            <button
+              key={s.id}
+              onClick={() => onChange(s.id)}
+              className={`h-12 px-3 rounded-xl border-2 text-sm font-semibold truncate transition-all ${
+                valor === s.id
+                  ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300 dark:border-blue-500/60'
+                  : 'border-surface-border bg-surface-card text-ink-muted hover:border-ink-subtle'
+              }`}
+            >
+              {s.apelido || s.nome}
+            </button>
+          ))}
+        </div>
+      )}
+      <button
+        onClick={() => onChange('nao_identificado')}
+        className={`w-full h-11 rounded-xl border-2 text-sm font-semibold transition-all ${
+          valor === 'nao_identificado'
+            ? 'border-amber-500 bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/60'
+            : 'border-dashed border-surface-border text-ink-subtle hover:border-amber-400 hover:text-amber-600 dark:hover:text-amber-400'
+        }`}
+      >
+        ⚠ Não identificado
+      </button>
+    </div>
+  )
+}
+
+function ModalSeparadoPor({ liberados, atual, onCancelar, onConfirmar }: {
+  liberados: SeparadorLiberado[]
+  atual: number | 'nao_identificado' | null
+  onCancelar: () => void
+  onConfirmar: (v: number | 'nao_identificado') => void
+}) {
+  const [valor, setValor] = useState<number | 'nao_identificado' | null>(atual)
+  return (
+    <div className="fixed inset-0 z-30 flex items-end justify-center">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onCancelar} />
+      <div className="relative bg-surface-card text-ink rounded-t-2xl w-full max-w-md p-6 pb-8 border-t border-surface-border shadow-2xl">
+        <h2 className="font-bold text-lg mb-4">Quem separou este pedido?</h2>
+        <SeletorSeparadoPor liberados={liberados} valor={valor} onChange={setValor} />
+        <div className="flex gap-3 mt-5">
+          <button
+            onClick={onCancelar}
+            className="flex-1 h-12 bg-surface-elev text-ink rounded-xl font-medium hover:bg-surface-border transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={() => valor !== null && onConfirmar(valor)}
+            disabled={valor === null}
+            className="flex-1 h-12 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-300 text-white dark:text-zinc-900 rounded-xl font-bold transition-colors disabled:opacity-40"
+          >
+            Salvar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function ModalNovoVolume({
   volumes,

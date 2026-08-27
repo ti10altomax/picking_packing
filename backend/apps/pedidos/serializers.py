@@ -10,6 +10,15 @@ class PedidoItemSerializer(serializers.ModelSerializer):
         fields = ['id', 'sku', 'descricao', 'ean', 'qtd_pedida', 'qtd_separada', 'status']
 
 
+def _nome_separado_por(obj):
+    """Nome do separador apontado; 'Não identificado' fica destacado nos relatórios."""
+    if obj.separado_por:
+        return str(obj.separado_por)
+    if obj.separador_nao_identificado:
+        return 'Não identificado'
+    return None
+
+
 def _formatar_duracao(inicio, fim):
     """Formata o delta entre dois timestamps como '5min', '1h12min', '12s'."""
     if not inicio or not fim:
@@ -32,6 +41,7 @@ class PedidoListSerializer(serializers.ModelSerializer):
     tempo_espera = serializers.SerializerMethodField()
     duracao_conferencia = serializers.SerializerMethodField()
     conferente_username = serializers.CharField(source='conferente.username', read_only=True)
+    separado_por_nome = serializers.SerializerMethodField()
 
     class Meta:
         model = Pedido
@@ -39,8 +49,12 @@ class PedidoListSerializer(serializers.ModelSerializer):
             'id', 'numero_externo', 'cliente', 'status', 'criado_em',
             'conferencia_iniciada_em', 'conferido_em', 'selecionado_em', 'atribuido_em',
             'conferente', 'conferente_username',
+            'separado_por', 'separado_por_nome', 'separador_nao_identificado',
             'qtd_itens', 'tempo_espera', 'duracao_conferencia',
         ]
+
+    def get_separado_por_nome(self, obj):
+        return _nome_separado_por(obj)
 
     def get_tempo_espera(self, obj):
         if not obj.criado_em:
@@ -56,6 +70,7 @@ class PedidoSerializer(serializers.ModelSerializer):
     itens = PedidoItemSerializer(many=True, read_only=True)
     marketplace_nome = serializers.CharField(source='marketplace.nome', read_only=True)
     conferente_username = serializers.CharField(source='conferente.username', read_only=True)
+    separado_por_nome = serializers.SerializerMethodField()
     percent_conferido = serializers.SerializerMethodField()
     qtd_itens = serializers.SerializerMethodField()
     tempo_espera = serializers.SerializerMethodField()
@@ -69,9 +84,13 @@ class PedidoSerializer(serializers.ModelSerializer):
             'conferencia_iniciada_em', 'conferido_em', 'faturado_em',
             'endereco_fisico', 'ordem_pilha',
             'selecionado_em', 'atribuido_em', 'conferente', 'conferente_username',
+            'separado_por', 'separado_por_nome', 'separador_nao_identificado',
             'percent_conferido', 'qtd_itens', 'tempo_espera', 'duracao_conferencia',
             'itens',
         ]
+
+    def get_separado_por_nome(self, obj):
+        return _nome_separado_por(obj)
 
     def get_percent_conferido(self, obj):
         itens = obj.itens.all()

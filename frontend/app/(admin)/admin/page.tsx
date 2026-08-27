@@ -17,6 +17,13 @@ const PRINCIPAL = [
     glow: 'dark:hover:shadow-amber-500/10',
   },
   {
+    href: '/supervisor/separadores',
+    titulo: 'Separadores — Cadastro e liberação',
+    descricao: 'Cadastra separadores físicos e marca quem está liberado hoje',
+    cor: 'border-violet-200 hover:border-violet-400 dark:border-violet-500/30 dark:hover:border-violet-500/70',
+    glow: 'dark:hover:shadow-violet-500/10',
+  },
+  {
     href: '/conferencia',
     titulo: 'Conferente — Atribuídos a mim',
     descricao: 'Lista pedidos atribuídos ao usuário logado e tela de conferência por volumes',

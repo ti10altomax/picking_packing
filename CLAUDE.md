@@ -6,7 +6,7 @@ Sistema interno para **separação de pedidos no galpão da Altomax**. Não é m
 
 > Pivot do projeto: este sistema **era** um fluxo de expedição multi-marketplace com VTEX/CLICK/etiquetagem. Esses módulos **continuam no código preservados** (não apagar) mas estão fora do MVP atual. Ver "Módulos congelados".
 
-> **Redesenho 2026-08 (aprovado)** — ver `DESIGN.md` para a espec completa. **Fase 1 (rename) implementada em 2026-08-27**: o papel do sistema agora é o **conferente** (perfil, campos, status, endpoints e rotas renomeados; "separador" ficou reservado para o trabalhador físico do cadastro da Fase 2). Faltam: cadastro de Separador + liberação diária (Fase 2), sequências (Fase 3), divergência de barra + erro de separação + relatório (Fase 4), APK novo (Fase 5).
+> **Redesenho 2026-08 (aprovado)** — ver `DESIGN.md` para a espec completa. **Fases 1 e 2 implementadas em 2026-08-27**: o papel do sistema agora é o **conferente** (rename completo), e o **separador físico** tem cadastro próprio (`Separador`, sem login) com **liberação diária** pelo Sup. Pátio — o conferente aponta "separado por" (ou "Não identificado") obrigatoriamente ao iniciar a conferência. Faltam: sequências (Fase 3), divergência de barra + erro de separação + relatório (Fase 4), APK novo (Fase 5).
 
 Atores principais: **Supervisor de Vendas**, **Supervisor de Pátio**, **Conferente** e **Admin**.
 
@@ -221,6 +221,7 @@ separa/
 │   │   ├── core/           # User, perfis, auth
 │   │   ├── pedidos/        # Pedido, PedidoItem, Volume, VolumeItem, PedidoLog + ações dos supervisores
 │   │   ├── conferencia/    # fluxo do conferente (bipagem em volumes + não conformes)
+│   │   ├── separadores/    # cadastro de separadores físicos + liberação diária
 │   │   ├── senior/         # leitura Oracle + saída SOAP (operação a definir)
 │   │   ├── etiquetas/      # CONGELADO — Impressora, PrintAgent, PrintJob (não tocar)
 │   │   └── vtex/           # CONGELADO — VTEX API
@@ -289,7 +290,7 @@ Não tocar nesses arquivos durante o trabalho do escopo atual. Podem voltar ao f
 
 ## Roadmap (novo escopo)
 
-> **2026-08**: as Fases A–F abaixo estão **concluídas** (detalhes em `STATUS.md`). O roadmap vigente é o do **redesenho 2026-08**, em `DESIGN.md`: 1) rename separador→conferente ✅ (2026-08-27) · 2) cadastro de Separador + liberação diária · 3) sequências · 4) divergência de barra + erro de separação + relatório agrupado · 5) paridade mobile + APK · 6) futuros (finalizar sem conferência, DOM, Sisplan, imagens).
+> **2026-08**: as Fases A–F abaixo estão **concluídas** (detalhes em `STATUS.md`). O roadmap vigente é o do **redesenho 2026-08**, em `DESIGN.md`: 1) rename separador→conferente ✅ · 2) cadastro de Separador + liberação diária ✅ (ambas 2026-08-27) · 3) sequências · 4) divergência de barra + erro de separação + relatório agrupado · 5) paridade mobile + APK · 6) futuros (finalizar sem conferência, DOM, Sisplan, imagens).
 
 **Fase A — Fundação**
 - Refatorar perfis: `separador`, `supervisor_vendas`, `supervisor_patio`, `admin`

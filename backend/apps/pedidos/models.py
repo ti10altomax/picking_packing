@@ -67,6 +67,13 @@ class Pedido(models.Model):
     )
     conferencia_iniciada_em = models.DateTimeField(null=True, blank=True)
 
+    # Apontamento de quem separou fisicamente (registrado pelo conferente ao iniciar)
+    separado_por = models.ForeignKey(
+        'Separador', null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='pedidos_separados',
+    )
+    separador_nao_identificado = models.BooleanField(default=False)
+
     # Não conforme
     nao_conforme_em = models.DateTimeField(null=True, blank=True)
     nao_conforme_motivo = models.CharField(
@@ -154,6 +161,60 @@ class VolumeItem(models.Model):
 
     class Meta:
         ordering = ['criado_em']
+
+
+class Separador(models.Model):
+    """Trabalhador físico que separa mercadoria no estoque (em geral extras).
+
+    Não é usuário do sistema — sem login. Se um dia contratado/precisar logar,
+    cria-se o User e vincula em `user` (histórico preservado). Ver DESIGN.md §2.
+    """
+
+    class Tipo(models.TextChoices):
+        EXTRA = 'extra', 'Extra'
+        FUNCIONARIO = 'funcionario', 'Funcionário'
+
+    nome = models.CharField(max_length=255)
+    apelido = models.CharField(max_length=100, blank=True)
+    documento = models.CharField(max_length=30, blank=True)
+    tipo = models.CharField(max_length=20, choices=Tipo.choices, default=Tipo.EXTRA)
+    ativo = models.BooleanField(default=True)
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='separador_registro',
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['nome']
+        verbose_name = 'Separador'
+        verbose_name_plural = 'Separadores'
+
+    def __str__(self):
+        return self.apelido or self.nome
+
+
+class SeparadorLiberacao(models.Model):
+    """Escala diária: quem está atuando como separador na data (Sup. Pátio marca)."""
+
+    separador = models.ForeignKey(Separador, on_delete=models.CASCADE, related_name='liberacoes')
+    data = models.DateField()
+    liberado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='liberacoes_concedidas',
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-data']
+        constraints = [
+            models.UniqueConstraint(fields=['separador', 'data'], name='liberacao_unica_por_dia'),
+        ]
+        verbose_name = 'Liberação diária'
+        verbose_name_plural = 'Liberações diárias'
+
+    def __str__(self):
+        return f'{self.separador} liberado em {self.data}'
 
 
 class EtiquetaVtex(models.Model):

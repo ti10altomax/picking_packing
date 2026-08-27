@@ -18,6 +18,18 @@ Sessão de definição com direção/supervisão fechou um redesenho grande — 
 
 **Fase 1 do redesenho implementada em 2026-08-27** (branch `develop`): rename completo `separador`→`conferente` — perfil (+migration de dados), campos do Pedido (`conferente`, `conferencia_iniciada_em`, `conferido_em`), status (`conferindo`/`conferido`, valores migrados), app `apps/conferencia/`, endpoints `/api/conferencia/` e `/api/users/conferentes/`, payload `conferente_id` no atribuir, chaves `conferente_username`/`percent_conferido`/`duracao_conferencia`, rotas web `/conferencia` e `/supervisor/conferidos`, mobile idem. **Mantidos**: `PedidoItem.qtd_separada` (compartilhado com legado), endpoint legado `finalizar_separacao`, módulos congelados intactos. Validado: `manage.py check` + `makemigrations --check` limpos, `tsc` web zerado, migrações aplicadas no dev, smoke test de rotas ok. Pendência conhecida: erro de tipo pré-existente em `mobile/components/CameraScanner.tsx` (expo-camera), sem relação com o rename. **APK dos coletores precisa de rebuild quando isso for pra produção.**
 
+**Fase 2 do redesenho implementada em 2026-08-27** (branch `develop`): cadastro de Separador + liberação diária + apontamento.
+
+- Modelos `Separador` e `SeparadorLiberacao` + `Pedido.separado_por`/`separador_nao_identificado` (migration `pedidos/0008`).
+- App novo `apps/separadores`: `GET/POST /api/separadores/`, `PATCH /api/separadores/<id>/`, `POST liberar//desliberar/` (sup. pátio/admin), `GET /api/separadores/liberados/` (picker — conferente pode ler).
+- `iniciar` da conferência agora **exige o apontamento** (`separado_por` ou `nao_identificado: true`); valida separador ativo + liberado hoje; `criar_volume` não auto-inicia mais; `POST /api/conferencia/pedidos/<id>/separado_por/` troca durante a conferência (logado).
+- Não conformes e serializers de pedido expõem `separado_por`/flag; "retornar para fila" limpa o apontamento.
+- Web: tela `/supervisor/separadores` (cadastro rápido + toggle "Liberado hoje" + desativar), picker obrigatório no iniciar com "Não identificado" destacado, chip "Separado por" com troca, não conformes mostra o separador, card no admin.
+- Mobile: paridade completa; a tela de não conformes foi **realinhada ao contrato real da API** (o shape anterior era imaginado e nunca bateu); fix do erro pré-existente de tipos no `CameraScanner` (`BarcodeType`).
+- Django admin: `Separador` com inline de liberações; campos novos no Pedido.
+- Infra dev: `backend/locale/.gitkeep` evita crash-loop do runserver por EIO do mount 9p do WSL em diretório inexistente.
+- Validação: e2e via API (selecionar → atribuir → iniciar sem/com apontamento → trocar → revertido); tsc web e mobile zerados; `makemigrations --check` limpo.
+
 Nota: a **Fase I (mobile)** descrita abaixo ficou desatualizada — o app chegou a **paridade total de telas** (Expo SDK 54, RN 0.81.4, NativeWind 4: login, separação + detalhe, vendas, pátio, separados, não-conformes, admin) com APK release buildado localmente em `mobile/android/`.
 
 ---
