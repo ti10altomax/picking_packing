@@ -5,15 +5,17 @@ import {
   Pressable,
   TextInput,
   FlatList,
+  ScrollView,
   RefreshControl,
   ActivityIndicator,
   Modal,
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useRouter } from 'expo-router'
 import { Header } from '@/components/Header'
 import { SupervisorNav } from '@/components/SupervisorNav'
 import { useDialog } from '@/components/Dialog'
-import { supervisorApi } from '@/lib/api'
+import { supervisorApi, sequenciasApi, SequenciaResumo } from '@/lib/api'
 
 type Pedido = {
   id: number
@@ -23,33 +25,49 @@ type Pedido = {
   tempo_espera: string
 }
 
-type Conferente = { id: number; username: string; first_name: string; last_name: string }
 type Paginado = { count: number; next: string | null; results: Pedido[] }
+
+const STATUS_SEQ: Record<string, { label: string; cor: string; texto: string }> = {
+  aberta: { label: 'Aberta', cor: 'bg-orange-500/15', texto: 'text-orange-300' },
+  em_andamento: { label: 'Em andamento', cor: 'bg-blue-500/15', texto: 'text-blue-300' },
+  concluida: { label: 'Concluída', cor: 'bg-emerald-500/15', texto: 'text-emerald-300' },
+}
 
 export default function SupervisorPatio() {
   const insets = useSafeAreaInsets()
+  const router = useRouter()
   const dialog = useDialog()
+  const [sequencias, setSequencias] = useState<SequenciaResumo[]>([])
   const [pedidos, setPedidos] = useState<Pedido[]>([])
   const [count, setCount] = useState(0)
   const [proximaPagina, setProximaPagina] = useState<number | null>(null)
   const [carregando, setCarregando] = useState(true)
   const [carregandoMais, setCarregandoMais] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
-  const [conferentes, setConferentes] = useState<Conferente[]>([])
-  const [conferenteId, setConferenteId] = useState<number | null>(null)
-  const [pickerAberto, setPickerAberto] = useState(false)
   const [selecionados, setSelecionados] = useState<Set<number>>(new Set())
+  const [destino, setDestino] = useState<'nova' | number>('nova')
+  const [pickerAberto, setPickerAberto] = useState(false)
   const [enviando, setEnviando] = useState(false)
   const [busca, setBusca] = useState('')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const buscaAtivaRef = useRef('')
+
+  const carregarSequencias = useCallback(async () => {
+    try {
+      setSequencias(await sequenciasApi.listar())
+    } catch {
+      /* secundário */
+    }
+  }, [])
 
   const carregar = useCallback(async (search: string, page = 1, append = false) => {
     if (page === 1 && !append) setCarregando(true)
     else setCarregandoMais(true)
     buscaAtivaRef.current = search
     try {
-      const data: Paginado | Pedido[] = await supervisorApi.listarSelecionados({ search, page })
+      const data: Paginado | Pedido[] = await supervisorApi.listarSelecionados({
+        search, page, sem_sequencia: '1',
+      })
       if (Array.isArray(data)) {
         setPedidos(data); setCount(data.length); setProximaPagina(null)
       } else {
@@ -67,12 +85,9 @@ export default function SupervisorPatio() {
 
   useEffect(() => {
     (async () => {
-      const seps: Conferente[] = await supervisorApi.listarConferentes()
-      setConferentes(seps)
-      if (seps.length > 0) setConferenteId(seps[0].id)
-      await carregar('', 1, false)
+      await Promise.all([carregarSequencias(), carregar('', 1, false)])
     })()
-  }, [carregar])
+  }, [carregar, carregarSequencias])
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
@@ -89,46 +104,86 @@ export default function SupervisorPatio() {
     })
   }
 
-  async function atribuir() {
-    if (selecionados.size === 0 || !conferenteId) return
+  async function enviarParaSequencia() {
+    if (selecionados.size === 0) return
     setEnviando(true)
+    const ids = Array.from(selecionados)
     try {
-      const ids = Array.from(selecionados)
-      const res = await supervisorApi.atribuir(ids, conferenteId)
+      if (destino === 'nova') {
+        const seq = await sequenciasApi.criar(ids)
+        setSelecionados(new Set())
+        router.push(`/supervisor/sequencia/${seq.id}` as never)
+        return
+      }
+      const res = await sequenciasApi.adicionar(destino, ids)
       setSelecionados(new Set())
       await dialog.alert({
         variant: 'success',
-        title: 'Pedidos atribuídos',
-        message: `${res.atribuidos.length} pedido(s) atribuído(s) a ${res.conferente}.`,
+        title: 'Pedidos adicionados',
+        message: `${res.adicionados.length} pedido(s) entraram na sequência.`,
       })
-      await carregar(buscaAtivaRef.current, 1, false)
+      await Promise.all([carregarSequencias(), carregar(buscaAtivaRef.current, 1, false)])
     } catch {
       await dialog.alert({
         variant: 'danger',
-        title: 'Erro ao atribuir',
-        message: 'Não foi possível atribuir os pedidos. Tente novamente.',
+        title: 'Erro',
+        message: 'Não foi possível montar a sequência.',
       })
     } finally {
       setEnviando(false)
     }
   }
 
-  const sepAtual = conferentes.find((s) => s.id === conferenteId)
-  const labelSep = sepAtual
-    ? (sepAtual.first_name || sepAtual.last_name)
-      ? `${sepAtual.first_name} ${sepAtual.last_name}`.trim()
-      : sepAtual.username
-    : 'Selecionar conferente'
+  const sequenciasAbertas = sequencias.filter((s) => s.status !== 'concluida')
+  const labelDestino = destino === 'nova'
+    ? 'Nova sequência'
+    : `Sequência ${sequenciasAbertas.find((s) => s.id === destino)?.numero ?? destino}`
 
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-surface-bg">
       <Header title="Sup. Pátio" />
       <SupervisorNav />
 
+      {/* Sequências em aberto */}
+      <View className="pt-3">
+        <Text className="px-4 text-sm font-semibold text-ink mb-2">Sequências</Text>
+        {sequenciasAbertas.length === 0 ? (
+          <Text className="px-4 text-xs text-ink-subtle mb-2">
+            Nenhuma sequência em aberto — selecione pedidos e crie a primeira.
+          </Text>
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}
+            style={{ flexGrow: 0 }}
+          >
+            {sequenciasAbertas.map((s) => {
+              const st = STATUS_SEQ[s.status] ?? STATUS_SEQ.aberta
+              return (
+                <Pressable
+                  key={s.id}
+                  onPress={() => router.push(`/supervisor/sequencia/${s.id}` as never)}
+                  className="bg-surface-card border border-surface-border rounded-xl p-3 w-52 active:bg-surface-elev"
+                >
+                  <View className="flex-row items-center gap-2 mb-1">
+                    <Text className="font-bold text-ink">Seq. {s.numero}</Text>
+                    <View className={`px-2 py-0.5 rounded-full ${st.cor}`}>
+                      <Text className={`text-xs font-medium ${st.texto}`}>{st.label}</Text>
+                    </View>
+                  </View>
+                  <Text className="text-xs text-ink-muted">
+                    {s.qtd_pedidos} pedido(s) · {s.qtd_sem_conferente} sem conf. · {s.qtd_finalizados} final.
+                  </Text>
+                </Pressable>
+              )
+            })}
+          </ScrollView>
+        )}
+      </View>
+
       <View className="px-4 pt-3 pb-2 gap-2">
-        <Text className="text-sm text-ink-muted">
-          Atribua pedidos selecionados a um conferente
-        </Text>
+        <Text className="text-sm font-semibold text-ink">Pedidos aguardando sequência</Text>
         <TextInput
           value={busca}
           onChangeText={setBusca}
@@ -136,13 +191,6 @@ export default function SupervisorPatio() {
           placeholderTextColor="#52525b"
           className="h-11 px-3 bg-surface-card border border-surface-border rounded-lg text-ink"
         />
-        <Pressable
-          onPress={() => setPickerAberto(true)}
-          className="h-11 px-3 bg-surface-card border border-surface-border rounded-lg flex-row items-center justify-between"
-        >
-          <Text className="text-ink" numberOfLines={1}>{labelSep}</Text>
-          <Text className="text-ink-subtle">▾</Text>
-        </Pressable>
       </View>
 
       {carregando && pedidos.length === 0 ? (
@@ -161,7 +209,11 @@ export default function SupervisorPatio() {
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={() => { setRefreshing(true); carregar(buscaAtivaRef.current, 1, false) }}
+              onRefresh={() => {
+                setRefreshing(true)
+                carregarSequencias()
+                carregar(buscaAtivaRef.current, 1, false)
+              }}
               tintColor="#a1a1aa"
             />
           }
@@ -169,7 +221,7 @@ export default function SupervisorPatio() {
             <Text className="text-xs text-ink-subtle mb-2">{pedidos.length} de {count}</Text>
           }
           ListEmptyComponent={
-            <Text className="text-ink-subtle text-center py-12">Nenhum pedido aguardando atribuição.</Text>
+            <Text className="text-ink-subtle text-center py-12">Nenhum pedido aguardando sequência.</Text>
           }
           ListFooterComponent={
             proximaPagina ? (
@@ -227,32 +279,30 @@ export default function SupervisorPatio() {
             paddingTop: 12,
             paddingBottom: Math.max(insets.bottom, 12),
           }}
-          className="bg-surface-card border-t border-surface-border flex-row items-center justify-between gap-3"
+          className="bg-surface-card border-t border-surface-border flex-row items-center justify-between gap-2"
         >
-          <Text className="text-sm text-ink-muted flex-1" numberOfLines={1}>
-            {selecionados.size} → <Text className="text-ink font-bold">{sepAtual?.username ?? '—'}</Text>
-          </Text>
-          <View className="flex-row gap-2">
-            <Pressable
-              onPress={() => setSelecionados(new Set())}
-              className="px-3 h-11 items-center justify-center"
-            >
-              <Text className="text-sm text-ink-muted">Limpar</Text>
-            </Pressable>
-            <Pressable
-              onPress={atribuir}
-              disabled={enviando || !conferenteId}
-              className="bg-amber-500 active:bg-amber-400 px-5 h-11 rounded-lg items-center justify-center"
-            >
-              <Text className="text-white font-semibold text-sm">
-                {enviando ? 'Atribuindo…' : 'Atribuir'}
-              </Text>
-            </Pressable>
-          </View>
+          <Pressable
+            onPress={() => setPickerAberto(true)}
+            className="flex-1 h-11 px-3 bg-surface-elev border border-surface-border rounded-lg flex-row items-center justify-between"
+          >
+            <Text className="text-ink text-sm" numberOfLines={1}>
+              {selecionados.size} → {labelDestino}
+            </Text>
+            <Text className="text-ink-subtle">▾</Text>
+          </Pressable>
+          <Pressable
+            onPress={enviarParaSequencia}
+            disabled={enviando}
+            className="bg-amber-500 active:bg-amber-400 px-4 h-11 rounded-lg items-center justify-center"
+          >
+            <Text className="text-white font-semibold text-sm">
+              {enviando ? '…' : destino === 'nova' ? 'Criar' : 'Adicionar'}
+            </Text>
+          </Pressable>
         </View>
       ) : null}
 
-      {/* Picker de conferente */}
+      {/* Picker de destino */}
       <Modal visible={pickerAberto} animationType="slide" transparent onRequestClose={() => setPickerAberto(false)}>
         <Pressable className="flex-1 bg-black/60 justify-end" onPress={() => setPickerAberto(false)}>
           <Pressable
@@ -260,27 +310,32 @@ export default function SupervisorPatio() {
             style={{ paddingBottom: Math.max(insets.bottom, 16), maxHeight: '70%' }}
             onPress={(e) => e.stopPropagation()}
           >
-            <Text className="font-bold text-lg text-ink mb-3">Escolher conferente</Text>
-            <FlatList
-              data={conferentes}
-              keyExtractor={(s) => String(s.id)}
-              ItemSeparatorComponent={() => <View className="h-px bg-surface-border" />}
-              renderItem={({ item: s }) => {
-                const ativo = s.id === conferenteId
-                const nome = (s.first_name || s.last_name) ? `${s.first_name} ${s.last_name}`.trim() : s.username
-                return (
-                  <Pressable
-                    onPress={() => { setConferenteId(s.id); setPickerAberto(false) }}
-                    className={`px-3 py-3 rounded-lg ${ativo ? 'bg-blue-500/15' : 'active:bg-surface-elev'}`}
-                  >
-                    <Text className={`text-base font-medium ${ativo ? 'text-blue-300' : 'text-ink'}`}>
-                      {nome}
-                    </Text>
-                    <Text className="text-xs text-ink-subtle">{s.username}</Text>
-                  </Pressable>
-                )
-              }}
-            />
+            <Text className="font-bold text-lg text-ink mb-3">Enviar para…</Text>
+            <Pressable
+              onPress={() => { setDestino('nova'); setPickerAberto(false) }}
+              className={`px-3 py-3 rounded-lg ${destino === 'nova' ? 'bg-blue-500/15' : 'active:bg-surface-elev'}`}
+            >
+              <Text className={`text-base font-medium ${destino === 'nova' ? 'text-blue-300' : 'text-ink'}`}>
+                Nova sequência
+              </Text>
+            </Pressable>
+            {sequenciasAbertas.map((s) => {
+              const ativo = destino === s.id
+              return (
+                <Pressable
+                  key={s.id}
+                  onPress={() => { setDestino(s.id); setPickerAberto(false) }}
+                  className={`px-3 py-3 rounded-lg ${ativo ? 'bg-blue-500/15' : 'active:bg-surface-elev'}`}
+                >
+                  <Text className={`text-base font-medium ${ativo ? 'text-blue-300' : 'text-ink'}`}>
+                    Sequência {s.numero}
+                  </Text>
+                  <Text className="text-xs text-ink-subtle">
+                    {s.qtd_pedidos} pedido(s) · {s.qtd_sem_conferente} sem conferente
+                  </Text>
+                </Pressable>
+              )
+            })}
           </Pressable>
         </Pressable>
       </Modal>

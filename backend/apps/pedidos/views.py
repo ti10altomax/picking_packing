@@ -5,7 +5,6 @@ from rest_framework.generics import get_object_or_404
 from django.db import models
 from django.db.models import Count, Q
 from django.utils import timezone
-from apps.core.models import User
 from .models import Pedido, PedidoItem, PedidoLog
 from .serializers import PedidoSerializer, PedidoListSerializer
 
@@ -22,9 +21,9 @@ class PedidoViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         if self.action == 'list':
             # Listagem slim — sem prefetch de itens, com qtd_itens anotada
-            qs = Pedido.objects.select_related('conferente', 'separado_por').annotate(qtd_itens=Count('itens'))
+            qs = Pedido.objects.select_related('conferente', 'separado_por', 'sequencia').annotate(qtd_itens=Count('itens'))
         else:
-            qs = Pedido.objects.select_related('marketplace', 'conferente', 'separado_por').prefetch_related('itens')
+            qs = Pedido.objects.select_related('marketplace', 'conferente', 'separado_por', 'sequencia').prefetch_related('itens')
 
         status_filter = self.request.query_params.get('status')
         marketplace = self.request.query_params.get('marketplace')
@@ -32,6 +31,8 @@ class PedidoViewSet(viewsets.ModelViewSet):
 
         if status_filter:
             qs = qs.filter(status=status_filter)
+        if self.request.query_params.get('sem_sequencia') == '1':
+            qs = qs.filter(sequencia__isnull=True)
         if marketplace:
             qs = qs.filter(marketplace__slug=marketplace)
         if search:
@@ -154,55 +155,15 @@ class PedidoViewSet(viewsets.ModelViewSet):
         return Response({'selecionados': atualizados, 'ignorados': ignorados})
 
     # ------------------------------------------------------------------
-    # Sup. Pátio — atribuição em lote (Selecionado → Atribuído)
+    # Sup. Pátio — DESATIVADO na Fase 3: atribuição agora é por sequência
+    # (POST /api/sequencias/<id>/atribuir/). Mantido só para responder claro.
     # ------------------------------------------------------------------
     @action(detail=False, methods=['post'])
     def atribuir(self, request):
-        if request.user.perfil not in ('supervisor_patio', 'admin'):
-            return Response(
-                {'erro': 'restrito ao Supervisor de Pátio'},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        ids = request.data.get('pedido_ids') or []
-        conferente_id = request.data.get('conferente_id')
-
-        if not isinstance(ids, list) or not ids:
-            return Response({'erro': 'pedido_ids obrigatório'}, status=status.HTTP_400_BAD_REQUEST)
-        if not conferente_id:
-            return Response({'erro': 'conferente_id obrigatório'}, status=status.HTTP_400_BAD_REQUEST)
-
-        conferente = User.objects.filter(
-            pk=conferente_id, perfil=User.Perfil.CONFERENTE, is_active=True,
-        ).first()
-        if not conferente:
-            return Response(
-                {'erro': 'conferente inválido ou inativo'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        agora = timezone.now()
-        qs = Pedido.objects.filter(pk__in=ids, status=Pedido.Status.SELECIONADO)
-        atualizados = list(qs.values_list('id', flat=True))
-        qs.update(
-            status=Pedido.Status.ATRIBUIDO,
-            atribuido_em=agora,
-            atribuido_por=request.user,
-            conferente=conferente,
+        return Response(
+            {'erro': 'atribuição direta desativada — monte uma sequência e use /api/sequencias/<id>/atribuir/'},
+            status=status.HTTP_410_GONE,
         )
-        for pid in atualizados:
-            PedidoLog.objects.create(
-                pedido_id=pid, usuario=request.user,
-                acao='pedido_atribuido',
-                payload={'conferente_id': conferente.id, 'conferente': conferente.username},
-            )
-
-        ignorados = [i for i in ids if i not in atualizados]
-        return Response({
-            'atribuidos': atualizados,
-            'ignorados': ignorados,
-            'conferente': conferente.username,
-        })
 
     @action(detail=True, methods=['post'])
     def finalizar_separacao(self, request, pk=None):

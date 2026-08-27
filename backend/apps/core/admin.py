@@ -10,7 +10,18 @@ from unfold.forms import (
 from unfold.contrib.filters.admin import ChoicesDropdownFilter
 from unfold.decorators import display
 
-from .models import User
+from .models import Configuracao, User
+
+
+@admin.register(Configuracao)
+class ConfiguracaoAdmin(ModelAdmin):
+    """Valores válidos (DESIGN.md — Configurações do sistema):
+
+    - liberacao_proxima_sequencia: ao_terminar_meus_pedidos | ao_concluir_sequencia_inteira
+    - fechamento_sobra: supervisor_patio | conferente
+    """
+    list_display = ('chave', 'valor', 'atualizado_em')
+    readonly_fields = ('atualizado_em',)
 
 
 @admin.register(User)

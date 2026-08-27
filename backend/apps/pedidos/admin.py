@@ -10,7 +10,7 @@ from unfold.decorators import display
 from .models import (
     Pedido, PedidoItem, Marketplace, Impressora, Lote,
     PrintAgent, PrintJob, Volume, VolumeItem, PedidoLog,
-    Separador, SeparadorLiberacao,
+    Separador, SeparadorLiberacao, Sequencia,
 )
 
 
@@ -73,6 +73,7 @@ class PedidoAdmin(ModelAdmin):
         ("Atribuição", {
             "fields": (
                 "selecionado_em", "selecionado_por",
+                "sequencia",
                 "atribuido_em", "atribuido_por",
                 "conferente",
             ),
@@ -157,6 +158,22 @@ class VolumeAdmin(ModelAdmin):
     @display(description="Unidades")
     def qtd_unidades(self, obj):
         return sum(i.qtd for i in obj.itens.all())
+
+
+# -----------------------------------------------------------------------------
+# Sequências de separação (DESIGN.md §3)
+# -----------------------------------------------------------------------------
+
+@admin.register(Sequencia)
+class SequenciaAdmin(ModelAdmin):
+    list_display = ('numero', 'status', 'qtd_pedidos', 'criado_em', 'criado_por', 'concluida_em')
+    list_filter = (('status', ChoicesDropdownFilter), ('criado_em', RangeDateFilter))
+    search_fields = ('numero',)
+    readonly_fields = ('criado_em', 'criado_por', 'concluida_em')
+
+    @display(description="Pedidos")
+    def qtd_pedidos(self, obj):
+        return obj.pedidos.count()
 
 
 # -----------------------------------------------------------------------------

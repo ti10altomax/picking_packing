@@ -42,6 +42,7 @@ class PedidoListSerializer(serializers.ModelSerializer):
     duracao_conferencia = serializers.SerializerMethodField()
     conferente_username = serializers.CharField(source='conferente.username', read_only=True)
     separado_por_nome = serializers.SerializerMethodField()
+    sequencia_numero = serializers.IntegerField(source='sequencia.numero', read_only=True)
 
     class Meta:
         model = Pedido
@@ -49,6 +50,7 @@ class PedidoListSerializer(serializers.ModelSerializer):
             'id', 'numero_externo', 'cliente', 'status', 'criado_em',
             'conferencia_iniciada_em', 'conferido_em', 'selecionado_em', 'atribuido_em',
             'conferente', 'conferente_username',
+            'sequencia', 'sequencia_numero',
             'separado_por', 'separado_por_nome', 'separador_nao_identificado',
             'qtd_itens', 'tempo_espera', 'duracao_conferencia',
         ]
@@ -71,6 +73,7 @@ class PedidoSerializer(serializers.ModelSerializer):
     marketplace_nome = serializers.CharField(source='marketplace.nome', read_only=True)
     conferente_username = serializers.CharField(source='conferente.username', read_only=True)
     separado_por_nome = serializers.SerializerMethodField()
+    sequencia_numero = serializers.IntegerField(source='sequencia.numero', read_only=True)
     percent_conferido = serializers.SerializerMethodField()
     qtd_itens = serializers.SerializerMethodField()
     tempo_espera = serializers.SerializerMethodField()
@@ -84,6 +87,7 @@ class PedidoSerializer(serializers.ModelSerializer):
             'conferencia_iniciada_em', 'conferido_em', 'faturado_em',
             'endereco_fisico', 'ordem_pilha',
             'selecionado_em', 'atribuido_em', 'conferente', 'conferente_username',
+            'sequencia', 'sequencia_numero',
             'separado_por', 'separado_por_nome', 'separador_nao_identificado',
             'percent_conferido', 'qtd_itens', 'tempo_espera', 'duracao_conferencia',
             'itens',

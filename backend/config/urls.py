@@ -13,6 +13,7 @@ urlpatterns = [
     path('api/', include('apps.pedidos.urls')),
     path('api/', include('apps.conferencia.urls')),
     path('api/', include('apps.separadores.urls')),
+    path('api/', include('apps.sequencias.urls')),
     path('api/', include('apps.senior.urls')),
     path('api/', include('apps.etiquetas.urls')),
 ]

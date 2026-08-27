@@ -98,6 +98,52 @@ export const conferenciaApi = {
     api.delete(`/api/conferencia/pedidos/${pedidoId}/volumes/${volumeId}/`).then((r) => r.data),
 }
 
+export type SequenciaResumo = {
+  id: number
+  numero: number
+  status: 'aberta' | 'em_andamento' | 'concluida'
+  criado_em: string
+  concluida_em: string | null
+  qtd_pedidos: number
+  qtd_sem_conferente: number
+  qtd_pendentes: number
+  qtd_finalizados: number
+}
+
+export type SequenciaPedido = {
+  id: number
+  numero_externo: string
+  cliente: string
+  status: string
+  conferente: number | null
+  conferente_username: string | null
+  atribuido_em: string | null
+  qtd_itens: number
+}
+
+export const sequenciasApi = {
+  listar: (status?: string) =>
+    api.get('/api/sequencias/', { params: status ? { status } : {} })
+      .then((r) => r.data as SequenciaResumo[]),
+  criar: (pedidoIds: number[]) =>
+    api.post('/api/sequencias/', { pedido_ids: pedidoIds })
+      .then((r) => r.data as SequenciaResumo & { adicionados: number[]; ignorados: number[] }),
+  detalhe: (id: number) =>
+    api.get(`/api/sequencias/${id}/`)
+      .then((r) => r.data as SequenciaResumo & { pedidos: SequenciaPedido[] }),
+  adicionar: (id: number, pedidoIds: number[]) =>
+    api.post(`/api/sequencias/${id}/adicionar/`, { pedido_ids: pedidoIds }).then((r) => r.data),
+  remover: (id: number, pedidoIds: number[]) =>
+    api.post(`/api/sequencias/${id}/remover/`, { pedido_ids: pedidoIds }).then((r) => r.data),
+  atribuir: (id: number, pedidoIds: number[], conferenteId: number) =>
+    api.post(`/api/sequencias/${id}/atribuir/`, {
+      pedido_ids: pedidoIds,
+      conferente_id: conferenteId,
+    }).then((r) => r.data),
+  excluir: (id: number) =>
+    api.delete(`/api/sequencias/${id}/`).then((r) => r.data),
+}
+
 export type SeparadorCadastro = {
   id: number
   nome: string
@@ -141,17 +187,12 @@ export const supervisorApi = {
     }).then((r) => r.data),
   selecionar: (pedidoIds: number[]) =>
     api.post('/api/pedidos/selecionar/', { pedido_ids: pedidoIds }).then((r) => r.data),
-  listarSelecionados: (params: { search?: string; page?: number } = {}) =>
+  listarSelecionados: (params: { search?: string; page?: number; sem_sequencia?: '1' } = {}) =>
     api.get('/api/pedidos/', {
       params: { status: 'selecionado', ...params },
     }).then((r) => r.data),
   listarConferentes: () =>
     api.get('/api/users/conferentes/').then((r) => r.data),
-  atribuir: (pedidoIds: number[], conferenteId: number) =>
-    api.post('/api/pedidos/atribuir/', {
-      pedido_ids: pedidoIds,
-      conferente_id: conferenteId,
-    }).then((r) => r.data),
   listarNaoConformes: () =>
     api.get('/api/nao-conformes/').then((r) => r.data),
   cancelarNaoConforme: (id: number) =>

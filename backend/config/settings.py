@@ -35,6 +35,7 @@ INSTALLED_APPS = [
     'apps.pedidos',
     'apps.conferencia',
     'apps.separadores',
+    'apps.sequencias',
     'apps.senior',
     'apps.vtex',
     'apps.etiquetas',

@@ -30,6 +30,18 @@ Sessão de definição com direção/supervisão fechou um redesenho grande — 
 - Infra dev: `backend/locale/.gitkeep` evita crash-loop do runserver por EIO do mount 9p do WSL em diretório inexistente.
 - Validação: e2e via API (selecionar → atribuir → iniciar sem/com apontamento → trocar → revertido); tsc web e mobile zerados; `makemigrations --check` limpo.
 
+**Fase 3 do redesenho implementada em 2026-08-27** (branch `develop`): sequências de separação.
+
+- Modelos `Sequencia` (numero auto, aberta→em_andamento→concluida) + `Pedido.sequencia` (migration `pedidos/0009`) e `Configuracao` no core (migration `core/0004`, editável no Django admin) — chaves `liberacao_proxima_sequencia` (default `ao_terminar_meus_pedidos`) e `fechamento_sobra` (pronta pra Fase 4).
+- App novo `apps/sequencias`: `GET/POST /api/sequencias/`, `GET/DELETE /api/sequencias/<id>/`, `POST adicionar//remover//atribuir/` (sup. pátio/admin). Remover pedido atribuído desatribui (volta a Selecionado); tudo logado em `PedidoLog` (`pedido_sequenciado`, `pedido_removido_sequencia`, `pedido_atribuido`).
+- **Atribuição direta antiga desativada**: `POST /api/pedidos/atribuir/` responde 410 — tudo via sequência.
+- **Trava do conferente**: `GET /api/conferencia/pedidos/` agora retorna `{sequencia, aguardando_sequencia, pedidos, outras_sequencias_pendentes}` — só os pedidos da sequência ativa (FIFO por atribuição; pedidos legados sem sequência continuam visíveis); `iniciar` bloqueia pedido de outra sequência (409). Regra de liberação configurável testada nos dois modos.
+- Sequência conclui sozinha quando todos os pedidos ficam Conferido/Não conforme/Cancelado; "retornar para fila" tira o pedido da sequência.
+- Filtro novo `?sem_sequencia=1` no `GET /api/pedidos/`.
+- Web: `/supervisor/patio` redesenhada (cards de sequências + selecionados sem sequência → criar/adicionar) + página nova `/supervisor/patio/[id]` (atribuir por conferente, reatribuir, remover, excluir vazia); lista do conferente mostra badge da sequência e o estado "aguardando sequência N".
+- Mobile: paridade completa (`patio` redesenhada, `supervisor/sequencia/[id]` nova, lista do conferente atualizada).
+- Validação: e2e via API (criar sequências → atribuir → trava 409 entre sequências → concluir libera a próxima → regra `ao_concluir_sequencia_inteira` bloqueando com 2 conferentes → tudo revertido); tsc web e mobile zerados; `makemigrations --check` limpo.
+
 Nota: a **Fase I (mobile)** descrita abaixo ficou desatualizada — o app chegou a **paridade total de telas** (Expo SDK 54, RN 0.81.4, NativeWind 4: login, separação + detalhe, vendas, pátio, separados, não-conformes, admin) com APK release buildado localmente em `mobile/android/`.
 
 ---

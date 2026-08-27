@@ -6,7 +6,7 @@ Sistema interno para **separação de pedidos no galpão da Altomax**. Não é m
 
 > Pivot do projeto: este sistema **era** um fluxo de expedição multi-marketplace com VTEX/CLICK/etiquetagem. Esses módulos **continuam no código preservados** (não apagar) mas estão fora do MVP atual. Ver "Módulos congelados".
 
-> **Redesenho 2026-08 (aprovado)** — ver `DESIGN.md` para a espec completa. **Fases 1 e 2 implementadas em 2026-08-27**: o papel do sistema agora é o **conferente** (rename completo), e o **separador físico** tem cadastro próprio (`Separador`, sem login) com **liberação diária** pelo Sup. Pátio — o conferente aponta "separado por" (ou "Não identificado") obrigatoriamente ao iniciar a conferência. Faltam: sequências (Fase 3), divergência de barra + erro de separação + relatório (Fase 4), APK novo (Fase 5).
+> **Redesenho 2026-08 (aprovado)** — ver `DESIGN.md` para a espec completa. **Fases 1, 2 e 3 implementadas em 2026-08-27**: o papel do sistema agora é o **conferente** (rename completo); o **separador físico** tem cadastro próprio com **liberação diária** e é apontado pelo conferente ao iniciar; o Sup. Pátio monta **sequências** e atribui pedido a pedido dentro delas (atribuição direta antiga desativada — 410), com **trava de sequência ativa** no conferente (regra de liberação configurável em `Configuracao`). Faltam: divergência de barra + erro de separação + relatório (Fase 4), APK novo (Fase 5).
 
 Atores principais: **Supervisor de Vendas**, **Supervisor de Pátio**, **Conferente** e **Admin**.
 
@@ -93,11 +93,15 @@ Toda transição grava em `PedidoLog` (quem, quando, ação, payload).
 
 ## Fluxo 2 — Supervisor de Pátio
 
-1. **Lista de pedidos selecionados**
-   - Pedidos com status `Selecionado` ainda não atribuídos.
-2. **Atribuir a conferente**
-   - Para cada pedido (ou em lote), escolher um conferente da lista de usuários ativos com perfil `conferente`.
-   - Status passa para `Atribuído`, registra `atribuido_em`/`atribuido_por`/`conferente`.
+1. **Montar sequências** (Fase 3)
+   - Pedidos `Selecionado` sem sequência entram em **sequências de separação** (criar nova ou adicionar a uma aberta).
+   - Tudo passa por sequência — a atribuição direta antiga foi desativada.
+2. **Atribuir dentro da sequência**
+   - Na tela da sequência, escolher pedidos (multi-seleção) e um conferente ativo — a supervisora decide quem pega o quê.
+   - Status passa para `Atribuído`, registra `atribuido_em`/`atribuido_por`/`conferente`; reatribuir e remover são permitidos até o pedido entrar em conferência.
+3. **Trava do conferente**
+   - O conferente só confere pedidos da sua sequência ativa (a mais antiga com pendências dele); a liberação da próxima é configurável (`ao_terminar_meus_pedidos` default | `ao_concluir_sequencia_inteira`).
+4. **Separadores do dia** — mantém a liberação diária (Fase 2).
 
 ---
 
@@ -222,6 +226,7 @@ separa/
 │   │   ├── pedidos/        # Pedido, PedidoItem, Volume, VolumeItem, PedidoLog + ações dos supervisores
 │   │   ├── conferencia/    # fluxo do conferente (bipagem em volumes + não conformes)
 │   │   ├── separadores/    # cadastro de separadores físicos + liberação diária
+│   │   ├── sequencias/     # sequências de separação (fluxo do Sup. Pátio)
 │   │   ├── senior/         # leitura Oracle + saída SOAP (operação a definir)
 │   │   ├── etiquetas/      # CONGELADO — Impressora, PrintAgent, PrintJob (não tocar)
 │   │   └── vtex/           # CONGELADO — VTEX API
@@ -290,7 +295,7 @@ Não tocar nesses arquivos durante o trabalho do escopo atual. Podem voltar ao f
 
 ## Roadmap (novo escopo)
 
-> **2026-08**: as Fases A–F abaixo estão **concluídas** (detalhes em `STATUS.md`). O roadmap vigente é o do **redesenho 2026-08**, em `DESIGN.md`: 1) rename separador→conferente ✅ · 2) cadastro de Separador + liberação diária ✅ (ambas 2026-08-27) · 3) sequências · 4) divergência de barra + erro de separação + relatório agrupado · 5) paridade mobile + APK · 6) futuros (finalizar sem conferência, DOM, Sisplan, imagens).
+> **2026-08**: as Fases A–F abaixo estão **concluídas** (detalhes em `STATUS.md`). O roadmap vigente é o do **redesenho 2026-08**, em `DESIGN.md`: 1) rename separador→conferente ✅ · 2) cadastro de Separador + liberação diária ✅ · 3) sequências ✅ (todas 2026-08-27) · 4) divergência de barra + erro de separação + relatório agrupado · 5) paridade mobile + APK · 6) futuros (finalizar sem conferência, DOM, Sisplan, imagens).
 
 **Fase A — Fundação**
 - Refatorar perfis: `separador`, `supervisor_vendas`, `supervisor_patio`, `admin`

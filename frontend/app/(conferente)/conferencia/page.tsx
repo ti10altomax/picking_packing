@@ -11,6 +11,14 @@ type PedidoLista = {
   qtd_itens: number
   percent_conferido: number
   atribuido_em: string | null
+  sequencia: { id: number; numero: number } | null
+}
+
+type ListaResposta = {
+  sequencia: { id: number; numero: number } | null
+  aguardando_sequencia: { id: number; numero: number } | null
+  pedidos: PedidoLista[]
+  outras_sequencias_pendentes: number
 }
 
 function tempoDesde(iso: string | null): string {
@@ -27,14 +35,20 @@ function tempoDesde(iso: string | null): string {
 export default function ConferenciaListaPage() {
   const router = useRouter()
   const [pedidos, setPedidos] = useState<PedidoLista[]>([])
+  const [sequencia, setSequencia] = useState<{ id: number; numero: number } | null>(null)
+  const [aguardando, setAguardando] = useState<{ id: number; numero: number } | null>(null)
+  const [outras, setOutras] = useState(0)
   const [loading, setLoading] = useState(true)
   const [lastSync, setLastSync] = useState<Date | null>(null)
 
   const carregar = useCallback(async () => {
     setLoading(true)
     try {
-      const data = await conferenciaApi.listarAtribuidos()
-      setPedidos(data)
+      const data: ListaResposta = await conferenciaApi.listarAtribuidos()
+      setPedidos(data.pedidos)
+      setSequencia(data.sequencia)
+      setAguardando(data.aguardando_sequencia)
+      setOutras(data.outras_sequencias_pendentes)
       setLastSync(new Date())
     } finally {
       setLoading(false)
@@ -55,7 +69,14 @@ export default function ConferenciaListaPage() {
     <div className="flex flex-col" style={{ height: 'calc(100vh - 3.5rem)' }}>
       <div className="px-4 pt-4 pb-3">
         <div className="flex items-center justify-between mb-1">
-          <h1 className="text-xl font-bold text-ink">Atribuídos a mim</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold text-ink">Atribuídos a mim</h1>
+            {sequencia && (
+              <span className="text-xs px-2 py-0.5 rounded-full font-semibold bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
+                Sequência {sequencia.numero}
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-2">
             {syncLabel && <span className="text-xs text-ink-subtle">sync {syncLabel}</span>}
             <button
@@ -69,6 +90,7 @@ export default function ConferenciaListaPage() {
         </div>
         <p className="text-sm text-ink-subtle">
           {pedidos.length} pedido{pedidos.length !== 1 ? 's' : ''}
+          {outras > 0 && ` · +${outras} em próximas sequências`}
         </p>
       </div>
 
@@ -76,7 +98,15 @@ export default function ConferenciaListaPage() {
         {loading && pedidos.length === 0 && (
           <p className="text-center py-20 text-ink-subtle">Carregando…</p>
         )}
-        {!loading && pedidos.length === 0 && (
+        {!loading && pedidos.length === 0 && aguardando && (
+          <div className="text-center py-20 px-6">
+            <p className="text-ink font-semibold mb-1">Você terminou os seus pedidos 🎉</p>
+            <p className="text-sm text-ink-subtle">
+              Aguardando a conclusão da <strong>sequência {aguardando.numero}</strong> para liberar a próxima.
+            </p>
+          </div>
+        )}
+        {!loading && pedidos.length === 0 && !aguardando && (
           <p className="text-center py-20 text-ink-subtle">Nenhum pedido atribuído.</p>
         )}
         {pedidos.map((p) => (

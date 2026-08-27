@@ -6,8 +6,9 @@ from rest_framework.decorators import api_view
 from rest_framework.generics import get_object_or_404
 from rest_framework.response import Response
 
+from apps.core.models import Configuracao
 from apps.pedidos.models import (
-    Pedido, PedidoItem, PedidoLog, Separador, Volume, VolumeItem,
+    Pedido, PedidoItem, PedidoLog, Separador, Sequencia, Volume, VolumeItem,
 )
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,44 @@ def _exige_supervisor_ou_admin(request):
             status=http_status.HTTP_403_FORBIDDEN,
         )
     return None
+
+
+STATUS_PENDENTES = (Pedido.Status.ATRIBUIDO, Pedido.Status.CONFERINDO)
+
+
+def _minhas_sequencias(user):
+    """Sequências com pedidos do conferente, FIFO pela 1ª atribuição dele."""
+    return list(
+        Sequencia.objects
+        .filter(pedidos__conferente=user)
+        .annotate(primeira_atribuicao=models.Min(
+            'pedidos__atribuido_em',
+            filter=models.Q(pedidos__conferente=user),
+        ))
+        .order_by('primeira_atribuicao')
+        .distinct()
+    )
+
+
+def _sequencia_ativa(user):
+    """(ativa, aguardando) — trava de sequência do DESIGN.md §3.
+
+    ativa: a sequência mais antiga com pedidos pendentes do conferente.
+    aguardando: na regra 'ao_concluir_sequencia_inteira', a sequência anterior
+    ainda não concluída que bloqueia a próxima (o conferente fica em espera).
+    """
+    regra = Configuracao.obter(Configuracao.Chave.LIBERACAO_PROXIMA_SEQUENCIA)
+    seqs = _minhas_sequencias(user)
+    for i, seq in enumerate(seqs):
+        tem_pendentes = seq.pedidos.filter(conferente=user, status__in=STATUS_PENDENTES).exists()
+        if not tem_pendentes:
+            continue
+        if regra == 'ao_concluir_sequencia_inteira':
+            anteriores = [s for s in seqs[:i] if s.status != Sequencia.Status.CONCLUIDA]
+            if anteriores:
+                return None, anteriores[0]
+        return seq, None
+    return None, None
 
 
 def _resolver_apontamento(request):
@@ -101,6 +140,9 @@ def _serializar_pedido(p: Pedido, com_volumes: bool = False) -> dict:
         'criado_em': p.criado_em,
         'atribuido_em': p.atribuido_em,
         'conferencia_iniciada_em': p.conferencia_iniciada_em,
+        'sequencia': (
+            {'id': p.sequencia.id, 'numero': p.sequencia.numero} if p.sequencia else None
+        ),
         'separado_por': (
             {'id': p.separado_por.id, 'nome': p.separado_por.nome, 'apelido': p.separado_por.apelido}
             if p.separado_por else None
@@ -128,21 +170,49 @@ def _serializar_pedido(p: Pedido, com_volumes: bool = False) -> dict:
 
 @api_view(['GET'])
 def listar_atribuidos(request):
+    """Pedidos da sequência ativa do conferente (FIFO por atribuição).
+
+    Retorna também o contexto da trava: qual sequência está ativa, se o
+    conferente está aguardando outra concluir (regra configurável) e quantos
+    pedidos existem em sequências futuras.
+    """
     err = _exige_conferente(request)
     if err:
         return err
 
-    qs = (
+    ativa, aguardando = _sequencia_ativa(request.user)
+
+    # Transição: pedidos antigos sem sequência continuam sempre visíveis
+    pedidos = list(
         Pedido.objects
-        .filter(
-            conferente=request.user,
-            status__in=[Pedido.Status.ATRIBUIDO, Pedido.Status.CONFERINDO],
-        )
-        .select_related('separado_por')
+        .filter(conferente=request.user, sequencia__isnull=True, status__in=STATUS_PENDENTES)
+        .select_related('separado_por', 'sequencia')
         .prefetch_related('itens')
-        .order_by('-atribuido_em', '-criado_em')
+        .order_by('atribuido_em', 'criado_em')
     )
-    return Response([_serializar_pedido(p) for p in qs])
+    if ativa:
+        pedidos += list(
+            ativa.pedidos
+            .filter(conferente=request.user, status__in=STATUS_PENDENTES)
+            .select_related('separado_por', 'sequencia')
+            .prefetch_related('itens')
+            .order_by('atribuido_em', 'criado_em')
+        )
+
+    outras = (
+        Pedido.objects
+        .filter(conferente=request.user, status__in=STATUS_PENDENTES, sequencia__isnull=False)
+        .exclude(sequencia_id=ativa.id if ativa else 0)
+        .count()
+    )
+    return Response({
+        'sequencia': {'id': ativa.id, 'numero': ativa.numero} if ativa else None,
+        'aguardando_sequencia': (
+            {'id': aguardando.id, 'numero': aguardando.numero} if aguardando else None
+        ),
+        'pedidos': [_serializar_pedido(p) for p in pedidos],
+        'outras_sequencias_pendentes': outras,
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -156,7 +226,7 @@ def detalhe(request, pk):
         return err
 
     pedido = get_object_or_404(
-        Pedido.objects.select_related('separado_por').prefetch_related('itens', 'volumes__itens'),
+        Pedido.objects.select_related('separado_por', 'sequencia').prefetch_related('itens', 'volumes__itens'),
         pk=pk,
     )
     if pedido.conferente_id != request.user.id and request.user.perfil != 'admin':
@@ -187,6 +257,21 @@ def iniciar(request, pk):
             status=http_status.HTTP_400_BAD_REQUEST,
         )
 
+    # Trava de sequência (DESIGN.md §3): só inicia pedido da sequência ativa
+    if pedido.sequencia_id and request.user.perfil != 'admin':
+        ativa, aguardando = _sequencia_ativa(request.user)
+        if not ativa or ativa.id != pedido.sequencia_id:
+            if aguardando:
+                msg = f'aguarde a conclusão da sequência {aguardando.numero} para iniciar a próxima'
+            elif ativa:
+                msg = (
+                    f'este pedido é da sequência {pedido.sequencia.numero} — '
+                    f'termine a sequência {ativa.numero} primeiro'
+                )
+            else:
+                msg = 'este pedido não está na sua sequência ativa'
+            return Response({'erro': msg}, status=http_status.HTTP_409_CONFLICT)
+
     separador, nao_identificado, err = _resolver_apontamento(request)
     if err:
         return err
@@ -198,6 +283,9 @@ def iniciar(request, pk):
     pedido.save(update_fields=[
         'status', 'conferencia_iniciada_em', 'separado_por', 'separador_nao_identificado',
     ])
+    if pedido.sequencia and pedido.sequencia.status == Sequencia.Status.ABERTA:
+        pedido.sequencia.status = Sequencia.Status.EM_ANDAMENTO
+        pedido.sequencia.save(update_fields=['status'])
     PedidoLog.objects.create(
         pedido=pedido, usuario=request.user,
         acao='conferencia_iniciada',
@@ -572,6 +660,8 @@ def concluir(request, pk):
         acao='conferencia_concluida',
         payload={'volumes_count': pedido.volumes.count(), 'senior_ok': sucesso},
     )
+    if pedido.sequencia:
+        pedido.sequencia.recalcular_status()
     return Response({
         'ok': True,
         'status': pedido.status,
@@ -622,6 +712,8 @@ def marcar_nao_conforme(request, pk):
         acao='pedido_nao_conforme',
         payload={'motivo': motivo, 'detalhe': detalhe},
     )
+    if pedido.sequencia:
+        pedido.sequencia.recalcular_status()
     return Response({
         'ok': True,
         'status': pedido.status,
@@ -686,6 +778,8 @@ def cancelar_nao_conforme(request, pk):
         acao='nao_conforme_cancelado',
         payload={'motivo_anterior': pedido.nao_conforme_motivo},
     )
+    if pedido.sequencia:
+        pedido.sequencia.recalcular_status()
     return Response({'ok': True, 'status': pedido.status})
 
 
@@ -705,12 +799,14 @@ def retornar_nao_conforme(request, pk):
 
     motivo_anterior = pedido.nao_conforme_motivo
     detalhe_anterior = pedido.nao_conforme_detalhe
+    sequencia_anterior = pedido.sequencia
 
     pedido.status = Pedido.Status.PENDENTE
     pedido.selecionado_em = None
     pedido.selecionado_por = None
     pedido.atribuido_em = None
     pedido.atribuido_por = None
+    pedido.sequencia = None
     pedido.conferente = None
     pedido.conferencia_iniciada_em = None
     pedido.separado_por = None
@@ -720,10 +816,12 @@ def retornar_nao_conforme(request, pk):
     pedido.nao_conforme_detalhe = ''
     pedido.save(update_fields=[
         'status', 'selecionado_em', 'selecionado_por',
-        'atribuido_em', 'atribuido_por', 'conferente', 'conferencia_iniciada_em',
+        'atribuido_em', 'atribuido_por', 'sequencia', 'conferente', 'conferencia_iniciada_em',
         'separado_por', 'separador_nao_identificado',
         'nao_conforme_em', 'nao_conforme_motivo', 'nao_conforme_detalhe',
     ])
+    if sequencia_anterior:
+        sequencia_anterior.recalcular_status()
     PedidoLog.objects.create(
         pedido=pedido, usuario=request.user,
         acao='nao_conforme_retornado',

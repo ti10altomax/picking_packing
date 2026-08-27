@@ -2,6 +2,7 @@ import secrets
 
 from django.db import models
 from django.conf import settings
+from django.utils import timezone
 
 
 class Marketplace(models.Model):
@@ -64,6 +65,12 @@ class Pedido(models.Model):
     atribuido_por = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True,
         on_delete=models.SET_NULL, related_name='pedidos_atribuidos',
+    )
+
+    # Sequência de separação (Fase 3 — DESIGN.md §3). Nula até o Sup. Pátio montar.
+    sequencia = models.ForeignKey(
+        'Sequencia', null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='pedidos',
     )
     conferencia_iniciada_em = models.DateTimeField(null=True, blank=True)
 
@@ -161,6 +168,47 @@ class VolumeItem(models.Model):
 
     class Meta:
         ordering = ['criado_em']
+
+
+class Sequencia(models.Model):
+    """Onda de separação montada pelo Sup. Pátio (DESIGN.md §3).
+
+    O pátio agrupa pedidos selecionados em sequências e atribui pedido a
+    pedido a conferentes dentro delas. Vários conferentes podem participar da
+    mesma sequência — a participação é derivada dos pedidos, sem tabela M:N.
+    """
+
+    class Status(models.TextChoices):
+        ABERTA = 'aberta', 'Aberta'
+        EM_ANDAMENTO = 'em_andamento', 'Em andamento'
+        CONCLUIDA = 'concluida', 'Concluída'
+
+    numero = models.IntegerField(unique=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.ABERTA)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    criado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='sequencias_criadas',
+    )
+    concluida_em = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-criado_em']
+        verbose_name = 'Sequência'
+        verbose_name_plural = 'Sequências'
+
+    def __str__(self):
+        return f'Sequência {self.numero} [{self.status}]'
+
+    def recalcular_status(self):
+        """Concluída quando todos os pedidos estão em estado final (não conforme não trava)."""
+        finais = (Pedido.Status.CONFERIDO, Pedido.Status.NAO_CONFORME, Pedido.Status.CANCELADO)
+        status_pedidos = list(self.pedidos.values_list('status', flat=True))
+        if status_pedidos and all(s in finais for s in status_pedidos):
+            if self.status != self.Status.CONCLUIDA:
+                self.status = self.Status.CONCLUIDA
+                self.concluida_em = timezone.now()
+                self.save(update_fields=['status', 'concluida_em'])
 
 
 class Separador(models.Model):

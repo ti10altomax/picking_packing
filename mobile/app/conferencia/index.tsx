@@ -20,6 +20,14 @@ type Pedido = {
   qtd_itens: number
   percent_conferido: number
   atribuido_em: string | null
+  sequencia: { id: number; numero: number } | null
+}
+
+type ListaResposta = {
+  sequencia: { id: number; numero: number } | null
+  aguardando_sequencia: { id: number; numero: number } | null
+  pedidos: Pedido[]
+  outras_sequencias_pendentes: number
 }
 
 function tempoDesde(iso: string | null): string {
@@ -36,6 +44,9 @@ function tempoDesde(iso: string | null): string {
 export default function ConferenciaLista() {
   const router = useRouter()
   const [pedidos, setPedidos] = useState<Pedido[]>([])
+  const [sequencia, setSequencia] = useState<{ id: number; numero: number } | null>(null)
+  const [aguardando, setAguardando] = useState<{ id: number; numero: number } | null>(null)
+  const [outras, setOutras] = useState(0)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [lastSync, setLastSync] = useState<Date | null>(null)
@@ -44,8 +55,11 @@ export default function ConferenciaLista() {
     if (refresh) setRefreshing(true)
     else setLoading(true)
     try {
-      const data: Pedido[] = await conferenciaApi.listarAtribuidos()
-      setPedidos(data)
+      const data: ListaResposta = await conferenciaApi.listarAtribuidos()
+      setPedidos(data.pedidos)
+      setSequencia(data.sequencia)
+      setAguardando(data.aguardando_sequencia)
+      setOutras(data.outras_sequencias_pendentes)
       setLastSync(new Date())
     } catch {
       // mostrar erro depois com Dialog
@@ -71,9 +85,17 @@ export default function ConferenciaLista() {
       <Header title="Atribuídos a mim" />
 
       <View className="px-4 pt-3 pb-2 flex-row items-center justify-between">
-        <Text className="text-sm text-ink-subtle">
-          {pedidos.length} pedido{pedidos.length !== 1 ? 's' : ''}
-        </Text>
+        <View className="flex-row items-center gap-2 flex-1">
+          {sequencia ? (
+            <View className="px-2 py-0.5 rounded-full bg-blue-500/15">
+              <Text className="text-xs font-semibold text-blue-300">Sequência {sequencia.numero}</Text>
+            </View>
+          ) : null}
+          <Text className="text-sm text-ink-subtle" numberOfLines={1}>
+            {pedidos.length} pedido{pedidos.length !== 1 ? 's' : ''}
+            {outras > 0 ? ` · +${outras} em próximas` : ''}
+          </Text>
+        </View>
         <View className="flex-row items-center gap-2">
           {syncLabel ? (
             <Text className="text-xs text-ink-subtle">sync {syncLabel}</Text>
@@ -108,9 +130,18 @@ export default function ConferenciaLista() {
             />
           }
           ListEmptyComponent={
-            <View className="py-20 items-center">
-              <Text className="text-ink-subtle">Nenhum pedido atribuído.</Text>
-            </View>
+            aguardando ? (
+              <View className="py-20 items-center px-6">
+                <Text className="text-ink font-semibold mb-1">Você terminou os seus pedidos 🎉</Text>
+                <Text className="text-sm text-ink-subtle text-center">
+                  Aguardando a conclusão da sequência {aguardando.numero} para liberar a próxima.
+                </Text>
+              </View>
+            ) : (
+              <View className="py-20 items-center">
+                <Text className="text-ink-subtle">Nenhum pedido atribuído.</Text>
+              </View>
+            )
           }
           renderItem={({ item: p }) => (
             <Pressable
