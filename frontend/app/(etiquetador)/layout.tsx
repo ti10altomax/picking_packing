@@ -16,7 +16,7 @@ export default function EtiquetadorLayout({ children }: { children: React.ReactN
   useEffect(() => {
     if (!ready) return
     if (!token) { router.replace('/login'); return }
-    if (user && user.perfil === 'separador') router.replace('/pedidos')
+    if (user && user.perfil === 'conferente') router.replace('/conferencia')
   }, [ready, token, user])
 
   if (!ready || !token) return null

@@ -15,12 +15,12 @@ class Marketplace(models.Model):
 
 class Pedido(models.Model):
     class Status(models.TextChoices):
-        # Escopo atual (separação interna)
+        # Escopo atual (conferência interna)
         PENDENTE = 'pendente', 'Pendente'
         SELECIONADO = 'selecionado', 'Selecionado'
         ATRIBUIDO = 'atribuido', 'Atribuído'
-        SEPARANDO = 'separando', 'Em separação'
-        SEPARADO = 'separado', 'Separado'
+        CONFERINDO = 'conferindo', 'Em conferência'
+        CONFERIDO = 'conferido', 'Conferido'
         NAO_CONFORME = 'nao_conforme', 'Não conforme'
         CANCELADO = 'cancelado', 'Cancelado'
         # Escopo antigo (CONGELADO — fluxo de etiquetagem marketplace/VTEX)
@@ -39,15 +39,15 @@ class Pedido(models.Model):
     status = models.CharField(max_length=30, choices=Status.choices, default=Status.PENDENTE)
 
     criado_em = models.DateTimeField()
-    separado_em = models.DateTimeField(null=True, blank=True)
+    conferido_em = models.DateTimeField(null=True, blank=True)
     faturado_em = models.DateTimeField(null=True, blank=True)
 
     endereco_fisico = models.CharField(max_length=20, blank=True)
     ordem_pilha = models.IntegerField(null=True, blank=True)
 
-    separador = models.ForeignKey(
+    conferente = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True,
-        on_delete=models.SET_NULL, related_name='pedidos_separados'
+        on_delete=models.SET_NULL, related_name='pedidos_conferidos'
     )
     etiquetador = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True,
@@ -65,7 +65,7 @@ class Pedido(models.Model):
         settings.AUTH_USER_MODEL, null=True, blank=True,
         on_delete=models.SET_NULL, related_name='pedidos_atribuidos',
     )
-    separacao_iniciada_em = models.DateTimeField(null=True, blank=True)
+    conferencia_iniciada_em = models.DateTimeField(null=True, blank=True)
 
     # Não conforme
     nao_conforme_em = models.DateTimeField(null=True, blank=True)
@@ -74,7 +74,7 @@ class Pedido(models.Model):
     )
     nao_conforme_detalhe = models.TextField(blank=True)
 
-    # Senior — atualização pós-separação (WS a definir)
+    # Senior — atualização pós-conferência (WS a definir)
     senior_atualizado_em = models.DateTimeField(null=True, blank=True)
     senior_tentativas = models.IntegerField(default=0)
     senior_ultimo_erro = models.TextField(blank=True)

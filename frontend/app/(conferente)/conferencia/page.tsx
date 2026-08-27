@@ -1,15 +1,15 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { separacaoApi } from '@/lib/api'
+import { conferenciaApi } from '@/lib/api'
 
 type PedidoLista = {
   id: number
   numero_externo: string
   cliente: string
-  status: 'atribuido' | 'separando'
+  status: 'atribuido' | 'conferindo'
   qtd_itens: number
-  percent_separado: number
+  percent_conferido: number
   atribuido_em: string | null
 }
 
@@ -24,7 +24,7 @@ function tempoDesde(iso: string | null): string {
   return `há ${d}d`
 }
 
-export default function SeparacaoListaPage() {
+export default function ConferenciaListaPage() {
   const router = useRouter()
   const [pedidos, setPedidos] = useState<PedidoLista[]>([])
   const [loading, setLoading] = useState(true)
@@ -33,7 +33,7 @@ export default function SeparacaoListaPage() {
   const carregar = useCallback(async () => {
     setLoading(true)
     try {
-      const data = await separacaoApi.listarAtribuidos()
+      const data = await conferenciaApi.listarAtribuidos()
       setPedidos(data)
       setLastSync(new Date())
     } finally {
@@ -82,7 +82,7 @@ export default function SeparacaoListaPage() {
         {pedidos.map((p) => (
           <button
             key={p.id}
-            onClick={() => router.push(`/separacao/${p.id}`)}
+            onClick={() => router.push(`/conferencia/${p.id}`)}
             className="w-full bg-surface-card border border-surface-border rounded-xl p-4 text-left hover:border-blue-400 dark:hover:border-blue-500/60 hover:shadow-md dark:hover:shadow-blue-500/10 active:scale-[0.99] transition-all"
           >
             <div className="flex items-start justify-between gap-2">
@@ -91,12 +91,12 @@ export default function SeparacaoListaPage() {
                   <span className="font-bold text-ink">{p.numero_externo}</span>
                   <span
                     className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                      p.status === 'separando'
+                      p.status === 'conferindo'
                         ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300'
                         : 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'
                     }`}
                   >
-                    {p.status === 'separando' ? 'Em separação' : 'Atribuído'}
+                    {p.status === 'conferindo' ? 'Em conferência' : 'Atribuído'}
                   </span>
                 </div>
                 <p className="text-sm text-ink-muted truncate mt-0.5">
@@ -106,9 +106,9 @@ export default function SeparacaoListaPage() {
                   {p.qtd_itens} {p.qtd_itens === 1 ? 'item' : 'itens'} · {tempoDesde(p.atribuido_em)}
                 </p>
               </div>
-              {p.status === 'separando' && (
+              {p.status === 'conferindo' && (
                 <div className="text-right shrink-0">
-                  <p className="text-lg font-bold text-blue-600 dark:text-blue-400">{p.percent_separado}%</p>
+                  <p className="text-lg font-bold text-blue-600 dark:text-blue-400">{p.percent_conferido}%</p>
                 </div>
               )}
             </div>

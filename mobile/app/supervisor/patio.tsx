@@ -23,7 +23,7 @@ type Pedido = {
   tempo_espera: string
 }
 
-type Separador = { id: number; username: string; first_name: string; last_name: string }
+type Conferente = { id: number; username: string; first_name: string; last_name: string }
 type Paginado = { count: number; next: string | null; results: Pedido[] }
 
 export default function SupervisorPatio() {
@@ -35,8 +35,8 @@ export default function SupervisorPatio() {
   const [carregando, setCarregando] = useState(true)
   const [carregandoMais, setCarregandoMais] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
-  const [separadores, setSeparadores] = useState<Separador[]>([])
-  const [separadorId, setSeparadorId] = useState<number | null>(null)
+  const [conferentes, setConferentes] = useState<Conferente[]>([])
+  const [conferenteId, setConferenteId] = useState<number | null>(null)
   const [pickerAberto, setPickerAberto] = useState(false)
   const [selecionados, setSelecionados] = useState<Set<number>>(new Set())
   const [enviando, setEnviando] = useState(false)
@@ -67,9 +67,9 @@ export default function SupervisorPatio() {
 
   useEffect(() => {
     (async () => {
-      const seps: Separador[] = await supervisorApi.listarSeparadores()
-      setSeparadores(seps)
-      if (seps.length > 0) setSeparadorId(seps[0].id)
+      const seps: Conferente[] = await supervisorApi.listarConferentes()
+      setConferentes(seps)
+      if (seps.length > 0) setConferenteId(seps[0].id)
       await carregar('', 1, false)
     })()
   }, [carregar])
@@ -90,16 +90,16 @@ export default function SupervisorPatio() {
   }
 
   async function atribuir() {
-    if (selecionados.size === 0 || !separadorId) return
+    if (selecionados.size === 0 || !conferenteId) return
     setEnviando(true)
     try {
       const ids = Array.from(selecionados)
-      const res = await supervisorApi.atribuir(ids, separadorId)
+      const res = await supervisorApi.atribuir(ids, conferenteId)
       setSelecionados(new Set())
       await dialog.alert({
         variant: 'success',
         title: 'Pedidos atribuídos',
-        message: `${res.atribuidos.length} pedido(s) atribuído(s) a ${res.separador}.`,
+        message: `${res.atribuidos.length} pedido(s) atribuído(s) a ${res.conferente}.`,
       })
       await carregar(buscaAtivaRef.current, 1, false)
     } catch {
@@ -113,12 +113,12 @@ export default function SupervisorPatio() {
     }
   }
 
-  const sepAtual = separadores.find((s) => s.id === separadorId)
+  const sepAtual = conferentes.find((s) => s.id === conferenteId)
   const labelSep = sepAtual
     ? (sepAtual.first_name || sepAtual.last_name)
       ? `${sepAtual.first_name} ${sepAtual.last_name}`.trim()
       : sepAtual.username
-    : 'Selecionar separador'
+    : 'Selecionar conferente'
 
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-surface-bg">
@@ -127,7 +127,7 @@ export default function SupervisorPatio() {
 
       <View className="px-4 pt-3 pb-2 gap-2">
         <Text className="text-sm text-ink-muted">
-          Atribua pedidos selecionados a um separador
+          Atribua pedidos selecionados a um conferente
         </Text>
         <TextInput
           value={busca}
@@ -241,7 +241,7 @@ export default function SupervisorPatio() {
             </Pressable>
             <Pressable
               onPress={atribuir}
-              disabled={enviando || !separadorId}
+              disabled={enviando || !conferenteId}
               className="bg-amber-500 active:bg-amber-400 px-5 h-11 rounded-lg items-center justify-center"
             >
               <Text className="text-white font-semibold text-sm">
@@ -252,7 +252,7 @@ export default function SupervisorPatio() {
         </View>
       ) : null}
 
-      {/* Picker de separador */}
+      {/* Picker de conferente */}
       <Modal visible={pickerAberto} animationType="slide" transparent onRequestClose={() => setPickerAberto(false)}>
         <Pressable className="flex-1 bg-black/60 justify-end" onPress={() => setPickerAberto(false)}>
           <Pressable
@@ -260,17 +260,17 @@ export default function SupervisorPatio() {
             style={{ paddingBottom: Math.max(insets.bottom, 16), maxHeight: '70%' }}
             onPress={(e) => e.stopPropagation()}
           >
-            <Text className="font-bold text-lg text-ink mb-3">Escolher separador</Text>
+            <Text className="font-bold text-lg text-ink mb-3">Escolher conferente</Text>
             <FlatList
-              data={separadores}
+              data={conferentes}
               keyExtractor={(s) => String(s.id)}
               ItemSeparatorComponent={() => <View className="h-px bg-surface-border" />}
               renderItem={({ item: s }) => {
-                const ativo = s.id === separadorId
+                const ativo = s.id === conferenteId
                 const nome = (s.first_name || s.last_name) ? `${s.first_name} ${s.last_name}`.trim() : s.username
                 return (
                   <Pressable
-                    onPress={() => { setSeparadorId(s.id); setPickerAberto(false) }}
+                    onPress={() => { setConferenteId(s.id); setPickerAberto(false) }}
                     className={`px-3 py-3 rounded-lg ${ativo ? 'bg-blue-500/15' : 'active:bg-surface-elev'}`}
                   >
                     <Text className={`text-base font-medium ${ativo ? 'text-blue-300' : 'text-ink'}`}>

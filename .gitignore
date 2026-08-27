@@ -23,3 +23,6 @@ deploy/*.retry
 
 # Documentação pessoal — não versionar
 docs_pessoais/
+
+# TypeScript build info (gerado)
+*.tsbuildinfo

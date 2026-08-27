@@ -88,7 +88,7 @@ export default function SupervisorVendas() {
       await dialog.alert({
         variant: 'success',
         title: 'Pedidos enviados',
-        message: `${res.selecionados.length} pedido(s) enviado(s) para separação${
+        message: `${res.selecionados.length} pedido(s) enviado(s) para conferência${
           res.ignorados.length ? ` · ${res.ignorados.length} ignorado(s)` : ''
         }.`,
       })
@@ -111,7 +111,7 @@ export default function SupervisorVendas() {
 
       <View className="px-4 pt-3 pb-2">
         <Text className="text-sm text-ink-muted mb-2">
-          Selecione pedidos pendentes pra enviar à separação
+          Selecione pedidos pendentes pra enviar à conferência
         </Text>
         <TextInput
           value={busca}
@@ -224,7 +224,7 @@ export default function SupervisorVendas() {
               className="bg-orange-500 active:bg-orange-400 px-5 h-11 rounded-lg items-center justify-center"
             >
               <Text className="text-white font-semibold text-sm">
-                {enviando ? 'Enviando…' : 'Enviar separação'}
+                {enviando ? 'Enviando…' : 'Enviar conferência'}
               </Text>
             </Pressable>
           </View>

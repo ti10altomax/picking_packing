@@ -63,10 +63,10 @@ export default function SupervisorLayout({ children }: { children: React.ReactNo
             )}
             {podeNaoConformes && (
               <NavLink
-                href="/supervisor/separados"
-                ativo={pathname?.startsWith('/supervisor/separados')}
+                href="/supervisor/conferidos"
+                ativo={pathname?.startsWith('/supervisor/conferidos')}
               >
-                Separados
+                Conferidos
               </NavLink>
             )}
           </nav>

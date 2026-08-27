@@ -18,7 +18,7 @@ type NaoConforme = {
   pedido_id: number
   pedido_numero_externo: string
   pedido_cliente: string
-  separador_username: string | null
+  conferente_username: string | null
   motivo: string
   detalhe: string
   status: 'aberto' | 'cancelado' | 'retornado'
@@ -182,7 +182,7 @@ export default function NaoConformes() {
 
                 <Text className="text-xs text-ink-subtle mb-3">
                   Aberto em {formatarData(nc.criado_em)}
-                  {nc.separador_username ? ` por ${nc.separador_username}` : ''}
+                  {nc.conferente_username ? ` por ${nc.conferente_username}` : ''}
                   {nc.resolvido_em ? ` · resolvido em ${formatarData(nc.resolvido_em)}` : ''}
                 </Text>
 

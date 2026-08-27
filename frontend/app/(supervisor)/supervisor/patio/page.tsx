@@ -12,7 +12,7 @@ type Pedido = {
   tempo_espera: string
 }
 
-type Separador = {
+type Conferente = {
   id: number
   username: string
   first_name: string
@@ -21,13 +21,13 @@ type Separador = {
 
 export default function SupervisorPatioPage() {
   const [pedidos, setPedidos] = useState<Pedido[]>([])
-  const [separadores, setSeparadores] = useState<Separador[]>([])
+  const [conferentes, setConferentes] = useState<Conferente[]>([])
   const [count, setCount] = useState(0)
   const [proximaPagina, setProximaPagina] = useState<number | null>(null)
   const [carregando, setCarregando] = useState(true)
   const [carregandoMais, setCarregandoMais] = useState(false)
   const [selecionados, setSelecionados] = useState<Set<number>>(new Set())
-  const [separadorId, setSeparadorId] = useState<number | null>(null)
+  const [conferenteId, setConferenteId] = useState<number | null>(null)
   const [enviando, setEnviando] = useState(false)
   const [busca, setBusca] = useState('')
   const [buscaAtiva, setBuscaAtiva] = useState('')
@@ -57,9 +57,9 @@ export default function SupervisorPatioPage() {
 
   useEffect(() => {
     (async () => {
-      const seps: Separador[] = await supervisorApi.listarSeparadores()
-      setSeparadores(seps)
-      if (seps.length > 0) setSeparadorId(seps[0].id)
+      const seps: Conferente[] = await supervisorApi.listarConferentes()
+      setConferentes(seps)
+      if (seps.length > 0) setConferenteId(seps[0].id)
       inicializadoRef.current = true
       await carregar('', 1, false)
     })()
@@ -99,16 +99,16 @@ export default function SupervisorPatioPage() {
   }
 
   async function atribuir() {
-    if (selecionados.size === 0 || !separadorId) return
+    if (selecionados.size === 0 || !conferenteId) return
     setEnviando(true)
     setMensagem(null)
     try {
       const ids = Array.from(selecionados)
-      const res = await supervisorApi.atribuir(ids, separadorId)
+      const res = await supervisorApi.atribuir(ids, conferenteId)
       setSelecionados(new Set())
       setMensagem({
         tipo: 'ok',
-        texto: `${res.atribuidos.length} pedido(s) atribuído(s) a ${res.separador}${
+        texto: `${res.atribuidos.length} pedido(s) atribuído(s) a ${res.conferente}${
           res.ignorados.length ? ` · ${res.ignorados.length} ignorado(s)` : ''
         }`,
       })
@@ -121,14 +121,14 @@ export default function SupervisorPatioPage() {
   }
 
   const todosMarcadosNaPagina = pedidos.length > 0 && selecionados.size >= pedidos.length
-  const separadorAtual = separadores.find((s) => s.id === separadorId)
+  const conferenteAtual = conferentes.find((s) => s.id === conferenteId)
 
   return (
     <div className="max-w-5xl mx-auto p-4 pb-32">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-xl font-bold text-ink">Pedidos selecionados</h1>
-          <p className="text-sm text-ink-muted">Atribua os pedidos a um separador</p>
+          <p className="text-sm text-ink-muted">Atribua os pedidos a um conferente</p>
         </div>
         <button onClick={() => carregar(buscaAtiva, 1, false)} className="text-sm text-blue-600 dark:text-blue-400 min-h-[44px] px-2">
           Atualizar
@@ -144,12 +144,12 @@ export default function SupervisorPatioPage() {
           className="w-full bg-surface-card border border-surface-border text-ink placeholder:text-ink-subtle rounded-lg px-3 py-2 text-sm min-h-[44px] focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-300"
         />
         <select
-          value={separadorId ?? ''}
-          onChange={(e) => setSeparadorId(Number(e.target.value))}
+          value={conferenteId ?? ''}
+          onChange={(e) => setConferenteId(Number(e.target.value))}
           className="w-full bg-surface-card border border-surface-border text-ink rounded-lg px-3 py-2 text-sm min-h-[44px] focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-300"
         >
-          {separadores.length === 0 && <option value="">Nenhum separador disponível</option>}
-          {separadores.map((s) => {
+          {conferentes.length === 0 && <option value="">Nenhum conferente disponível</option>}
+          {conferentes.map((s) => {
             const nome = (s.first_name || s.last_name)
               ? `${s.first_name} ${s.last_name}`.trim()
               : s.username
@@ -245,7 +245,7 @@ export default function SupervisorPatioPage() {
         <div className="fixed bottom-0 left-0 right-0 bg-surface-card border-t border-surface-border shadow-lg dark:shadow-2xl dark:shadow-black/40 px-4 py-3 z-20">
           <div className="max-w-5xl mx-auto flex items-center justify-between gap-3 flex-wrap">
             <span className="text-sm text-ink-muted">
-              {selecionados.size} pedido(s) → <strong className="text-ink">{separadorAtual?.username ?? '—'}</strong>
+              {selecionados.size} pedido(s) → <strong className="text-ink">{conferenteAtual?.username ?? '—'}</strong>
             </span>
             <div className="flex gap-2">
               <button
@@ -256,7 +256,7 @@ export default function SupervisorPatioPage() {
               </button>
               <button
                 onClick={atribuir}
-                disabled={enviando || !separadorId}
+                disabled={enviando || !conferenteId}
                 className="bg-amber-500 hover:bg-amber-400 text-white px-5 py-2 rounded-lg text-sm font-semibold min-h-[44px] disabled:opacity-50 shadow-lg shadow-amber-500/30 transition-all"
               >
                 {enviando ? 'Atribuindo…' : 'Atribuir'}

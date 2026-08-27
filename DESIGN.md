@@ -1,8 +1,8 @@
 # Redesenho 2026-08 — Conferência, Sequências e Separadores
 
-> Decisões fechadas em **2026-08-25/26** com direção e supervisão. **Nada disso está
-> implementado ainda** — o código segue a nomenclatura antiga (estado real em `STATUS.md`).
+> Decisões fechadas em **2026-08-25/26** com direção e supervisão.
 > **Espec fechada** — todas as pendências resolvidas (histórico em [Pendências](#pendências-de-definição)).
+> **Fase 1 (rename) implementada em 2026-08-27** na branch `develop`; Fases 2+ pendentes.
 
 ---
 
@@ -174,7 +174,7 @@ Tabela de configuração nova (não existe ainda), editável pelo admin — nasc
 
 ## Roadmap
 
-1. **Rename** separador → conferente
+1. **Rename** separador → conferente — ✅ implementado 2026-08-27
 2. **Cadastro de Separador** + liberação diária + apontamento na conferência
 3. **Sequências** + tela nova do Sup. Pátio
 4. **Divergência de barra + erro de separação + relatório agrupado**

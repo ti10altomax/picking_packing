@@ -17,10 +17,10 @@ type Pedido = {
   id: number
   numero_externo: string
   cliente: string
-  separado_em: string | null
-  separador_username: string | null
+  conferido_em: string | null
+  conferente_username: string | null
   qtd_itens: number
-  duracao_separacao: string | null
+  duracao_conferencia: string | null
 }
 
 type Item = {
@@ -42,7 +42,7 @@ function formatarData(iso: string | null): string {
   })
 }
 
-export default function Separados() {
+export default function Conferidos() {
   const insets = useSafeAreaInsets()
   const [pedidos, setPedidos] = useState<Pedido[]>([])
   const [count, setCount] = useState(0)
@@ -64,7 +64,7 @@ export default function Separados() {
     else setCarregandoMais(true)
     buscaAtivaRef.current = search
     try {
-      const data: Paginado | Pedido[] = await supervisorApi.listarSeparados({ search, page })
+      const data: Paginado | Pedido[] = await supervisorApi.listarConferidos({ search, page })
       if (Array.isArray(data)) {
         setPedidos(data); setCount(data.length); setProximaPagina(null)
       } else {
@@ -114,11 +114,11 @@ export default function Separados() {
 
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-surface-bg">
-      <Header title="Separados" />
+      <Header title="Conferidos" />
       <SupervisorNav />
 
       <View className="px-4 pt-3 pb-2 gap-2">
-        <Text className="text-sm text-ink-muted">Pedidos concluídos pelos separadores</Text>
+        <Text className="text-sm text-ink-muted">Pedidos concluídos pelos conferentes</Text>
         <TextInput
           value={busca}
           onChangeText={setBusca}
@@ -152,7 +152,7 @@ export default function Separados() {
             <Text className="text-xs text-ink-subtle mb-2">{pedidos.length} de {count}</Text>
           }
           ListEmptyComponent={
-            <Text className="text-ink-subtle text-center py-12">Nenhum pedido separado.</Text>
+            <Text className="text-ink-subtle text-center py-12">Nenhum pedido conferido.</Text>
           }
           ListFooterComponent={
             proximaPagina ? (
@@ -182,21 +182,21 @@ export default function Separados() {
                       <View className="flex-row items-center gap-2 flex-wrap">
                         <Text className="font-bold text-ink">{p.numero_externo}</Text>
                         <View className="bg-emerald-500/15 px-2 py-0.5 rounded-full">
-                          <Text className="text-xs text-emerald-300 font-medium">Separado</Text>
+                          <Text className="text-xs text-emerald-300 font-medium">Conferido</Text>
                         </View>
                       </View>
                       <Text className="text-sm text-ink-muted" numberOfLines={1}>
                         {p.cliente || '—'}
                       </Text>
                       <Text className="text-xs text-ink-subtle mt-1">
-                        {p.separado_em ? `${formatarData(p.separado_em)} · ` : ''}
-                        {p.separador_username
-                          ? <>por <Text className="text-ink">{p.separador_username}</Text></>
-                          : 'sem separador'}
+                        {p.conferido_em ? `${formatarData(p.conferido_em)} · ` : ''}
+                        {p.conferente_username
+                          ? <>por <Text className="text-ink">{p.conferente_username}</Text></>
+                          : 'sem conferente'}
                         {' · '}
                         {p.qtd_itens} {p.qtd_itens === 1 ? 'item' : 'itens'}
-                        {p.duracao_separacao ? (
-                          <> · em <Text className="text-ink">{p.duracao_separacao}</Text></>
+                        {p.duracao_conferencia ? (
+                          <> · em <Text className="text-ink">{p.duracao_conferencia}</Text></>
                         ) : null}
                       </Text>
                     </View>

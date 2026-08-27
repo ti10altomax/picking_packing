@@ -20,8 +20,8 @@ class SeparaTokenView(TokenObtainPairView):
 
 
 @api_view(['GET'])
-def listar_separadores(request):
+def listar_conferentes(request):
     qs = User.objects.filter(
-        perfil=User.Perfil.SEPARADOR, is_active=True,
+        perfil=User.Perfil.CONFERENTE, is_active=True,
     ).order_by('username').values('id', 'username', 'first_name', 'last_name')
     return Response(list(qs))

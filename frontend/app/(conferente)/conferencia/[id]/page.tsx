@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { separacaoApi } from '@/lib/api'
+import { conferenciaApi } from '@/lib/api'
 import { CameraScanner } from '@/components/CameraScanner'
 import { useDialog } from '@/components/Dialog'
 
@@ -39,9 +39,9 @@ type Pedido = {
   id: number
   numero_externo: string
   cliente: string
-  status: 'atribuido' | 'separando' | 'separado' | 'nao_conforme'
+  status: 'atribuido' | 'conferindo' | 'conferido' | 'nao_conforme'
   qtd_itens: number
-  percent_separado: number
+  percent_conferido: number
   itens: ItemPedido[]
   volumes: Volume[]
 }
@@ -83,7 +83,7 @@ function formatTimer(s: number) {
 // Página
 // -----------------------------------------------------------------------------
 
-export default function SeparacaoPedidoPage() {
+export default function ConferenciaPedidoPage() {
   const router = useRouter()
   const params = useParams()
   const pedidoId = Number(params.id)
@@ -112,7 +112,7 @@ export default function SeparacaoPedidoPage() {
 
   const carregar = useCallback(async () => {
     try {
-      const data: Pedido = await separacaoApi.detalhe(pedidoId)
+      const data: Pedido = await conferenciaApi.detalhe(pedidoId)
       setPedido(data)
     } catch {
       setErroGlobal('Erro ao carregar pedido')
@@ -134,7 +134,7 @@ export default function SeparacaoPedidoPage() {
 
   const volumes = pedido?.volumes ?? []
   const [ativoIdManual, setAtivoIdManual] = useState<number | null>(null)
-  // Volume ativo: o que o separador escolheu manualmente (se ainda válido),
+  // Volume ativo: o que o conferente escolheu manualmente (se ainda válido),
   // senão fallback pro último volume aberto.
   const volumeAtivo =
     (ativoIdManual !== null
@@ -146,11 +146,11 @@ export default function SeparacaoPedidoPage() {
   const totalPedido = pedido?.itens.reduce(
     (s, i) => s + (i.status === 'ok' ? i.qtd_pedida : 0), 0,
   ) ?? 0
-  const totalSeparado = pedido?.itens.reduce(
+  const totalConferido = pedido?.itens.reduce(
     (s, i) => s + (i.status === 'ok' ? i.qtd_separada : 0), 0,
   ) ?? 0
-  const percent = totalPedido ? Math.round(totalSeparado / totalPedido * 1000) / 10 : 0
-  const tudo100 = pedido && totalPedido > 0 && totalSeparado >= totalPedido
+  const percent = totalPedido ? Math.round(totalConferido / totalPedido * 1000) / 10 : 0
+  const tudo100 = pedido && totalPedido > 0 && totalConferido >= totalPedido
 
   // -------------------------------------------------------------------------
   // Ações
@@ -158,17 +158,17 @@ export default function SeparacaoPedidoPage() {
 
   const iniciar = async () => {
     try {
-      await separacaoApi.iniciar(pedidoId)
+      await conferenciaApi.iniciar(pedidoId)
       await carregar()
     } catch {
-      setErroGlobal('Erro ao iniciar separação')
+      setErroGlobal('Erro ao iniciar conferência')
     }
   }
 
   const aoCriarVolume = async (tipo: 'caixa' | 'fardo' | 'outro', identificador: string) => {
     setModalNovoVolume(false)
     try {
-      await separacaoApi.criarVolume(pedidoId, tipo, identificador)
+      await conferenciaApi.criarVolume(pedidoId, tipo, identificador)
       await carregar()
     } catch {
       setErroGlobal('Erro ao criar volume')
@@ -177,20 +177,20 @@ export default function SeparacaoPedidoPage() {
 
   const aoConcluir = async () => {
     const ok = await dialog.confirm({
-      title: 'Concluir separação?',
+      title: 'Concluir conferência?',
       message: 'Os volumes serão enviados ao Senior.',
       variant: 'success',
       confirmText: 'Concluir',
     })
     if (!ok) return
     try {
-      await separacaoApi.concluir(pedidoId)
-      router.replace('/separacao')
+      await conferenciaApi.concluir(pedidoId)
+      router.replace('/conferencia')
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { erro?: string } } })?.response?.data?.erro
       await dialog.alert({
         title: 'Erro ao concluir',
-        message: msg ?? 'Não foi possível concluir a separação.',
+        message: msg ?? 'Não foi possível concluir a conferência.',
         variant: 'danger',
       })
     }
@@ -199,8 +199,8 @@ export default function SeparacaoPedidoPage() {
   const aoMarcarNaoConforme = async (motivo: string, detalhe: string) => {
     setModalNaoConforme(false)
     try {
-      await separacaoApi.marcarNaoConforme(pedidoId, motivo, detalhe)
-      router.replace('/separacao')
+      await conferenciaApi.marcarNaoConforme(pedidoId, motivo, detalhe)
+      router.replace('/conferencia')
     } catch {
       setErroGlobal('Erro ao marcar como não conforme')
     }
@@ -221,7 +221,7 @@ export default function SeparacaoPedidoPage() {
     })
     if (!ok) return
     try {
-      await separacaoApi.removerVolumeItem(pedidoId, volumeId, volumeItemId)
+      await conferenciaApi.removerVolumeItem(pedidoId, volumeId, volumeItemId)
       await carregar()
     } catch {
       await dialog.alert({
@@ -241,7 +241,7 @@ export default function SeparacaoPedidoPage() {
     })
     if (!ok) return
     try {
-      await separacaoApi.removerVolume(pedidoId, volumeId)
+      await conferenciaApi.removerVolume(pedidoId, volumeId)
       await carregar()
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { erro?: string } } })?.response?.data?.erro
@@ -296,7 +296,7 @@ export default function SeparacaoPedidoPage() {
   useEffect(() => {
     if (loading) return
     const algumModal = itemSelecionado || modalNovoVolume || modalNaoConforme
-    if (!algumModal && pedido?.status === 'separando') {
+    if (!algumModal && pedido?.status === 'conferindo') {
       setTimeout(() => scanRef.current?.focus(), 100)
     }
   }, [loading, itemSelecionado, modalNovoVolume, modalNaoConforme, pedido?.status])
@@ -330,7 +330,7 @@ export default function SeparacaoPedidoPage() {
             onClick={iniciar}
             className="bg-blue-600 hover:bg-blue-500 dark:bg-blue-500 dark:hover:bg-blue-400 text-white px-8 h-14 rounded-2xl font-bold text-base active:scale-[0.98] transition-all shadow-lg shadow-blue-500/30 dark:shadow-blue-500/20"
           >
-            Iniciar separação
+            Iniciar conferência
           </button>
         </div>
       </div>
@@ -359,7 +359,7 @@ export default function SeparacaoPedidoPage() {
           />
         </div>
         <p className="text-xs text-ink-subtle mt-1">
-          {totalSeparado} / {totalPedido} unidades · {volumes.length} volume(s)
+          {totalConferido} / {totalPedido} unidades · {volumes.length} volume(s)
         </p>
       </div>
 
@@ -393,7 +393,7 @@ export default function SeparacaoPedidoPage() {
           volumes={volumes}
           itens={pedido.itens}
           ativoId={volumeAtivo?.id ?? null}
-          permiteEdicao={pedido.status === 'separando'}
+          permiteEdicao={pedido.status === 'conferindo'}
           onAtivar={setAtivoIdManual}
           onRemoverItem={aoRemoverItem}
           onRemoverVolume={aoRemoverVolume}
@@ -542,7 +542,7 @@ export default function SeparacaoPedidoPage() {
               : 'bg-surface-elev text-ink-subtle cursor-not-allowed'
           }`}
         >
-          {tudo100 ? 'Concluir ✓' : `Falta ${totalPedido - totalSeparado} unid.`}
+          {tudo100 ? 'Concluir ✓' : `Falta ${totalPedido - totalConferido} unid.`}
         </button>
       </div>
 
@@ -841,7 +841,7 @@ function ModalBipar({
     setFlash(null)
     setMensagem('')
     try {
-      await separacaoApi.bipar(pedidoId, {
+      await conferenciaApi.bipar(pedidoId, {
         item_id: item.id, qtd: qtdNum, codigo: cod, volume_id: volumeId,
       })
       playBeep(880, 150)

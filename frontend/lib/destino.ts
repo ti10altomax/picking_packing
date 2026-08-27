@@ -6,7 +6,7 @@ export function destinoPorPerfil(perfil?: Perfil | string | null): string {
     case 'supervisor_vendas': return '/supervisor/vendas'
     case 'supervisor_patio': return '/supervisor/patio'
     case 'etiquetador': return '/etiquetador' // CONGELADO
-    case 'separador': return '/separacao'
+    case 'conferente': return '/conferencia'
     default: return '/login'
   }
 }

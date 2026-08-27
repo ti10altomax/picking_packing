@@ -10,15 +10,15 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { Header } from '@/components/Header'
-import { separacaoApi } from '@/lib/api'
+import { conferenciaApi } from '@/lib/api'
 
 type Pedido = {
   id: number
   numero_externo: string
   cliente: string
-  status: 'atribuido' | 'separando' | 'separado' | 'nao_conforme'
+  status: 'atribuido' | 'conferindo' | 'conferido' | 'nao_conforme'
   qtd_itens: number
-  percent_separado: number
+  percent_conferido: number
   atribuido_em: string | null
 }
 
@@ -33,7 +33,7 @@ function tempoDesde(iso: string | null): string {
   return `há ${d}d`
 }
 
-export default function SeparacaoLista() {
+export default function ConferenciaLista() {
   const router = useRouter()
   const [pedidos, setPedidos] = useState<Pedido[]>([])
   const [loading, setLoading] = useState(true)
@@ -44,7 +44,7 @@ export default function SeparacaoLista() {
     if (refresh) setRefreshing(true)
     else setLoading(true)
     try {
-      const data: Pedido[] = await separacaoApi.listarAtribuidos()
+      const data: Pedido[] = await conferenciaApi.listarAtribuidos()
       setPedidos(data)
       setLastSync(new Date())
     } catch {
@@ -114,7 +114,7 @@ export default function SeparacaoLista() {
           }
           renderItem={({ item: p }) => (
             <Pressable
-              onPress={() => router.push(`/separacao/${p.id}` as never)}
+              onPress={() => router.push(`/conferencia/${p.id}` as never)}
               className="bg-surface-card border border-surface-border rounded-xl p-4 active:bg-surface-elev"
             >
               <View className="flex-row items-start justify-between gap-2">
@@ -123,19 +123,19 @@ export default function SeparacaoLista() {
                     <Text className="font-bold text-ink">{p.numero_externo}</Text>
                     <View
                       className={`px-2 py-0.5 rounded-full ${
-                        p.status === 'separando'
+                        p.status === 'conferindo'
                           ? 'bg-blue-500/15'
                           : 'bg-amber-500/15'
                       }`}
                     >
                       <Text
                         className={`text-xs font-medium ${
-                          p.status === 'separando'
+                          p.status === 'conferindo'
                             ? 'text-blue-300'
                             : 'text-amber-300'
                         }`}
                       >
-                        {p.status === 'separando' ? 'Em separação' : 'Atribuído'}
+                        {p.status === 'conferindo' ? 'Em conferência' : 'Atribuído'}
                       </Text>
                     </View>
                   </View>
@@ -146,9 +146,9 @@ export default function SeparacaoLista() {
                     {p.qtd_itens} {p.qtd_itens === 1 ? 'item' : 'itens'} · {tempoDesde(p.atribuido_em)}
                   </Text>
                 </View>
-                {p.status === 'separando' ? (
+                {p.status === 'conferindo' ? (
                   <Text className="text-lg font-bold text-blue-400">
-                    {p.percent_separado}%
+                    {p.percent_conferido}%
                   </Text>
                 ) : null}
               </View>

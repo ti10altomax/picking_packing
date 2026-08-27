@@ -16,6 +16,8 @@ Sessão de definição com direção/supervisão fechou um redesenho grande — 
 - **Decidido na 2ª rodada (2026-08-26)**: vínculo de barra divergente vale só pra ocorrência (nunca alias global); "a menos" continua Não conforme + registra erro; "a mais" conclui com erro registrado e **fechamento pelo Sup. Pátio** (configurável; sugestão: status novo `Aguardando fechamento`).
 - **3ª rodada (2026-08-26)**: relatório agrupado com recorte **por sequência**, consumido pelo **diretor**; opção **"Não identificado"** no apontamento aprovada. **Espec fechada — sem pendências.**
 
+**Fase 1 do redesenho implementada em 2026-08-27** (branch `develop`): rename completo `separador`→`conferente` — perfil (+migration de dados), campos do Pedido (`conferente`, `conferencia_iniciada_em`, `conferido_em`), status (`conferindo`/`conferido`, valores migrados), app `apps/conferencia/`, endpoints `/api/conferencia/` e `/api/users/conferentes/`, payload `conferente_id` no atribuir, chaves `conferente_username`/`percent_conferido`/`duracao_conferencia`, rotas web `/conferencia` e `/supervisor/conferidos`, mobile idem. **Mantidos**: `PedidoItem.qtd_separada` (compartilhado com legado), endpoint legado `finalizar_separacao`, módulos congelados intactos. Validado: `manage.py check` + `makemigrations --check` limpos, `tsc` web zerado, migrações aplicadas no dev, smoke test de rotas ok. Pendência conhecida: erro de tipo pré-existente em `mobile/components/CameraScanner.tsx` (expo-camera), sem relação com o rename. **APK dos coletores precisa de rebuild quando isso for pra produção.**
+
 Nota: a **Fase I (mobile)** descrita abaixo ficou desatualizada — o app chegou a **paridade total de telas** (Expo SDK 54, RN 0.81.4, NativeWind 4: login, separação + detalhe, vendas, pátio, separados, não-conformes, admin) com APK release buildado localmente em `mobile/android/`.
 
 ---
@@ -457,8 +459,9 @@ Pré-requisito: `certs/cert.pem` e `certs/key.pem` gerados via mkcert (ver Fase 
 | `/supervisor/vendas` | sup_vendas, admin | Lista pendentes + selecionar |
 | `/supervisor/patio` | sup_patio, admin | Lista selecionados + atribuir |
 | `/supervisor/nao-conformes` | sup_vendas, sup_patio, admin | Lista não conformes + cancelar/retornar |
-| `/separacao` | separador, admin | Lista "atribuídos a mim" |
-| `/separacao/[id]` | separador, admin | Separação por volumes (núcleo do trabalho) |
+| `/conferencia` | conferente, admin | Lista "atribuídos a mim" (era `/separacao`) |
+| `/conferencia/[id]` | conferente, admin | Conferência por volumes (núcleo do trabalho) |
+| `/supervisor/conferidos` | supervisores, admin | Lista de pedidos conferidos (era `/supervisor/separados`) |
 | `/pedidos` | (LEGADO) | Tela do escopo antigo — ainda funciona com endpoints antigos |
 | `/pedidos/[id]` | (LEGADO) | Conferência por bipagem do escopo antigo |
 | `/etiquetador` | (LEGADO) | Lista a etiquetar (escopo antigo) |
@@ -471,7 +474,7 @@ Pré-requisito: `certs/cert.pem` e `certs/key.pem` gerados via mkcert (ver Fase 
 ### Auth (core)
 - `POST /api/auth/token/` — login
 - `POST /api/auth/token/refresh/`
-- `GET /api/users/separadores/` — lista separadores ativos
+- `GET /api/users/conferentes/` — lista conferentes ativos (era `/separadores/`)
 
 ### Pedidos
 - `GET /api/pedidos/?status=pendente|selecionado|...` — lista
@@ -481,14 +484,14 @@ Pré-requisito: `certs/cert.pem` e `certs/key.pem` gerados via mkcert (ver Fase 
 - `POST /api/pedidos/<id>/bipar_item/` — LEGADO (escopo antigo)
 - `POST /api/pedidos/<id>/finalizar_separacao/` — LEGADO
 
-### Separação (escopo atual)
-- `GET /api/separacao/pedidos/`
-- `GET /api/separacao/pedidos/<id>/`
-- `POST /api/separacao/pedidos/<id>/iniciar/`
-- `POST /api/separacao/pedidos/<id>/volumes/`
-- `POST /api/separacao/pedidos/<id>/bipar/`
-- `POST /api/separacao/pedidos/<id>/concluir/`
-- `POST /api/separacao/pedidos/<id>/nao_conforme/`
+### Conferência (escopo atual — era `/api/separacao/`)
+- `GET /api/conferencia/pedidos/`
+- `GET /api/conferencia/pedidos/<id>/`
+- `POST /api/conferencia/pedidos/<id>/iniciar/`
+- `POST /api/conferencia/pedidos/<id>/volumes/`
+- `POST /api/conferencia/pedidos/<id>/bipar/`
+- `POST /api/conferencia/pedidos/<id>/concluir/`
+- `POST /api/conferencia/pedidos/<id>/nao_conforme/`
 
 ### Não conformes
 - `GET /api/nao-conformes/`

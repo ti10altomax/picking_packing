@@ -30,16 +30,16 @@ class PedidoListSerializer(serializers.ModelSerializer):
     """Serializer slim para listagens (sem itens). Usa qtd_itens anotado no queryset."""
     qtd_itens = serializers.IntegerField(read_only=True)
     tempo_espera = serializers.SerializerMethodField()
-    duracao_separacao = serializers.SerializerMethodField()
-    separador_username = serializers.CharField(source='separador.username', read_only=True)
+    duracao_conferencia = serializers.SerializerMethodField()
+    conferente_username = serializers.CharField(source='conferente.username', read_only=True)
 
     class Meta:
         model = Pedido
         fields = [
             'id', 'numero_externo', 'cliente', 'status', 'criado_em',
-            'separacao_iniciada_em', 'separado_em', 'selecionado_em', 'atribuido_em',
-            'separador', 'separador_username',
-            'qtd_itens', 'tempo_espera', 'duracao_separacao',
+            'conferencia_iniciada_em', 'conferido_em', 'selecionado_em', 'atribuido_em',
+            'conferente', 'conferente_username',
+            'qtd_itens', 'tempo_espera', 'duracao_conferencia',
         ]
 
     def get_tempo_espera(self, obj):
@@ -48,32 +48,32 @@ class PedidoListSerializer(serializers.ModelSerializer):
         delta = timesince(obj.criado_em, now=timezone.now())
         return f'há {delta.split(", ")[0]}'
 
-    def get_duracao_separacao(self, obj):
-        return _formatar_duracao(obj.separacao_iniciada_em, obj.separado_em)
+    def get_duracao_conferencia(self, obj):
+        return _formatar_duracao(obj.conferencia_iniciada_em, obj.conferido_em)
 
 
 class PedidoSerializer(serializers.ModelSerializer):
     itens = PedidoItemSerializer(many=True, read_only=True)
     marketplace_nome = serializers.CharField(source='marketplace.nome', read_only=True)
-    separador_username = serializers.CharField(source='separador.username', read_only=True)
-    percent_separado = serializers.SerializerMethodField()
+    conferente_username = serializers.CharField(source='conferente.username', read_only=True)
+    percent_conferido = serializers.SerializerMethodField()
     qtd_itens = serializers.SerializerMethodField()
     tempo_espera = serializers.SerializerMethodField()
-    duracao_separacao = serializers.SerializerMethodField()
+    duracao_conferencia = serializers.SerializerMethodField()
 
     class Meta:
         model = Pedido
         fields = [
             'id', 'numero_externo', 'marketplace', 'marketplace_nome',
             'cliente', 'status', 'criado_em',
-            'separacao_iniciada_em', 'separado_em', 'faturado_em',
+            'conferencia_iniciada_em', 'conferido_em', 'faturado_em',
             'endereco_fisico', 'ordem_pilha',
-            'selecionado_em', 'atribuido_em', 'separador', 'separador_username',
-            'percent_separado', 'qtd_itens', 'tempo_espera', 'duracao_separacao',
+            'selecionado_em', 'atribuido_em', 'conferente', 'conferente_username',
+            'percent_conferido', 'qtd_itens', 'tempo_espera', 'duracao_conferencia',
             'itens',
         ]
 
-    def get_percent_separado(self, obj):
+    def get_percent_conferido(self, obj):
         itens = obj.itens.all()
         total = sum(i.qtd_pedida for i in itens)
         if not total:
@@ -89,5 +89,5 @@ class PedidoSerializer(serializers.ModelSerializer):
         delta = timesince(obj.criado_em, now=timezone.now())
         return f'há {delta.split(", ")[0]}'
 
-    def get_duracao_separacao(self, obj):
-        return _formatar_duracao(obj.separacao_iniciada_em, obj.separado_em)
+    def get_duracao_conferencia(self, obj):
+        return _formatar_duracao(obj.conferencia_iniciada_em, obj.conferido_em)

@@ -33,7 +33,7 @@ INSTALLED_APPS = [
     # Local
     'apps.core',
     'apps.pedidos',
-    'apps.separacao',
+    'apps.conferencia',
     'apps.senior',
     'apps.vtex',
     'apps.etiquetas',

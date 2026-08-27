@@ -6,11 +6,11 @@ type Pedido = {
   id: number
   numero_externo: string
   cliente: string
-  separado_em: string | null
-  separador: number | null
-  separador_username: string | null
+  conferido_em: string | null
+  conferente: number | null
+  conferente_username: string | null
   qtd_itens: number
-  duracao_separacao: string | null
+  duracao_conferencia: string | null
 }
 
 type Item = {
@@ -23,7 +23,7 @@ type Item = {
   status: 'ok' | 'cancelado' | 'falta'
 }
 
-export default function SeparadosPage() {
+export default function ConferidosPage() {
   const [pedidos, setPedidos] = useState<Pedido[]>([])
   const [count, setCount] = useState(0)
   const [proximaPagina, setProximaPagina] = useState<number | null>(null)
@@ -42,7 +42,7 @@ export default function SeparadosPage() {
     if (page === 1) setCarregando(true)
     else setCarregandoMais(true)
     try {
-      const data: Paginado<Pedido> | Pedido[] = await supervisorApi.listarSeparados({ search, page })
+      const data: Paginado<Pedido> | Pedido[] = await supervisorApi.listarConferidos({ search, page })
       if (Array.isArray(data)) {
         setPedidos(data)
         setCount(data.length)
@@ -103,8 +103,8 @@ export default function SeparadosPage() {
     <div className="max-w-4xl mx-auto p-4">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-xl font-bold text-ink">Pedidos separados</h1>
-          <p className="text-sm text-ink-muted">Concluídos pelos separadores</p>
+          <h1 className="text-xl font-bold text-ink">Pedidos conferidos</h1>
+          <p className="text-sm text-ink-muted">Concluídos pelos conferentes</p>
         </div>
         <button onClick={() => carregar(buscaAtiva, 1, false)} className="text-sm text-blue-600 dark:text-blue-400 min-h-[44px] px-2">
           Atualizar
@@ -124,7 +124,7 @@ export default function SeparadosPage() {
       {carregando ? (
         <p className="text-ink-muted">Carregando…</p>
       ) : pedidos.length === 0 ? (
-        <p className="text-ink-subtle text-center py-12">Nenhum pedido separado.</p>
+        <p className="text-ink-subtle text-center py-12">Nenhum pedido conferido.</p>
       ) : (
         <>
           <div className="bg-surface-card rounded-xl border border-surface-border overflow-hidden">
@@ -148,27 +148,27 @@ export default function SeparadosPage() {
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-semibold text-ink">{p.numero_externo}</span>
                             <span className="text-xs bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300 px-2 py-0.5 rounded-full font-medium">
-                              Separado
+                              Conferido
                             </span>
                           </div>
                           <p className="text-sm text-ink-muted truncate">{p.cliente || '—'}</p>
                           <p className="text-xs text-ink-subtle mt-1">
-                            {p.separado_em && (
+                            {p.conferido_em && (
                               <>
-                                {new Date(p.separado_em).toLocaleString('pt-BR', {
+                                {new Date(p.conferido_em).toLocaleString('pt-BR', {
                                   day: '2-digit', month: '2-digit',
                                   hour: '2-digit', minute: '2-digit',
                                 })}
                                 {' · '}
                               </>
                             )}
-                            {p.separador_username
-                              ? <>por <strong className="text-ink">{p.separador_username}</strong></>
-                              : 'sem separador registrado'}
+                            {p.conferente_username
+                              ? <>por <strong className="text-ink">{p.conferente_username}</strong></>
+                              : 'sem conferente registrado'}
                             {' · '}
                             {p.qtd_itens} {p.qtd_itens === 1 ? 'item' : 'itens'}
-                            {p.duracao_separacao && (
-                              <> · em <strong className="text-ink">{p.duracao_separacao}</strong></>
+                            {p.duracao_conferencia && (
+                              <> · em <strong className="text-ink">{p.duracao_conferencia}</strong></>
                             )}
                           </p>
                         </div>

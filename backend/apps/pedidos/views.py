@@ -165,19 +165,19 @@ class PedidoViewSet(viewsets.ModelViewSet):
             )
 
         ids = request.data.get('pedido_ids') or []
-        separador_id = request.data.get('separador_id')
+        conferente_id = request.data.get('conferente_id')
 
         if not isinstance(ids, list) or not ids:
             return Response({'erro': 'pedido_ids obrigatório'}, status=status.HTTP_400_BAD_REQUEST)
-        if not separador_id:
-            return Response({'erro': 'separador_id obrigatório'}, status=status.HTTP_400_BAD_REQUEST)
+        if not conferente_id:
+            return Response({'erro': 'conferente_id obrigatório'}, status=status.HTTP_400_BAD_REQUEST)
 
-        separador = User.objects.filter(
-            pk=separador_id, perfil=User.Perfil.SEPARADOR, is_active=True,
+        conferente = User.objects.filter(
+            pk=conferente_id, perfil=User.Perfil.CONFERENTE, is_active=True,
         ).first()
-        if not separador:
+        if not conferente:
             return Response(
-                {'erro': 'separador inválido ou inativo'},
+                {'erro': 'conferente inválido ou inativo'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -188,24 +188,25 @@ class PedidoViewSet(viewsets.ModelViewSet):
             status=Pedido.Status.ATRIBUIDO,
             atribuido_em=agora,
             atribuido_por=request.user,
-            separador=separador,
+            conferente=conferente,
         )
         for pid in atualizados:
             PedidoLog.objects.create(
                 pedido_id=pid, usuario=request.user,
                 acao='pedido_atribuido',
-                payload={'separador_id': separador.id, 'separador': separador.username},
+                payload={'conferente_id': conferente.id, 'conferente': conferente.username},
             )
 
         ignorados = [i for i in ids if i not in atualizados]
         return Response({
             'atribuidos': atualizados,
             'ignorados': ignorados,
-            'separador': separador.username,
+            'conferente': conferente.username,
         })
 
     @action(detail=True, methods=['post'])
     def finalizar_separacao(self, request, pk=None):
+        # LEGADO (escopo antigo) — nome do action preservado para manter a URL congelada
         pedido = self.get_object()
 
         if pedido.status != Pedido.Status.PENDENTE:
@@ -229,9 +230,9 @@ class PedidoViewSet(viewsets.ModelViewSet):
             )
 
         pedido.endereco_fisico = endereco
-        pedido.separador = request.user
-        pedido.separado_em = timezone.now()
-        pedido.status = Pedido.Status.SEPARANDO
+        pedido.conferente = request.user
+        pedido.conferido_em = timezone.now()
+        pedido.status = Pedido.Status.CONFERINDO
         pedido.save()
 
         from apps.senior.tasks import enviar_embalagem

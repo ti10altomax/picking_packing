@@ -5,27 +5,27 @@ const PRINCIPAL = [
   {
     href: '/supervisor/vendas',
     titulo: 'Sup. Vendas — Selecionar pedidos',
-    descricao: 'Lista pedidos pendentes do Senior e envia para separação',
+    descricao: 'Lista pedidos pendentes do Senior e envia para conferência',
     cor: 'border-orange-200 hover:border-orange-400 dark:border-orange-500/30 dark:hover:border-orange-500/70',
     glow: 'dark:hover:shadow-orange-500/10',
   },
   {
     href: '/supervisor/patio',
     titulo: 'Sup. Pátio — Atribuir',
-    descricao: 'Lista pedidos selecionados e atribui a um separador',
+    descricao: 'Lista pedidos selecionados e atribui a um conferente',
     cor: 'border-amber-200 hover:border-amber-400 dark:border-amber-500/30 dark:hover:border-amber-500/70',
     glow: 'dark:hover:shadow-amber-500/10',
   },
   {
-    href: '/separacao',
-    titulo: 'Separador — Atribuídos a mim',
-    descricao: 'Lista pedidos atribuídos ao usuário logado e tela de separação por volumes',
+    href: '/conferencia',
+    titulo: 'Conferente — Atribuídos a mim',
+    descricao: 'Lista pedidos atribuídos ao usuário logado e tela de conferência por volumes',
     cor: 'border-blue-200 hover:border-blue-400 dark:border-blue-500/30 dark:hover:border-blue-500/70',
     glow: 'dark:hover:shadow-blue-500/10',
   },
   {
-    href: '/supervisor/separados',
-    titulo: 'Pedidos separados',
+    href: '/supervisor/conferidos',
+    titulo: 'Pedidos conferidos',
     descricao: 'Histórico dos pedidos concluídos com quem separou',
     cor: 'border-emerald-200 hover:border-emerald-400 dark:border-emerald-500/30 dark:hover:border-emerald-500/70',
     glow: 'dark:hover:shadow-emerald-500/10',
@@ -33,7 +33,7 @@ const PRINCIPAL = [
   {
     href: '/supervisor/nao-conformes',
     titulo: 'Não conformes',
-    descricao: 'Pedidos com problema na separação — cancelar ou retornar para fila',
+    descricao: 'Pedidos com problema na conferência — cancelar ou retornar para fila',
     cor: 'border-red-200 hover:border-red-400 dark:border-red-500/30 dark:hover:border-red-500/70',
     glow: 'dark:hover:shadow-red-500/10',
   },
@@ -42,7 +42,7 @@ const PRINCIPAL = [
 const CONGELADOS = [
   {
     href: '/pedidos',
-    titulo: 'Separador (legado)',
+    titulo: 'Conferente (legado)',
     descricao: 'Fluxo antigo de bipagem com endereço — preservado mas fora do escopo atual',
   },
   {

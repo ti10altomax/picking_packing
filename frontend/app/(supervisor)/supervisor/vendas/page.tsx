@@ -82,7 +82,7 @@ export default function SupervisorVendasPage() {
     if (proximaPagina) await carregar(buscaAtiva, proximaPagina, true)
   }
 
-  async function enviarParaSeparacao() {
+  async function enviarParaConferencia() {
     if (selecionados.size === 0) return
     setEnviando(true)
     setMensagem(null)
@@ -92,7 +92,7 @@ export default function SupervisorVendasPage() {
       setSelecionados(new Set())
       setMensagem({
         tipo: 'ok',
-        texto: `${res.selecionados.length} pedido(s) enviado(s) para separação${
+        texto: `${res.selecionados.length} pedido(s) enviado(s) para conferência${
           res.ignorados.length ? ` · ${res.ignorados.length} ignorado(s)` : ''
         }`,
       })
@@ -111,7 +111,7 @@ export default function SupervisorVendasPage() {
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-xl font-bold text-ink">Pedidos pendentes</h1>
-          <p className="text-sm text-ink-muted">Selecione os pedidos que vão para separação</p>
+          <p className="text-sm text-ink-muted">Selecione os pedidos que vão para conferência</p>
         </div>
         <button
           onClick={() => carregar(buscaAtiva, 1, false)}
@@ -226,11 +226,11 @@ export default function SupervisorVendasPage() {
                 Limpar
               </button>
               <button
-                onClick={enviarParaSeparacao}
+                onClick={enviarParaConferencia}
                 disabled={enviando}
                 className="bg-orange-500 hover:bg-orange-400 text-white px-5 py-2 rounded-lg text-sm font-semibold min-h-[44px] disabled:opacity-50 shadow-lg shadow-orange-500/30 transition-all"
               >
-                {enviando ? 'Enviando…' : 'Enviar para separação'}
+                {enviando ? 'Enviando…' : 'Enviar para conferência'}
               </button>
             </div>
           </div>

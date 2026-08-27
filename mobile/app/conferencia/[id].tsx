@@ -13,7 +13,7 @@ import {
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { separacaoApi } from '@/lib/api'
+import { conferenciaApi } from '@/lib/api'
 import { CameraScanner } from '@/components/CameraScanner'
 import { useDialog } from '@/components/Dialog'
 
@@ -49,7 +49,7 @@ type Pedido = {
   id: number
   numero_externo: string
   cliente: string
-  status: 'atribuido' | 'separando' | 'separado' | 'nao_conforme'
+  status: 'atribuido' | 'conferindo' | 'conferido' | 'nao_conforme'
   qtd_itens: number
   itens: ItemPedido[]
   volumes: Volume[]
@@ -65,7 +65,7 @@ const MOTIVOS = [
 // Tela principal
 // -----------------------------------------------------------------------------
 
-export default function SeparacaoDetalhe() {
+export default function ConferenciaDetalhe() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const pedidoId = Number(id)
   const router = useRouter()
@@ -84,7 +84,7 @@ export default function SeparacaoDetalhe() {
 
   const carregar = useCallback(async () => {
     try {
-      const data: Pedido = await separacaoApi.detalhe(pedidoId)
+      const data: Pedido = await conferenciaApi.detalhe(pedidoId)
       setPedido(data)
     } catch {
       setErro('Erro ao carregar pedido')
@@ -102,7 +102,7 @@ export default function SeparacaoDetalhe() {
 
   const volumes = pedido?.volumes ?? []
   const [ativoIdManual, setAtivoIdManual] = useState<number | null>(null)
-  // Volume ativo: o que o separador escolheu manualmente (se ainda válido),
+  // Volume ativo: o que o conferente escolheu manualmente (se ainda válido),
   // senão fallback pro último volume aberto.
   const volumeAtivo =
     (ativoIdManual !== null
@@ -114,11 +114,11 @@ export default function SeparacaoDetalhe() {
   const totalPedido = pedido?.itens.reduce(
     (s, i) => s + (i.status === 'ok' ? i.qtd_pedida : 0), 0,
   ) ?? 0
-  const totalSeparado = pedido?.itens.reduce(
+  const totalConferido = pedido?.itens.reduce(
     (s, i) => s + (i.status === 'ok' ? i.qtd_separada : 0), 0,
   ) ?? 0
-  const percent = totalPedido ? Math.round((totalSeparado / totalPedido) * 1000) / 10 : 0
-  const tudo100 = !!pedido && totalPedido > 0 && totalSeparado >= totalPedido
+  const percent = totalPedido ? Math.round((totalConferido / totalPedido) * 1000) / 10 : 0
+  const tudo100 = !!pedido && totalPedido > 0 && totalConferido >= totalPedido
 
   // -------------------------------------------------------------------------
   // Ações
@@ -126,17 +126,17 @@ export default function SeparacaoDetalhe() {
 
   async function iniciar() {
     try {
-      await separacaoApi.iniciar(pedidoId)
+      await conferenciaApi.iniciar(pedidoId)
       await carregar()
     } catch {
-      setErro('Erro ao iniciar separação')
+      setErro('Erro ao iniciar conferência')
     }
   }
 
   async function aoCriarVolume(tipo: 'caixa' | 'fardo' | 'outro', identificador: string) {
     setModalNovoVolume(false)
     try {
-      await separacaoApi.criarVolume(pedidoId, tipo, identificador)
+      await conferenciaApi.criarVolume(pedidoId, tipo, identificador)
       await carregar()
     } catch {
       setErro('Erro ao criar volume')
@@ -146,20 +146,20 @@ export default function SeparacaoDetalhe() {
   async function aoConcluir() {
     const ok = await dialog.confirm({
       variant: 'success',
-      title: 'Concluir separação?',
-      message: 'Os volumes serão enviados ao Senior e o pedido marcado como separado.',
+      title: 'Concluir conferência?',
+      message: 'Os volumes serão enviados ao Senior e o pedido marcado como conferido.',
       confirmText: 'Concluir',
     })
     if (!ok) return
     try {
-      await separacaoApi.concluir(pedidoId)
-      router.replace('/separacao')
+      await conferenciaApi.concluir(pedidoId)
+      router.replace('/conferencia')
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { erro?: string } } })?.response?.data?.erro
       await dialog.alert({
         variant: 'danger',
         title: 'Erro ao concluir',
-        message: msg ?? 'Não foi possível concluir a separação.',
+        message: msg ?? 'Não foi possível concluir a conferência.',
       })
     }
   }
@@ -167,8 +167,8 @@ export default function SeparacaoDetalhe() {
   async function aoMarcarNaoConforme(motivo: string, detalhe: string) {
     setModalNaoConforme(false)
     try {
-      await separacaoApi.marcarNaoConforme(pedidoId, motivo, detalhe)
-      router.replace('/separacao')
+      await conferenciaApi.marcarNaoConforme(pedidoId, motivo, detalhe)
+      router.replace('/conferencia')
     } catch {
       setErro('Erro ao marcar como não conforme')
     }
@@ -189,7 +189,7 @@ export default function SeparacaoDetalhe() {
     })
     if (!ok) return
     try {
-      await separacaoApi.removerVolumeItem(pedidoId, volumeId, volumeItemId)
+      await conferenciaApi.removerVolumeItem(pedidoId, volumeId, volumeItemId)
       await carregar()
     } catch {
       await dialog.alert({
@@ -209,7 +209,7 @@ export default function SeparacaoDetalhe() {
     })
     if (!ok) return
     try {
-      await separacaoApi.removerVolume(pedidoId, volumeId)
+      await conferenciaApi.removerVolume(pedidoId, volumeId)
       await carregar()
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { erro?: string } } })?.response?.data?.erro
@@ -265,7 +265,7 @@ export default function SeparacaoDetalhe() {
     )
   }
 
-  // Estado: ainda não iniciou separação
+  // Estado: ainda não iniciou conferência
   if (pedido.status === 'atribuido') {
     return (
       <SafeAreaView edges={['top']} className="flex-1 bg-surface-bg">
@@ -279,7 +279,7 @@ export default function SeparacaoDetalhe() {
             onPress={iniciar}
             className="bg-blue-500 active:bg-blue-400 px-8 h-14 rounded-2xl items-center justify-center"
           >
-            <Text className="text-white font-bold text-base">Iniciar separação</Text>
+            <Text className="text-white font-bold text-base">Iniciar conferência</Text>
           </Pressable>
         </View>
       </SafeAreaView>
@@ -299,7 +299,7 @@ export default function SeparacaoDetalhe() {
           />
         </View>
         <Text className="text-xs text-ink-subtle mt-1">
-          {totalSeparado} / {totalPedido} unidades · {volumes.length} volume(s)
+          {totalConferido} / {totalPedido} unidades · {volumes.length} volume(s)
         </Text>
       </View>
 
@@ -345,7 +345,7 @@ export default function SeparacaoDetalhe() {
           volumes={volumes}
           itens={pedido.itens}
           ativoId={volumeAtivo?.id ?? null}
-          permiteEdicao={pedido.status === 'separando'}
+          permiteEdicao={pedido.status === 'conferindo'}
           onAtivar={setAtivoIdManual}
           onRemoverItem={aoRemoverItem}
           onRemoverVolume={aoRemoverVolume}
@@ -443,7 +443,7 @@ export default function SeparacaoDetalhe() {
           <Text className={`font-bold text-base ${
             tudo100 && volumes.length > 0 ? 'text-white' : 'text-ink-subtle'
           }`}>
-            {tudo100 ? 'Concluir ✓' : `Falta ${totalPedido - totalSeparado} unid.`}
+            {tudo100 ? 'Concluir ✓' : `Falta ${totalPedido - totalConferido} unid.`}
           </Text>
         </Pressable>
       </View>
@@ -759,7 +759,7 @@ function ModalBipar({
     setMensagem('')
     setTipoMsg(null)
     try {
-      await separacaoApi.bipar(pedidoId, {
+      await conferenciaApi.bipar(pedidoId, {
         item_id: item.id, qtd: qtdNum, codigo: cod, volume_id: volumeId,
       })
       Vibration.vibrate(60)

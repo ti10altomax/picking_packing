@@ -6,7 +6,7 @@ import { useExitGuard } from '@/lib/useExitGuard'
 import { FullscreenOnFirstTap, FullscreenToggle } from '@/components/FullscreenLayer'
 import { ThemeToggle } from '@/components/ThemeToggle'
 
-export default function SeparadorLayout({ children }: { children: React.ReactNode }) {
+export default function ConferenteLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const { token, user, hydrate, logout } = useAuthStore()
   const [ready, setReady] = useState(false)

@@ -167,15 +167,15 @@ def monitorar_faturamento():
     from apps.pedidos.models import Pedido, PedidoLog
     import oracledb
 
-    pedidos_separados = list(
-        Pedido.objects.filter(status=Pedido.Status.SEPARANDO)
+    pedidos_conferidos = list(
+        Pedido.objects.filter(status=Pedido.Status.CONFERINDO)
         .values_list('id', 'numero_externo')
     )
 
-    if not pedidos_separados:
+    if not pedidos_conferidos:
         return {'verificados': 0, 'faturados': 0}
 
-    numeros = [n for _, n in pedidos_separados]
+    numeros = [n for _, n in pedidos_conferidos]
     placeholders = ','.join([':' + str(i + 1) for i in range(len(numeros))])
     query = QUERY_SITPED_POR_NUMEROS.format(placeholders=placeholders)
 
@@ -191,10 +191,10 @@ def monitorar_faturamento():
     }
 
     faturados = 0
-    for pedido_id, numero in pedidos_separados:
+    for pedido_id, numero in pedidos_conferidos:
         if numero not in faturados_senior:
             continue
-        Pedido.objects.filter(pk=pedido_id, status=Pedido.Status.SEPARANDO).update(
+        Pedido.objects.filter(pk=pedido_id, status=Pedido.Status.CONFERINDO).update(
             status=Pedido.Status.FATURADO,
             faturado_em=timezone.now(),
         )
@@ -207,5 +207,5 @@ def monitorar_faturamento():
         faturados += 1
         logger.info(f"Pedido {numero} faturado pelo Senior → status FATURADO")
 
-    logger.info(f"monitorar_faturamento: {len(pedidos_separados)} verificados, {faturados} faturados")
-    return {'verificados': len(pedidos_separados), 'faturados': faturados}
+    logger.info(f"monitorar_faturamento: {len(pedidos_conferidos)} verificados, {faturados} faturados")
+    return {'verificados': len(pedidos_conferidos), 'faturados': faturados}

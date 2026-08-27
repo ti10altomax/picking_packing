@@ -14,8 +14,8 @@ type Card = {
 
 const CARDS: Card[] = [
   {
-    href: '/separacao',
-    titulo: 'Minha separação',
+    href: '/conferencia',
+    titulo: 'Minha conferência',
     descricao: 'Pedidos atribuídos a mim',
     emoji: '📦',
     cor: 'bg-emerald-500/15 border-emerald-500/30',
@@ -30,13 +30,13 @@ const CARDS: Card[] = [
   {
     href: '/supervisor/patio',
     titulo: 'Sup. Pátio',
-    descricao: 'Atribuir pedidos a separadores',
+    descricao: 'Atribuir pedidos a conferentes',
     emoji: '🚚',
     cor: 'bg-amber-500/15 border-amber-500/30',
   },
   {
-    href: '/supervisor/separados',
-    titulo: 'Separados',
+    href: '/supervisor/conferidos',
+    titulo: 'Conferidos',
     descricao: 'Histórico de pedidos concluídos',
     emoji: '✅',
     cor: 'bg-emerald-500/15 border-emerald-500/30',

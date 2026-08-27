@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 
 export type Perfil =
-  | 'separador'
+  | 'conferente'
   | 'supervisor_vendas'
   | 'supervisor_patio'
   | 'admin'

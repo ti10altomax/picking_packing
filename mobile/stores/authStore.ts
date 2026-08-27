@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import * as SecureStore from 'expo-secure-store'
 
 export type Perfil =
-  | 'separador'
+  | 'conferente'
   | 'supervisor_vendas'
   | 'supervisor_patio'
   | 'admin'

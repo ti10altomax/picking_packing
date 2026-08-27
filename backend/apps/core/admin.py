@@ -56,7 +56,7 @@ class CustomUserAdmin(BaseUserAdmin, ModelAdmin):
     @display(
         description="Perfil",
         label={
-            "Separador":            "info",
+            "Conferente":           "info",
             "Supervisor de Vendas": "warning",
             "Supervisor de Pátio":  "warning",
             "Admin":                "primary",

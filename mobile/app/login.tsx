@@ -50,7 +50,7 @@ export default function Login() {
       await setAuth(data.access, data.refresh, {
         id: payload.user_id,
         username: payload.username ?? username,
-        perfil: (payload.perfil as never) ?? 'separador',
+        perfil: (payload.perfil as never) ?? 'conferente',
       })
       router.replace(destinoPorPerfil(payload.perfil) as never)
     } catch (e: unknown) {

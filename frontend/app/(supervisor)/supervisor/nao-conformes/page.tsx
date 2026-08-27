@@ -12,7 +12,7 @@ type NaoConforme = {
   motivo: string
   motivo_label: string
   detalhe: string
-  separador: string | null
+  conferente: string | null
   atribuido_por: string | null
 }
 
@@ -129,7 +129,7 @@ export default function NaoConformesPage() {
         <div>
           <h1 className="text-xl font-bold text-ink">Não conformes</h1>
           <p className="text-sm text-ink-muted">
-            Pedidos com problema na separação aguardando ação
+            Pedidos com problema na conferência aguardando ação
           </p>
         </div>
         <button onClick={carregar} className="text-sm text-blue-600 dark:text-blue-400 min-h-[44px] px-2">
@@ -185,7 +185,7 @@ export default function NaoConformesPage() {
                         {new Date(p.nao_conforme_em).toLocaleString('pt-BR', {
                           day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
                         })}
-                        {p.separador && ` · separador: ${p.separador}`}
+                        {p.conferente && ` · conferente: ${p.conferente}`}
                       </p>
                       {p.detalhe && (
                         <p className="text-sm text-ink mt-2 p-2 bg-surface-elev rounded-lg italic">

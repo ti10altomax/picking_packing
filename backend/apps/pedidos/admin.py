@@ -22,8 +22,8 @@ STATUS_BADGES = {
     "pendente":             ("Pendente",        "warning"),
     "selecionado":          ("Selecionado",     "warning"),
     "atribuido":            ("Atribuído",       "info"),
-    "separando":            ("Em separação",    "info"),
-    "separado":             ("Separado",        "success"),
+    "conferindo":           ("Em conferência",  "info"),
+    "conferido":            ("Conferido",       "success"),
     "nao_conforme":         ("Não conforme",    "danger"),
     "cancelado":            ("Cancelado",       "secondary"),
     # Estados antigos (escopo congelado) — cinza
@@ -46,12 +46,12 @@ class PedidoItemInline(TabularInline):
 class PedidoAdmin(ModelAdmin):
     list_display = (
         'numero_externo', 'cliente_curto', 'status_badge',
-        'criado_em', 'separador',
+        'criado_em', 'conferente',
     )
     list_filter = (
         ('status', ChoicesDropdownFilter),
         ('criado_em', RangeDateFilter),
-        ('separador', admin.RelatedOnlyFieldListFilter),
+        ('conferente', admin.RelatedOnlyFieldListFilter),
     )
     list_filter_submit = True       # botão "Aplicar" — não recarrega a cada clique
     list_per_page = 50
@@ -59,7 +59,7 @@ class PedidoAdmin(ModelAdmin):
     date_hierarchy = 'criado_em'
     readonly_fields = (
         'criado_em', 'selecionado_em', 'atribuido_em',
-        'separacao_iniciada_em', 'separado_em',
+        'conferencia_iniciada_em', 'conferido_em',
         'embalagem_enviada_em', 'embalagem_tentativas', 'embalagem_ultimo_erro',
         'senior_atualizado_em', 'senior_tentativas', 'senior_ultimo_erro',
     )
@@ -73,13 +73,13 @@ class PedidoAdmin(ModelAdmin):
             "fields": (
                 "selecionado_em", "selecionado_por",
                 "atribuido_em", "atribuido_por",
-                "separador",
+                "conferente",
             ),
             "classes": ("tab",),
         }),
-        ("Separação", {
+        ("Conferência", {
             "fields": (
-                "separacao_iniciada_em", "separado_em",
+                "conferencia_iniciada_em", "conferido_em",
                 "endereco_fisico", "ordem_pilha",
             ),
             "classes": ("tab",),
@@ -117,8 +117,8 @@ class PedidoAdmin(ModelAdmin):
             "Pendente":        "warning",
             "Selecionado":     "warning",
             "Atribuído":       "info",
-            "Em separação":    "info",
-            "Separado":        "success",
+            "Em conferência":  "info",
+            "Conferido":       "success",
             "Não conforme":    "danger",
             "Cancelado":       "secondary",
             "Faturado":        "secondary",

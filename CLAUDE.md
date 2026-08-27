@@ -2,21 +2,21 @@
 
 ## Visão geral
 
-Sistema interno para **separação de pedidos no galpão da Altomax**. Não é mais um fluxo de expedição com etiquetagem por marketplace/transportadora — o foco atual é apoiar o trabalho do separador no chão de fábrica, garantindo que cada item bipado bate com o pedido e organizando o conteúdo em **volumes** (caixas, fardos, etc.).
+Sistema interno para **separação de pedidos no galpão da Altomax**. Não é mais um fluxo de expedição com etiquetagem por marketplace/transportadora — o foco atual é apoiar o trabalho do **conferente** no chão de fábrica, garantindo que cada item bipado bate com o pedido e organizando o conteúdo em **volumes** (caixas, fardos, etc.).
 
 > Pivot do projeto: este sistema **era** um fluxo de expedição multi-marketplace com VTEX/CLICK/etiquetagem. Esses módulos **continuam no código preservados** (não apagar) mas estão fora do MVP atual. Ver "Módulos congelados".
 
-> **Redesenho 2026-08 (aprovado, ainda não implementado)** — ver `DESIGN.md` para a espec completa: o papel "separador" do sistema será renomeado para **conferente** (status, campos e endpoints juntos); entra o **cadastro de Separador** físico (extras, com liberação diária, apontado pelo conferente ao iniciar); o Sup. Pátio passa a montar **sequências de separação** e atribuir pedido a pedido dentro delas; divergência de barra autorizada pelo supervisor no web; registro de erro de separação a mais/a menos. Enquanto a Fase 1 do redesenho não for implementada, o código e o restante deste documento seguem a nomenclatura antiga.
+> **Redesenho 2026-08 (aprovado)** — ver `DESIGN.md` para a espec completa. **Fase 1 (rename) implementada em 2026-08-27**: o papel do sistema agora é o **conferente** (perfil, campos, status, endpoints e rotas renomeados; "separador" ficou reservado para o trabalhador físico do cadastro da Fase 2). Faltam: cadastro de Separador + liberação diária (Fase 2), sequências (Fase 3), divergência de barra + erro de separação + relatório (Fase 4), APK novo (Fase 5).
 
-Atores principais: **Supervisor de Vendas**, **Supervisor de Pátio**, **Separador** e **Admin**.
+Atores principais: **Supervisor de Vendas**, **Supervisor de Pátio**, **Conferente** e **Admin**.
 
 ### Fluxo geral
 
 ```
 1. [Senior]            Pedidos pendentes existem no Senior (Oracle, leitura).
 2. [Sup. Vendas]       Sincroniza pedidos; seleciona quais entram para separação.
-3. [Sup. Pátio]        Atribui cada pedido selecionado a um separador específico.
-4. [Separador]         Lista pedidos atribuídos a ele → inicia separação:
+3. [Sup. Pátio]        Atribui cada pedido selecionado a um conferente específico.
+4. [Conferente]        Lista pedidos atribuídos a ele → inicia conferência:
    - cria um volume (caixa / fardo / outro);
    - para cada item: seleciona, informa qtd, bipa o código de barras
      → sistema valida produto + quantidade;
@@ -35,9 +35,11 @@ Atores principais: **Supervisor de Vendas**, **Supervisor de Pátio**, **Separad
 |---|---|
 | Pedido | Unidade de venda originada no Senior; contém 1..N itens |
 | Volume | Embalagem física (caixa, fardo etc.) que agrupa parte dos itens separados de um pedido |
-| Conferência por bipagem | Operador escolhe item, informa qtd e bipa o código de barras; sistema verifica se bate com o item esperado |
-| Não conforme | Pedido com problema na separação (qtd divergente, produto errado, item ausente) |
-| Senior | ERP da empresa — fonte dos pedidos (Oracle, leitura) e destino do status pós-separação (SOAP, escrita via WS a definir) |
+| Conferente | Usuário do sistema que confere por bipagem e monta volumes (era chamado de "separador" até o rename de 2026-08) |
+| Separador | Trabalhador físico que separa a mercadoria no estoque — em geral extras; terá cadastro próprio sem login (Fase 2, ver `DESIGN.md`) |
+| Conferência por bipagem | Conferente escolhe item, informa qtd e bipa o código de barras; sistema verifica se bate com o item esperado |
+| Não conforme | Pedido com problema na conferência (qtd divergente, produto errado, item ausente) |
+| Senior | ERP da empresa — fonte dos pedidos (Oracle, leitura) e destino do status pós-conferência (SOAP, escrita via WS a definir) |
 
 ---
 
@@ -46,8 +48,8 @@ Atores principais: **Supervisor de Vendas**, **Supervisor de Pátio**, **Separad
 | Perfil | Permissões |
 |---|---|
 | **Supervisor de Vendas** | Lista pedidos pendentes do Senior; seleciona pedidos que vão para separação |
-| **Supervisor de Pátio** | Lista pedidos selecionados; atribui cada pedido a um separador |
-| **Separador** | Lista pedidos atribuídos a ele; executa separação por bipagem em volumes |
+| **Supervisor de Pátio** | Lista pedidos selecionados; atribui cada pedido a um conferente |
+| **Conferente** | Lista pedidos atribuídos a ele; executa conferência por bipagem em volumes |
 | **Admin** | Tudo acima + cadastros, usuários, relatórios |
 
 A autenticação associa usuário → perfil. Telas são filtradas pelo perfil.
@@ -60,8 +62,8 @@ A autenticação associa usuário → perfil. Telas são filtradas pelo perfil.
 Pendente
   → [Sup. Vendas seleciona]   → Selecionado
   → [Sup. Pátio atribui]      → Atribuído
-  → [Separador inicia]        → Em separação
-  → [Separador conclui]       → Separado          (chama WS Senior)
+  → [Conferente inicia]       → Em conferência
+  → [Conferente conclui]      → Conferido         (chama WS Senior)
                                 ou
                                 Não conforme       (entra na lista de exceções)
 ```
@@ -70,8 +72,8 @@ Cores sugeridas no front:
 - Pendente — **cinza**
 - Selecionado — **laranja**
 - Atribuído — **amarelo**
-- Em separação — **azul**
-- Separado — **verde**
+- Em conferência — **azul**
+- Conferido — **verde**
 - Não conforme — **vermelho**
 
 Toda transição grava em `PedidoLog` (quem, quando, ação, payload).
@@ -93,20 +95,20 @@ Toda transição grava em `PedidoLog` (quem, quando, ação, payload).
 
 1. **Lista de pedidos selecionados**
    - Pedidos com status `Selecionado` ainda não atribuídos.
-2. **Atribuir a separador**
-   - Para cada pedido (ou em lote), escolher um separador da lista de usuários ativos com perfil `separador`.
-   - Status passa para `Atribuído`, registra `atribuido_em`/`atribuido_para`.
+2. **Atribuir a conferente**
+   - Para cada pedido (ou em lote), escolher um conferente da lista de usuários ativos com perfil `conferente`.
+   - Status passa para `Atribuído`, registra `atribuido_em`/`atribuido_por`/`conferente`.
 
 ---
 
-## Fluxo 3 — Separador
+## Fluxo 3 — Conferente
 
 1. **Lista "Atribuídos a mim"**
-   - Pedidos com status `Atribuído` ou `Em separação` cujo `atribuido_para` é o usuário logado.
+   - Pedidos com status `Atribuído` ou `Em conferência` cujo `conferente` é o usuário logado.
    - FIFO por `atribuido_em`.
 2. **Selecionar pedido**
-   - Status passa para `Em separação` na primeira ação relevante (abrir volume).
-3. **Tela de separação**
+   - Status passa para `Em conferência` na primeira ação relevante (abrir volume).
+3. **Tela de conferência**
    - Header: número do pedido, cliente, contagem de itens (qtd_separada / qtd_pedida agregada), botão fixo "**Novo volume**".
    - Lista de itens do pedido: SKU, descrição, qtd_pedida, qtd_separada.
    - Painel "Volume atual": tipo, identificador, lista de itens já alocados nele.
@@ -114,7 +116,7 @@ Toda transição grava em `PedidoLog` (quem, quando, ação, payload).
    - Tipo: caixa / fardo / outro (string livre por enquanto, mapeamento Senior TBD).
    - Identificador opcional (texto livre).
 5. **Bipar item**
-   - Operador toca em um item da lista do pedido.
+   - Conferente toca em um item da lista do pedido.
    - Informa **quantidade** que está colocando no volume atual.
    - Bipa o código de barras → sistema valida:
      - Match (EAN/SKU bate com o item escolhido) → soma a qtd ao item, feedback verde + som curto.
@@ -122,21 +124,21 @@ Toda transição grava em `PedidoLog` (quem, quando, ação, payload).
      - Excesso (`qtd_separada` ficaria > `qtd_pedida`) → bloqueia ou pede confirmação.
 6. **Novo volume** (botão sempre disponível)
    - Pode abrir outro volume sem precisar fechar o atual (a confirmar se múltiplos volumes podem ficar simultaneamente abertos).
-7. **Concluir separação**
+7. **Concluir conferência**
    - Habilita quando `qtd_separada == qtd_pedida` para todos os itens.
    - Chama WS Senior (a definir) com a lista de volumes.
-   - Sucesso → `Separado`.
-   - Falha no WS → registra erro, mantém `Em separação`, alerta admin.
+   - Sucesso → `Conferido`.
+   - Falha no WS → registra erro, mantém `Em conferência`, alerta admin.
 8. **Marcar como Não conforme**
    - Botão alternativo a "Concluir".
-   - Operador escolhe motivo: divergência de quantidade, produto errado, item ausente.
+   - Conferente escolhe motivo: divergência de quantidade, produto errado, item ausente.
    - Status passa para `Não conforme` com payload do motivo.
 
 ---
 
 ## Fluxo 4 — Lista de Não Conformes
 
-- Página separada (admin/supervisor de pátio). Mostra pedidos `Não conforme` com motivo, separador, data.
+- Página separada (admin/supervisor de pátio). Mostra pedidos `Não conforme` com motivo, conferente, data.
 - Ações **a definir** (placeholder no MVP): cancelar pedido, retornar para fila de atribuição, escalar.
 
 ---
@@ -145,9 +147,9 @@ Toda transição grava em `PedidoLog` (quem, quando, ação, payload).
 
 1. **Login**
 2. **Sup. Vendas — Lista (a selecionar)**
-3. **Sup. Pátio — Lista (a atribuir)** + dropdown de separador
-4. **Separador — Lista (atribuídos a mim)**
-5. **Separador — Separação por bipagem (volumes)**
+3. **Sup. Pátio — Lista (a atribuir)** + dropdown de conferente
+4. **Conferente — Lista (atribuídos a mim)**
+5. **Conferente — Conferência por bipagem (volumes)**
 6. **Lista de Não Conformes** (com placeholder de ações)
 7. **Admin** (cadastros, usuários — futuro)
 
@@ -159,15 +161,16 @@ Todas mobile-first (coletor Android com leitor embutido). Campo de bipagem sempr
 
 ```
 User(id, username, perfil, ...)
-  perfil: separador | supervisor_vendas | supervisor_patio | admin
+  perfil: conferente | supervisor_vendas | supervisor_patio | admin
+          (+ etiquetador, congelado)
 
 Pedido(id, numero_externo, status, criado_em, cliente,
        selecionado_em, selecionado_por_id,
-       atribuido_em, atribuido_para_id,
-       separacao_iniciada_em,
-       separado_em,
+       atribuido_em, atribuido_por_id, conferente_id,
+       conferencia_iniciada_em,
+       conferido_em,
        senior_atualizado_em, senior_tentativas, senior_ultimo_erro,
-       nao_conforme_em, nao_conforme_motivo)
+       nao_conforme_em, nao_conforme_motivo, nao_conforme_detalhe)
 
 PedidoItem(id, pedido_id, sku, descricao, ean, qtd_pedida, qtd_separada, status)
 
@@ -216,22 +219,21 @@ separa/
 ├── backend/
 │   ├── apps/
 │   │   ├── core/           # User, perfis, auth
-│   │   ├── pedidos/        # Pedido, PedidoItem, PedidoLog (+ Volume, VolumeItem — a criar)
-│   │   ├── separacao/      # fluxo do separador (atualizar para volumes)
+│   │   ├── pedidos/        # Pedido, PedidoItem, Volume, VolumeItem, PedidoLog + ações dos supervisores
+│   │   ├── conferencia/    # fluxo do conferente (bipagem em volumes + não conformes)
 │   │   ├── senior/         # leitura Oracle + saída SOAP (operação a definir)
-│   │   ├── patio/          # NOVO — fluxos de Sup. Vendas e Sup. Pátio
-│   │   ├── etiquetagem/    # CONGELADO — Lote, LotePedido (não tocar)
 │   │   ├── etiquetas/      # CONGELADO — Impressora, PrintAgent, PrintJob (não tocar)
 │   │   └── vtex/           # CONGELADO — VTEX API
 ├── frontend/
 │   ├── app/
-│   │   ├── (separador)/
-│   │   ├── (supervisor)/   # NOVO — telas de Sup. Vendas e Sup. Pátio
+│   │   ├── (conferente)/   # conferencia/ (atual) + pedidos/ (LEGADO congelado)
+│   │   ├── (supervisor)/   # telas de Sup. Vendas, Sup. Pátio, conferidos, não conformes
 │   │   ├── (admin)/
 │   │   │   └── admin/
 │   │   │       ├── impressoras/   # CONGELADO — fora do menu
 │   │   │       └── agents/        # CONGELADO — fora do menu
 │   │   └── (etiquetador)/  # CONGELADO — fora do menu
+├── mobile/                 # app React Native (Expo) — paridade de telas com o web
 └── docker-compose.yml
 ```
 
@@ -241,18 +243,18 @@ separa/
 
 - **Mobile-first**: validar a 360px antes de pensar em desktop.
 - **Alvos de toque** ≥ 44px.
-- **Foco no input de bipagem** sempre que a tela de separação estiver visível.
+- **Foco no input de bipagem** sempre que a tela de conferência estiver visível.
 - **Cores fortes** para status (paleta acima).
-- **Operação com uma mão** — separador segura o coletor; UI cabe na metade superior da tela.
+- **Operação com uma mão** — conferente segura o coletor; UI cabe na metade superior da tela.
 
 ---
 
 ## Requisitos não-funcionais
 
-- Tempo real nas listas (Sup. Pátio precisa ver imediatamente o que Sup. Vendas selecionou; Separador idem).
+- Tempo real nas listas (Sup. Pátio precisa ver imediatamente o que Sup. Vendas selecionou; Conferente idem).
 - Auditoria: toda transição grava em `PedidoLog`.
 - Idempotência no WS Senior (não mandar duas vezes).
-- Resiliência: separador não perde progresso de separação se cair a rede.
+- Resiliência: conferente não perde progresso de conferência se cair a rede.
 
 ---
 
@@ -276,7 +278,7 @@ Não tocar nesses arquivos durante o trabalho do escopo atual. Podem voltar ao f
 - [ ] Nome e contrato do **WS Senior** para atualizar volumes pós-separação
 - [ ] Como o Senior identifica os tipos de volume (caixa/fardo/outro) — código próprio? string livre?
 - [ ] Critério no Oracle para "pedido pendente" (filtros, status, empresa) — possivelmente diferente do critério usado antes (CODEMP=8 era para o fluxo marketplace)
-- [ ] Comportamento esperado quando a separação termina parcial (alguns itens em falta) — chama o WS mesmo assim ou só Não Conforme?
+- [x] ~~Comportamento quando a separação termina parcial~~ — resolvido no redesenho (`DESIGN.md` §4.2): falta → Não conforme + erro registrado; sobra → conclui com erro registrado e fechamento pelo Sup. Pátio
 - [ ] Lista completa de ações disponíveis na lista de Não Conformes
 - [ ] Múltiplos volumes podem ficar abertos simultaneamente, ou só um por vez?
 - [ ] Bipar item para um item já completo (`qtd_separada == qtd_pedida`) — bloqueia ou avisa?
@@ -287,7 +289,7 @@ Não tocar nesses arquivos durante o trabalho do escopo atual. Podem voltar ao f
 
 ## Roadmap (novo escopo)
 
-> **2026-08**: as Fases A–F abaixo estão **concluídas** (detalhes em `STATUS.md`). O roadmap vigente é o do **redesenho 2026-08**, em `DESIGN.md`: 1) rename separador→conferente · 2) cadastro de Separador + liberação diária · 3) sequências · 4) divergência de barra + erro de separação + relatório agrupado · 5) paridade mobile + APK · 6) futuros (finalizar sem conferência, DOM, Sisplan, imagens).
+> **2026-08**: as Fases A–F abaixo estão **concluídas** (detalhes em `STATUS.md`). O roadmap vigente é o do **redesenho 2026-08**, em `DESIGN.md`: 1) rename separador→conferente ✅ (2026-08-27) · 2) cadastro de Separador + liberação diária · 3) sequências · 4) divergência de barra + erro de separação + relatório agrupado · 5) paridade mobile + APK · 6) futuros (finalizar sem conferência, DOM, Sisplan, imagens).
 
 **Fase A — Fundação**
 - Refatorar perfis: `separador`, `supervisor_vendas`, `supervisor_patio`, `admin`

@@ -54,6 +54,7 @@ export const pedidosApi = {
     api.post(`/api/pedidos/${pedidoId}/marcar_falta/`, { item_id: itemId }).then((r) => r.data),
   atribuirEndereco: (id: number, endereco: string) =>
     api.post(`/api/pedidos/${id}/atribuir_endereco/`, { endereco }).then((r) => r.data),
+  // LEGADO (escopo antigo) — endpoint congelado mantém o nome antigo
   finalizarSeparacao: (id: number, endereco: string) =>
     api.post(`/api/pedidos/${id}/finalizar_separacao/`, { endereco }).then((r) => r.data),
 }
@@ -73,26 +74,26 @@ export const etiquetasApi = {
     api.get('/api/etiquetas/lotes/ativo/').then((r) => r.data),
 }
 
-export const separacaoApi = {
+export const conferenciaApi = {
   listarAtribuidos: () =>
-    api.get('/api/separacao/pedidos/').then((r) => r.data),
+    api.get('/api/conferencia/pedidos/').then((r) => r.data),
   detalhe: (id: number) =>
-    api.get(`/api/separacao/pedidos/${id}/`).then((r) => r.data),
+    api.get(`/api/conferencia/pedidos/${id}/`).then((r) => r.data),
   iniciar: (id: number) =>
-    api.post(`/api/separacao/pedidos/${id}/iniciar/`).then((r) => r.data),
+    api.post(`/api/conferencia/pedidos/${id}/iniciar/`).then((r) => r.data),
   criarVolume: (id: number, tipo: 'caixa' | 'fardo' | 'outro', identificador?: string) =>
-    api.post(`/api/separacao/pedidos/${id}/volumes/`, { tipo, identificador }).then((r) => r.data),
+    api.post(`/api/conferencia/pedidos/${id}/volumes/`, { tipo, identificador }).then((r) => r.data),
   bipar: (id: number, body: { item_id: number; qtd: number; codigo: string; volume_id: number }) =>
-    api.post(`/api/separacao/pedidos/${id}/bipar/`, body).then((r) => r.data),
+    api.post(`/api/conferencia/pedidos/${id}/bipar/`, body).then((r) => r.data),
   concluir: (id: number) =>
-    api.post(`/api/separacao/pedidos/${id}/concluir/`).then((r) => r.data),
+    api.post(`/api/conferencia/pedidos/${id}/concluir/`).then((r) => r.data),
   marcarNaoConforme: (id: number, motivo: string, detalhe?: string) =>
-    api.post(`/api/separacao/pedidos/${id}/nao_conforme/`, { motivo, detalhe }).then((r) => r.data),
+    api.post(`/api/conferencia/pedidos/${id}/nao_conforme/`, { motivo, detalhe }).then((r) => r.data),
   removerVolumeItem: (pedidoId: number, volumeId: number, volumeItemId: number) =>
-    api.delete(`/api/separacao/pedidos/${pedidoId}/volumes/${volumeId}/itens/${volumeItemId}/`)
+    api.delete(`/api/conferencia/pedidos/${pedidoId}/volumes/${volumeId}/itens/${volumeItemId}/`)
       .then((r) => r.data),
   removerVolume: (pedidoId: number, volumeId: number) =>
-    api.delete(`/api/separacao/pedidos/${pedidoId}/volumes/${volumeId}/`).then((r) => r.data),
+    api.delete(`/api/conferencia/pedidos/${pedidoId}/volumes/${volumeId}/`).then((r) => r.data),
 }
 
 export type Paginado<T> = {
@@ -113,12 +114,12 @@ export const supervisorApi = {
     api.get('/api/pedidos/', {
       params: { status: 'selecionado', ...params },
     }).then((r) => r.data),
-  listarSeparadores: () =>
-    api.get('/api/users/separadores/').then((r) => r.data),
-  atribuir: (pedidoIds: number[], separadorId: number) =>
+  listarConferentes: () =>
+    api.get('/api/users/conferentes/').then((r) => r.data),
+  atribuir: (pedidoIds: number[], conferenteId: number) =>
     api.post('/api/pedidos/atribuir/', {
       pedido_ids: pedidoIds,
-      separador_id: separadorId,
+      conferente_id: conferenteId,
     }).then((r) => r.data),
   listarNaoConformes: () =>
     api.get('/api/nao-conformes/').then((r) => r.data),
@@ -126,9 +127,9 @@ export const supervisorApi = {
     api.post(`/api/nao-conformes/${id}/cancelar/`).then((r) => r.data),
   retornarNaoConforme: (id: number) =>
     api.post(`/api/nao-conformes/${id}/retornar/`).then((r) => r.data),
-  listarSeparados: (params: { search?: string; page?: number } = {}) =>
+  listarConferidos: (params: { search?: string; page?: number } = {}) =>
     api.get('/api/pedidos/', {
-      params: { status: 'separado', ...params },
+      params: { status: 'conferido', ...params },
     }).then((r) => r.data),
 }
 

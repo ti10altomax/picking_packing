@@ -13,10 +13,10 @@ from apps.pedidos.models import (
 logger = logging.getLogger(__name__)
 
 
-def _exige_separador(request):
-    if request.user.perfil not in ('separador', 'admin'):
+def _exige_conferente(request):
+    if request.user.perfil not in ('conferente', 'admin'):
         return Response(
-            {'erro': 'restrito ao Separador'},
+            {'erro': 'restrito ao Conferente'},
             status=http_status.HTTP_403_FORBIDDEN,
         )
     return None
@@ -53,8 +53,8 @@ def _serializar_volume(v: Volume) -> dict:
 def _serializar_pedido(p: Pedido, com_volumes: bool = False) -> dict:
     itens = list(p.itens.all())
     total_pedido = sum(i.qtd_pedida for i in itens if i.status == PedidoItem.Status.OK)
-    total_separado = sum(i.qtd_separada for i in itens if i.status == PedidoItem.Status.OK)
-    percent = round(total_separado / total_pedido * 100, 1) if total_pedido else 0
+    total_conferido = sum(i.qtd_separada for i in itens if i.status == PedidoItem.Status.OK)
+    percent = round(total_conferido / total_pedido * 100, 1) if total_pedido else 0
 
     dados = {
         'id': p.id,
@@ -63,9 +63,9 @@ def _serializar_pedido(p: Pedido, com_volumes: bool = False) -> dict:
         'status': p.status,
         'criado_em': p.criado_em,
         'atribuido_em': p.atribuido_em,
-        'separacao_iniciada_em': p.separacao_iniciada_em,
+        'conferencia_iniciada_em': p.conferencia_iniciada_em,
         'qtd_itens': len(itens),
-        'percent_separado': percent,
+        'percent_conferido': percent,
         'itens': [
             {
                 'id': i.id, 'sku': i.sku, 'descricao': i.descricao, 'ean': i.ean,
@@ -86,15 +86,15 @@ def _serializar_pedido(p: Pedido, com_volumes: bool = False) -> dict:
 
 @api_view(['GET'])
 def listar_atribuidos(request):
-    err = _exige_separador(request)
+    err = _exige_conferente(request)
     if err:
         return err
 
     qs = (
         Pedido.objects
         .filter(
-            separador=request.user,
-            status__in=[Pedido.Status.ATRIBUIDO, Pedido.Status.SEPARANDO],
+            conferente=request.user,
+            status__in=[Pedido.Status.ATRIBUIDO, Pedido.Status.CONFERINDO],
         )
         .prefetch_related('itens')
         .order_by('-atribuido_em', '-criado_em')
@@ -108,7 +108,7 @@ def listar_atribuidos(request):
 
 @api_view(['GET'])
 def detalhe(request, pk):
-    err = _exige_separador(request)
+    err = _exige_conferente(request)
     if err:
         return err
 
@@ -116,27 +116,27 @@ def detalhe(request, pk):
         Pedido.objects.prefetch_related('itens', 'volumes__itens'),
         pk=pk,
     )
-    if pedido.separador_id != request.user.id and request.user.perfil != 'admin':
+    if pedido.conferente_id != request.user.id and request.user.perfil != 'admin':
         return Response({'erro': 'pedido não atribuído a você'}, status=http_status.HTTP_403_FORBIDDEN)
 
     return Response(_serializar_pedido(pedido, com_volumes=True))
 
 
 # ---------------------------------------------------------------------------
-# Iniciar separação (Atribuído → Em separação)
+# Iniciar conferência (Atribuído → Em conferência)
 # ---------------------------------------------------------------------------
 
 @api_view(['POST'])
 def iniciar(request, pk):
-    err = _exige_separador(request)
+    err = _exige_conferente(request)
     if err:
         return err
 
     pedido = get_object_or_404(Pedido, pk=pk)
-    if pedido.separador_id != request.user.id and request.user.perfil != 'admin':
+    if pedido.conferente_id != request.user.id and request.user.perfil != 'admin':
         return Response({'erro': 'pedido não atribuído a você'}, status=http_status.HTTP_403_FORBIDDEN)
 
-    if pedido.status == Pedido.Status.SEPARANDO:
+    if pedido.status == Pedido.Status.CONFERINDO:
         return Response({'ok': True, 'ja_iniciado': True})
     if pedido.status != Pedido.Status.ATRIBUIDO:
         return Response(
@@ -144,14 +144,14 @@ def iniciar(request, pk):
             status=http_status.HTTP_400_BAD_REQUEST,
         )
 
-    pedido.status = Pedido.Status.SEPARANDO
-    pedido.separacao_iniciada_em = timezone.now()
-    pedido.save(update_fields=['status', 'separacao_iniciada_em'])
+    pedido.status = Pedido.Status.CONFERINDO
+    pedido.conferencia_iniciada_em = timezone.now()
+    pedido.save(update_fields=['status', 'conferencia_iniciada_em'])
     PedidoLog.objects.create(
         pedido=pedido, usuario=request.user,
-        acao='separacao_iniciada', payload={},
+        acao='conferencia_iniciada', payload={},
     )
-    return Response({'ok': True, 'separacao_iniciada_em': pedido.separacao_iniciada_em})
+    return Response({'ok': True, 'conferencia_iniciada_em': pedido.conferencia_iniciada_em})
 
 
 # ---------------------------------------------------------------------------
@@ -160,15 +160,15 @@ def iniciar(request, pk):
 
 @api_view(['POST'])
 def criar_volume(request, pk):
-    err = _exige_separador(request)
+    err = _exige_conferente(request)
     if err:
         return err
 
     pedido = get_object_or_404(Pedido, pk=pk)
-    if pedido.separador_id != request.user.id and request.user.perfil != 'admin':
+    if pedido.conferente_id != request.user.id and request.user.perfil != 'admin':
         return Response({'erro': 'pedido não atribuído a você'}, status=http_status.HTTP_403_FORBIDDEN)
 
-    if pedido.status not in (Pedido.Status.ATRIBUIDO, Pedido.Status.SEPARANDO):
+    if pedido.status not in (Pedido.Status.ATRIBUIDO, Pedido.Status.CONFERINDO):
         return Response(
             {'erro': f'pedido em status "{pedido.status}" não permite criar volume'},
             status=http_status.HTTP_400_BAD_REQUEST,
@@ -182,9 +182,9 @@ def criar_volume(request, pk):
 
     with transaction.atomic():
         if pedido.status == Pedido.Status.ATRIBUIDO:
-            pedido.status = Pedido.Status.SEPARANDO
-            pedido.separacao_iniciada_em = timezone.now()
-            pedido.save(update_fields=['status', 'separacao_iniciada_em'])
+            pedido.status = Pedido.Status.CONFERINDO
+            pedido.conferencia_iniciada_em = timezone.now()
+            pedido.save(update_fields=['status', 'conferencia_iniciada_em'])
 
         volume = Volume.objects.create(
             pedido=pedido, tipo=tipo, identificador=identificador,
@@ -205,12 +205,12 @@ def criar_volume(request, pk):
 
 @api_view(['POST'])
 def bipar(request, pk):
-    err = _exige_separador(request)
+    err = _exige_conferente(request)
     if err:
         return err
 
     pedido = get_object_or_404(Pedido, pk=pk)
-    if pedido.separador_id != request.user.id and request.user.perfil != 'admin':
+    if pedido.conferente_id != request.user.id and request.user.perfil != 'admin':
         return Response({'erro': 'pedido não atribuído a você'}, status=http_status.HTTP_403_FORBIDDEN)
 
     item_id = request.data.get('item_id')
@@ -297,15 +297,15 @@ def bipar(request, pk):
 
 @api_view(['DELETE'])
 def remover_volume_item(request, pk, volume_id, volume_item_id):
-    err = _exige_separador(request)
+    err = _exige_conferente(request)
     if err:
         return err
 
     pedido = get_object_or_404(Pedido, pk=pk)
-    if pedido.separador_id != request.user.id and request.user.perfil != 'admin':
+    if pedido.conferente_id != request.user.id and request.user.perfil != 'admin':
         return Response({'erro': 'pedido não atribuído a você'}, status=http_status.HTTP_403_FORBIDDEN)
 
-    if pedido.status != Pedido.Status.SEPARANDO:
+    if pedido.status != Pedido.Status.CONFERINDO:
         return Response(
             {'erro': f'pedido em status "{pedido.status}" não permite editar volumes'},
             status=http_status.HTTP_400_BAD_REQUEST,
@@ -361,15 +361,15 @@ def remover_volume_item(request, pk, volume_id, volume_item_id):
 
 @api_view(['DELETE'])
 def remover_volume(request, pk, volume_id):
-    err = _exige_separador(request)
+    err = _exige_conferente(request)
     if err:
         return err
 
     pedido = get_object_or_404(Pedido, pk=pk)
-    if pedido.separador_id != request.user.id and request.user.perfil != 'admin':
+    if pedido.conferente_id != request.user.id and request.user.perfil != 'admin':
         return Response({'erro': 'pedido não atribuído a você'}, status=http_status.HTTP_403_FORBIDDEN)
 
-    if pedido.status != Pedido.Status.SEPARANDO:
+    if pedido.status != Pedido.Status.CONFERINDO:
         return Response(
             {'erro': f'pedido em status "{pedido.status}" não permite editar volumes'},
             status=http_status.HTTP_400_BAD_REQUEST,
@@ -396,7 +396,7 @@ def remover_volume(request, pk, volume_id):
 
 
 # ---------------------------------------------------------------------------
-# Concluir separação (Em separação → Separado, chama WS Senior placeholder)
+# Concluir conferência (Em conferência → Conferido, chama WS Senior placeholder)
 # ---------------------------------------------------------------------------
 
 def _enviar_volumes_ao_senior(pedido: Pedido) -> tuple[bool, str]:
@@ -414,7 +414,7 @@ def _enviar_volumes_ao_senior(pedido: Pedido) -> tuple[bool, str]:
 
 @api_view(['POST'])
 def concluir(request, pk):
-    err = _exige_separador(request)
+    err = _exige_conferente(request)
     if err:
         return err
 
@@ -422,12 +422,12 @@ def concluir(request, pk):
         Pedido.objects.prefetch_related('itens', 'volumes'),
         pk=pk,
     )
-    if pedido.separador_id != request.user.id and request.user.perfil != 'admin':
+    if pedido.conferente_id != request.user.id and request.user.perfil != 'admin':
         return Response({'erro': 'pedido não atribuído a você'}, status=http_status.HTTP_403_FORBIDDEN)
 
-    if pedido.status != Pedido.Status.SEPARANDO:
+    if pedido.status != Pedido.Status.CONFERINDO:
         return Response(
-            {'erro': f'pedido em status "{pedido.status}", esperado "separando"'},
+            {'erro': f'pedido em status "{pedido.status}", esperado "conferindo"'},
             status=http_status.HTTP_400_BAD_REQUEST,
         )
 
@@ -437,7 +437,7 @@ def concluir(request, pk):
     ]
     if pendentes:
         return Response(
-            {'erro': f'{len(pendentes)} item(ns) ainda não totalmente separados',
+            {'erro': f'{len(pendentes)} item(ns) ainda não totalmente conferidos',
              'itens_pendentes': [i.id for i in pendentes]},
             status=http_status.HTTP_400_BAD_REQUEST,
         )
@@ -451,8 +451,8 @@ def concluir(request, pk):
     agora = timezone.now()
     sucesso, msg_erro = _enviar_volumes_ao_senior(pedido)
 
-    pedido.status = Pedido.Status.SEPARADO
-    pedido.separado_em = agora
+    pedido.status = Pedido.Status.CONFERIDO
+    pedido.conferido_em = agora
     pedido.senior_tentativas = (pedido.senior_tentativas or 0) + 1
     if sucesso:
         pedido.senior_atualizado_em = agora
@@ -461,12 +461,12 @@ def concluir(request, pk):
         pedido.senior_ultimo_erro = msg_erro
 
     pedido.save(update_fields=[
-        'status', 'separado_em',
+        'status', 'conferido_em',
         'senior_atualizado_em', 'senior_tentativas', 'senior_ultimo_erro',
     ])
     PedidoLog.objects.create(
         pedido=pedido, usuario=request.user,
-        acao='separacao_concluida',
+        acao='conferencia_concluida',
         payload={'volumes_count': pedido.volumes.count(), 'senior_ok': sucesso},
     )
     return Response({
@@ -483,12 +483,12 @@ def concluir(request, pk):
 
 @api_view(['POST'])
 def marcar_nao_conforme(request, pk):
-    err = _exige_separador(request)
+    err = _exige_conferente(request)
     if err:
         return err
 
     pedido = get_object_or_404(Pedido, pk=pk)
-    if pedido.separador_id != request.user.id and request.user.perfil != 'admin':
+    if pedido.conferente_id != request.user.id and request.user.perfil != 'admin':
         return Response({'erro': 'pedido não atribuído a você'}, status=http_status.HTTP_403_FORBIDDEN)
 
     motivo = request.data.get('motivo', '').strip()
@@ -501,7 +501,7 @@ def marcar_nao_conforme(request, pk):
             status=http_status.HTTP_400_BAD_REQUEST,
         )
 
-    if pedido.status not in (Pedido.Status.ATRIBUIDO, Pedido.Status.SEPARANDO):
+    if pedido.status not in (Pedido.Status.ATRIBUIDO, Pedido.Status.CONFERINDO):
         return Response(
             {'erro': f'pedido em status "{pedido.status}" não pode ir para Não Conforme'},
             status=http_status.HTTP_400_BAD_REQUEST,
@@ -539,7 +539,7 @@ def listar_nao_conformes(request):
     qs = (
         Pedido.objects
         .filter(status=Pedido.Status.NAO_CONFORME)
-        .select_related('separador', 'atribuido_por')
+        .select_related('conferente', 'atribuido_por')
         .order_by('-nao_conforme_em')
     )
     motivos_label = dict(Pedido.MotivoNaoConforme.choices)
@@ -553,7 +553,7 @@ def listar_nao_conformes(request):
             'motivo': p.nao_conforme_motivo,
             'motivo_label': motivos_label.get(p.nao_conforme_motivo, p.nao_conforme_motivo),
             'detalhe': p.nao_conforme_detalhe,
-            'separador': p.separador.username if p.separador else None,
+            'conferente': p.conferente.username if p.conferente else None,
             'atribuido_por': p.atribuido_por.username if p.atribuido_por else None,
         }
         for p in qs
@@ -606,14 +606,14 @@ def retornar_nao_conforme(request, pk):
     pedido.selecionado_por = None
     pedido.atribuido_em = None
     pedido.atribuido_por = None
-    pedido.separador = None
-    pedido.separacao_iniciada_em = None
+    pedido.conferente = None
+    pedido.conferencia_iniciada_em = None
     pedido.nao_conforme_em = None
     pedido.nao_conforme_motivo = ''
     pedido.nao_conforme_detalhe = ''
     pedido.save(update_fields=[
         'status', 'selecionado_em', 'selecionado_por',
-        'atribuido_em', 'atribuido_por', 'separador', 'separacao_iniciada_em',
+        'atribuido_em', 'atribuido_por', 'conferente', 'conferencia_iniciada_em',
         'nao_conforme_em', 'nao_conforme_motivo', 'nao_conforme_detalhe',
     ])
     PedidoLog.objects.create(

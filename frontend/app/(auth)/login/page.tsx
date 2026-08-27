@@ -49,7 +49,7 @@ export default function LoginPage() {
       setAuth(data.access, data.refresh, {
         id: payload.user_id,
         username: payload.username ?? form.username,
-        perfil: payload.perfil ?? 'separador',
+        perfil: payload.perfil ?? 'conferente',
       })
       const destino = destinoPorPerfil(payload.perfil)
       router.push(destino)
