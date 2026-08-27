@@ -4,6 +4,22 @@
 
 ---
 
+## 2026-08-26 — Redesenho aprovado (ainda não implementado)
+
+Sessão de definição com direção/supervisão fechou um redesenho grande — **espec completa em `DESIGN.md`**:
+
+- **Rename**: perfil/campos/status/endpoints `separador`/`separação` → `conferente`/`conferência` (opção "tudo vira conferência"; "Separa" continua o nome do sistema).
+- **Cadastro de Separador** físico (extras, sem login, FK opcional pra User) + **liberação diária** (`SeparadorLiberacao` por data) + apontamento "separado por" registrado pelo conferente ao **iniciar** a conferência.
+- **Sequências de separação**: Sup. Pátio agrupa pedidos em sequências e atribui **pedido a pedido** a conferentes (push mantido — a proposta de fila compartilhada/claim foi rejeitada); trava de sequência ativa com regra de liberação **configurável**; tudo passa por sequência; edição em andamento permitida com log.
+- **Divergência de barra** autorizada pelo supervisor no web (registrada p/ gestão — decisão da direção), **erro de separação a mais/a menos** na conclusão, **relatório agrupado** produto × tipo de volume.
+- **Futuros**: finalizar sem conferência, códigos DOM (kit multiplicador de qtd por bip), barra Sisplan, imagem do produto na janela de qtd.
+- **Decidido na 2ª rodada (2026-08-26)**: vínculo de barra divergente vale só pra ocorrência (nunca alias global); "a menos" continua Não conforme + registra erro; "a mais" conclui com erro registrado e **fechamento pelo Sup. Pátio** (configurável; sugestão: status novo `Aguardando fechamento`).
+- **3ª rodada (2026-08-26)**: relatório agrupado com recorte **por sequência**, consumido pelo **diretor**; opção **"Não identificado"** no apontamento aprovada. **Espec fechada — sem pendências.**
+
+Nota: a **Fase I (mobile)** descrita abaixo ficou desatualizada — o app chegou a **paridade total de telas** (Expo SDK 54, RN 0.81.4, NativeWind 4: login, separação + detalhe, vendas, pátio, separados, não-conformes, admin) com APK release buildado localmente em `mobile/android/`.
+
+---
+
 ## Contexto rápido
 
 Em **2026-04-29** o projeto pivotou:

@@ -20,3 +20,6 @@ deploy/*.retry
 *.apk
 *.aab
 .gradle/
+
+# Documentação pessoal — não versionar
+docs_pessoais/

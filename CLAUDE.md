@@ -6,6 +6,8 @@ Sistema interno para **separação de pedidos no galpão da Altomax**. Não é m
 
 > Pivot do projeto: este sistema **era** um fluxo de expedição multi-marketplace com VTEX/CLICK/etiquetagem. Esses módulos **continuam no código preservados** (não apagar) mas estão fora do MVP atual. Ver "Módulos congelados".
 
+> **Redesenho 2026-08 (aprovado, ainda não implementado)** — ver `DESIGN.md` para a espec completa: o papel "separador" do sistema será renomeado para **conferente** (status, campos e endpoints juntos); entra o **cadastro de Separador** físico (extras, com liberação diária, apontado pelo conferente ao iniciar); o Sup. Pátio passa a montar **sequências de separação** e atribuir pedido a pedido dentro delas; divergência de barra autorizada pelo supervisor no web; registro de erro de separação a mais/a menos. Enquanto a Fase 1 do redesenho não for implementada, o código e o restante deste documento seguem a nomenclatura antiga.
+
 Atores principais: **Supervisor de Vendas**, **Supervisor de Pátio**, **Separador** e **Admin**.
 
 ### Fluxo geral
@@ -269,6 +271,8 @@ Não tocar nesses arquivos durante o trabalho do escopo atual. Podem voltar ao f
 
 ## Pontos abertos
 
+> **2026-08**: o redesenho está com a espec **fechada** — todas as pendências resolvidas; ver `DESIGN.md`.
+
 - [ ] Nome e contrato do **WS Senior** para atualizar volumes pós-separação
 - [ ] Como o Senior identifica os tipos de volume (caixa/fardo/outro) — código próprio? string livre?
 - [ ] Critério no Oracle para "pedido pendente" (filtros, status, empresa) — possivelmente diferente do critério usado antes (CODEMP=8 era para o fluxo marketplace)
@@ -282,6 +286,8 @@ Não tocar nesses arquivos durante o trabalho do escopo atual. Podem voltar ao f
 ---
 
 ## Roadmap (novo escopo)
+
+> **2026-08**: as Fases A–F abaixo estão **concluídas** (detalhes em `STATUS.md`). O roadmap vigente é o do **redesenho 2026-08**, em `DESIGN.md`: 1) rename separador→conferente · 2) cadastro de Separador + liberação diária · 3) sequências · 4) divergência de barra + erro de separação + relatório agrupado · 5) paridade mobile + APK · 6) futuros (finalizar sem conferência, DOM, Sisplan, imagens).
 
 **Fase A — Fundação**
 - Refatorar perfis: `separador`, `supervisor_vendas`, `supervisor_patio`, `admin`
