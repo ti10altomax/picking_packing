@@ -8,7 +8,8 @@ from rest_framework.response import Response
 
 from apps.core.models import Configuracao
 from apps.pedidos.models import (
-    Pedido, PedidoItem, PedidoLog, Separador, Sequencia, Volume, VolumeItem,
+    DivergenciaBarra, ErroSeparacao, Pedido, PedidoItem, PedidoLog,
+    Separador, Sequencia, Volume, VolumeItem,
 )
 
 logger = logging.getLogger(__name__)
@@ -603,6 +604,55 @@ def _enviar_volumes_ao_senior(pedido: Pedido) -> tuple[bool, str]:
     return True, ''
 
 
+def _finalizar_conferido(pedido: Pedido, user) -> tuple[bool, str]:
+    """Chama o WS Senior e marca o pedido como Conferido (+ log + sequência)."""
+    agora = timezone.now()
+    sucesso, msg_erro = _enviar_volumes_ao_senior(pedido)
+
+    pedido.status = Pedido.Status.CONFERIDO
+    pedido.conferido_em = agora
+    pedido.senior_tentativas = (pedido.senior_tentativas or 0) + 1
+    if sucesso:
+        pedido.senior_atualizado_em = agora
+        pedido.senior_ultimo_erro = ''
+    else:
+        pedido.senior_ultimo_erro = msg_erro
+
+    pedido.save(update_fields=[
+        'status', 'conferido_em',
+        'senior_atualizado_em', 'senior_tentativas', 'senior_ultimo_erro',
+    ])
+    PedidoLog.objects.create(
+        pedido=pedido, usuario=user,
+        acao='conferencia_concluida',
+        payload={'volumes_count': pedido.volumes.count(), 'senior_ok': sucesso},
+    )
+    if pedido.sequencia:
+        pedido.sequencia.recalcular_status()
+    return sucesso, msg_erro
+
+
+def _validar_sobras(pedido: Pedido, dados):
+    """Body `sobras: [{item_id, qtd}]` → (lista de (item, qtd), erro)."""
+    if not isinstance(dados, list):
+        return None, Response({'erro': 'sobras deve ser uma lista'}, status=http_status.HTTP_400_BAD_REQUEST)
+    itens = {i.id: i for i in pedido.itens.all()}
+    resultado = []
+    for s in dados:
+        item = itens.get((s or {}).get('item_id'))
+        try:
+            qtd = int((s or {}).get('qtd'))
+        except (TypeError, ValueError):
+            qtd = 0
+        if not item or qtd < 1:
+            return None, Response(
+                {'erro': 'sobra inválida — informe item_id do pedido e qtd maior que zero'},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+        resultado.append((item, qtd))
+    return resultado, None
+
+
 @api_view(['POST'])
 def concluir(request, pk):
     err = _exige_conferente(request)
@@ -610,7 +660,7 @@ def concluir(request, pk):
         return err
 
     pedido = get_object_or_404(
-        Pedido.objects.prefetch_related('itens', 'volumes'),
+        Pedido.objects.select_related('sequencia', 'separado_por').prefetch_related('itens', 'volumes'),
         pk=pk,
     )
     if pedido.conferente_id != request.user.id and request.user.perfil != 'admin':
@@ -639,29 +689,43 @@ def concluir(request, pk):
             status=http_status.HTTP_400_BAD_REQUEST,
         )
 
-    agora = timezone.now()
-    sucesso, msg_erro = _enviar_volumes_ao_senior(pedido)
+    # Sobras físicas (DESIGN.md §4.2) — registradas antes de decidir o desfecho
+    sobras, err = _validar_sobras(pedido, request.data.get('sobras') or [])
+    if err:
+        return err
 
-    pedido.status = Pedido.Status.CONFERIDO
-    pedido.conferido_em = agora
-    pedido.senior_tentativas = (pedido.senior_tentativas or 0) + 1
-    if sucesso:
-        pedido.senior_atualizado_em = agora
-        pedido.senior_ultimo_erro = ''
-    else:
-        pedido.senior_ultimo_erro = msg_erro
+    if sobras:
+        for item, qtd in sobras:
+            ErroSeparacao.objects.create(
+                pedido=pedido, pedido_item=item,
+                tipo=ErroSeparacao.Tipo.A_MAIS, qtd=qtd,
+                separador=pedido.separado_por, registrado_por=request.user,
+            )
+        PedidoLog.objects.create(
+            pedido=pedido, usuario=request.user,
+            acao='sobra_registrada',
+            payload={'sobras': [{'item_id': i.id, 'sku': i.sku, 'qtd': q} for i, q in sobras]},
+        )
 
-    pedido.save(update_fields=[
-        'status', 'conferido_em',
-        'senior_atualizado_em', 'senior_tentativas', 'senior_ultimo_erro',
-    ])
-    PedidoLog.objects.create(
-        pedido=pedido, usuario=request.user,
-        acao='conferencia_concluida',
-        payload={'volumes_count': pedido.volumes.count(), 'senior_ok': sucesso},
-    )
-    if pedido.sequencia:
-        pedido.sequencia.recalcular_status()
+        regra = Configuracao.obter(Configuracao.Chave.FECHAMENTO_SOBRA)
+        if regra != 'conferente':
+            # Default: quem fecha pedido com sobra é o Sup. Pátio — WS Senior só no fechamento
+            pedido.status = Pedido.Status.AGUARDANDO_FECHAMENTO
+            pedido.save(update_fields=['status'])
+            PedidoLog.objects.create(
+                pedido=pedido, usuario=request.user,
+                acao='conferencia_aguardando_fechamento',
+                payload={'qtd_sobras': len(sobras)},
+            )
+            if pedido.sequencia:
+                pedido.sequencia.recalcular_status()
+            return Response({
+                'ok': True,
+                'status': pedido.status,
+                'aguardando_fechamento': True,
+            })
+
+    sucesso, msg_erro = _finalizar_conferido(pedido, request.user)
     return Response({
         'ok': True,
         'status': pedido.status,
@@ -712,12 +776,227 @@ def marcar_nao_conforme(request, pk):
         acao='pedido_nao_conforme',
         payload={'motivo': motivo, 'detalhe': detalhe},
     )
+
+    # Faltas derivadas automaticamente (DESIGN.md §4.2): com motivo de quantidade
+    # ou ausência, o que ficou sem bipar é o que o separador trouxe a menos.
+    if motivo in (Pedido.MotivoNaoConforme.DIVERGENCIA_QTD, Pedido.MotivoNaoConforme.ITEM_AUSENTE):
+        faltas = []
+        for item in pedido.itens.all():
+            if item.status == PedidoItem.Status.OK and item.qtd_separada < item.qtd_pedida:
+                qtd_falta = item.qtd_pedida - item.qtd_separada
+                ErroSeparacao.objects.create(
+                    pedido=pedido, pedido_item=item,
+                    tipo=ErroSeparacao.Tipo.A_MENOS, qtd=qtd_falta,
+                    separador=pedido.separado_por, registrado_por=request.user,
+                )
+                faltas.append({'item_id': item.id, 'sku': item.sku, 'qtd': qtd_falta})
+        if faltas:
+            PedidoLog.objects.create(
+                pedido=pedido, usuario=request.user,
+                acao='falta_registrada', payload={'faltas': faltas},
+            )
+
     if pedido.sequencia:
         pedido.sequencia.recalcular_status()
     return Response({
         'ok': True,
         'status': pedido.status,
         'motivo': motivo,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Divergência de barra — liberação pelo supervisor no web (DESIGN.md §4.1)
+# ---------------------------------------------------------------------------
+
+@api_view(['POST'])
+def liberar_divergencia(request, pk):
+    """Mercadoria certa etiquetada errado: o supervisor digita a barra lida,
+    vincula ao item correto e a bipagem passa — registrada para gestão.
+    O vínculo vale só para esta ocorrência (nunca vira alias da barra)."""
+    err = _exige_supervisor_ou_admin(request)
+    if err:
+        return err
+
+    pedido = get_object_or_404(Pedido.objects.prefetch_related('itens', 'volumes'), pk=pk)
+    if pedido.status != Pedido.Status.CONFERINDO:
+        return Response(
+            {'erro': f'pedido em status "{pedido.status}" — só é possível liberar durante a conferência'},
+            status=http_status.HTTP_400_BAD_REQUEST,
+        )
+
+    item_id = request.data.get('item_id')
+    codigo = (request.data.get('codigo') or '').strip()
+    observacao = (request.data.get('observacao') or '').strip()
+    try:
+        qtd = int(request.data.get('qtd'))
+    except (TypeError, ValueError):
+        qtd = 0
+
+    if not item_id or not codigo or qtd < 1:
+        return Response(
+            {'erro': 'item_id, codigo e qtd (maior que zero) são obrigatórios'},
+            status=http_status.HTTP_400_BAD_REQUEST,
+        )
+
+    item = pedido.itens.filter(pk=item_id).first()
+    if not item:
+        return Response({'erro': 'item não pertence ao pedido'}, status=http_status.HTTP_404_NOT_FOUND)
+    if item.status != PedidoItem.Status.OK:
+        return Response({'erro': f'item está como "{item.status}"'}, status=http_status.HTTP_409_CONFLICT)
+
+    if codigo == item.ean or codigo == item.sku:
+        return Response(
+            {'erro': 'o código bate com o item — não é divergência, bipe normalmente no coletor'},
+            status=http_status.HTTP_400_BAD_REQUEST,
+        )
+
+    if item.qtd_separada + qtd > item.qtd_pedida:
+        return Response(
+            {'erro': 'quantidade excede o pedido',
+             'qtd_pedida': item.qtd_pedida, 'qtd_ja_separada': item.qtd_separada},
+            status=http_status.HTTP_409_CONFLICT,
+        )
+
+    volume = pedido.volumes.filter(fechado_em__isnull=True).order_by('criado_em').last()
+    if not volume:
+        return Response(
+            {'erro': 'nenhum volume aberto — peça ao conferente para abrir um volume'},
+            status=http_status.HTTP_400_BAD_REQUEST,
+        )
+
+    with transaction.atomic():
+        VolumeItem.objects.create(volume=volume, pedido_item=item, qtd=qtd)
+        item.qtd_separada = models.F('qtd_separada') + qtd
+        item.save(update_fields=['qtd_separada'])
+        item.refresh_from_db(fields=['qtd_separada'])
+        DivergenciaBarra.objects.create(
+            pedido_item=item, codigo_bipado=codigo, qtd=qtd,
+            vinculado_por=request.user, observacao=observacao,
+        )
+        PedidoLog.objects.create(
+            pedido=pedido, usuario=request.user,
+            acao='divergencia_liberada',
+            payload={
+                'item_id': item.id, 'sku': item.sku, 'codigo': codigo,
+                'qtd': qtd, 'volume_id': volume.id, 'observacao': observacao,
+            },
+        )
+
+    return Response({
+        'resultado': 'ok',
+        'item_id': item.id,
+        'qtd_separada': item.qtd_separada,
+        'qtd_pedida': item.qtd_pedida,
+        'volume_id': volume.id,
+    })
+
+
+@api_view(['GET'])
+def listar_divergencias(request):
+    """Relatório de etiquetagem errada — insumo para cobrar a fábrica."""
+    err = _exige_supervisor_ou_admin(request)
+    if err:
+        return err
+
+    qs = (
+        DivergenciaBarra.objects
+        .select_related('pedido_item__pedido', 'vinculado_por')
+        .order_by('-criado_em')[:200]
+    )
+    return Response([
+        {
+            'id': d.id,
+            'criado_em': d.criado_em,
+            'codigo_bipado': d.codigo_bipado,
+            'qtd': d.qtd,
+            'observacao': d.observacao,
+            'vinculado_por': d.vinculado_por.username if d.vinculado_por else None,
+            'sku': d.pedido_item.sku,
+            'descricao': d.pedido_item.descricao,
+            'ean': d.pedido_item.ean,
+            'pedido_id': d.pedido_item.pedido_id,
+            'numero_externo': d.pedido_item.pedido.numero_externo,
+        }
+        for d in qs
+    ])
+
+
+# ---------------------------------------------------------------------------
+# Fechamento de pedidos com sobra — Sup. Pátio (DESIGN.md §4.2)
+# ---------------------------------------------------------------------------
+
+def _exige_patio_ou_admin(request):
+    if request.user.perfil not in ('supervisor_patio', 'admin'):
+        return Response(
+            {'erro': 'restrito ao Supervisor de Pátio'},
+            status=http_status.HTTP_403_FORBIDDEN,
+        )
+    return None
+
+
+@api_view(['GET'])
+def listar_fechamentos(request):
+    err = _exige_supervisor_ou_admin(request)
+    if err:
+        return err
+
+    qs = (
+        Pedido.objects
+        .filter(status=Pedido.Status.AGUARDANDO_FECHAMENTO)
+        .select_related('conferente', 'separado_por', 'sequencia')
+        .prefetch_related('erros_separacao__pedido_item')
+        .order_by('conferencia_iniciada_em')
+    )
+    return Response([
+        {
+            'id': p.id,
+            'numero_externo': p.numero_externo,
+            'cliente': p.cliente,
+            'conferente': p.conferente.username if p.conferente else None,
+            'separado_por': str(p.separado_por) if p.separado_por else None,
+            'separador_nao_identificado': p.separador_nao_identificado,
+            'sequencia_numero': p.sequencia.numero if p.sequencia else None,
+            'sobras': [
+                {
+                    'sku': e.pedido_item.sku if e.pedido_item else None,
+                    'descricao': e.pedido_item.descricao if e.pedido_item else None,
+                    'qtd': e.qtd,
+                }
+                for e in p.erros_separacao.all()
+                if e.tipo == ErroSeparacao.Tipo.A_MAIS
+            ],
+        }
+        for p in qs
+    ])
+
+
+@api_view(['POST'])
+def fechar_sobra(request, pk):
+    err = _exige_patio_ou_admin(request)
+    if err:
+        return err
+
+    pedido = get_object_or_404(
+        Pedido.objects.select_related('sequencia').prefetch_related('volumes'),
+        pk=pk,
+    )
+    if pedido.status != Pedido.Status.AGUARDANDO_FECHAMENTO:
+        return Response(
+            {'erro': f'pedido em status "{pedido.status}", esperado "aguardando_fechamento"'},
+            status=http_status.HTTP_400_BAD_REQUEST,
+        )
+
+    PedidoLog.objects.create(
+        pedido=pedido, usuario=request.user,
+        acao='sobra_fechada', payload={},
+    )
+    sucesso, msg_erro = _finalizar_conferido(pedido, request.user)
+    return Response({
+        'ok': True,
+        'status': pedido.status,
+        'senior_ok': sucesso,
+        'senior_erro': msg_erro,
     })
 
 

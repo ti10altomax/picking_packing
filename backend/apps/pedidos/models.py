@@ -21,6 +21,9 @@ class Pedido(models.Model):
         SELECIONADO = 'selecionado', 'Selecionado'
         ATRIBUIDO = 'atribuido', 'Atribuído'
         CONFERINDO = 'conferindo', 'Em conferência'
+        # Sobra registrada na conclusão e config fechamento_sobra = supervisor_patio:
+        # o pedido espera o Sup. Pátio fechar (só então chama o WS Senior). DESIGN.md §4.2
+        AGUARDANDO_FECHAMENTO = 'aguardando_fechamento', 'Aguardando fechamento'
         CONFERIDO = 'conferido', 'Conferido'
         NAO_CONFORME = 'nao_conforme', 'Não conforme'
         CANCELADO = 'cancelado', 'Cancelado'
@@ -201,8 +204,15 @@ class Sequencia(models.Model):
         return f'Sequência {self.numero} [{self.status}]'
 
     def recalcular_status(self):
-        """Concluída quando todos os pedidos estão em estado final (não conforme não trava)."""
-        finais = (Pedido.Status.CONFERIDO, Pedido.Status.NAO_CONFORME, Pedido.Status.CANCELADO)
+        """Concluída quando todos os pedidos estão em estado final (não conforme não trava).
+
+        Aguardando fechamento conta como final: a conferência acabou — o fechamento
+        da sobra é ato administrativo do Sup. Pátio e não deve travar a sequência.
+        """
+        finais = (
+            Pedido.Status.CONFERIDO, Pedido.Status.NAO_CONFORME,
+            Pedido.Status.CANCELADO, Pedido.Status.AGUARDANDO_FECHAMENTO,
+        )
         status_pedidos = list(self.pedidos.values_list('status', flat=True))
         if status_pedidos and all(s in finais for s in status_pedidos):
             if self.status != self.Status.CONCLUIDA:
@@ -351,6 +361,73 @@ class LotePedido(models.Model):
     class Meta:
         ordering = ['ordem']
         unique_together = [('lote', 'pedido')]
+
+
+class DivergenciaBarra(models.Model):
+    """Barra bipada que não bate com o EAN/SKU do item, liberada pelo supervisor (DESIGN.md §4.1).
+
+    Mercadoria certa etiquetada errado na fábrica. O vínculo vale SÓ para esta
+    ocorrência — nunca vira alias global da barra. Insumo do relatório de
+    etiquetagem errada para cobrança da fábrica.
+    """
+
+    pedido_item = models.ForeignKey(
+        PedidoItem, on_delete=models.CASCADE, related_name='divergencias',
+    )
+    codigo_bipado = models.CharField(max_length=100)
+    qtd = models.IntegerField()
+    vinculado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='divergencias_liberadas',
+    )
+    observacao = models.TextField(blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-criado_em']
+        verbose_name = 'Divergência de barra'
+        verbose_name_plural = 'Divergências de barra'
+
+    def __str__(self):
+        return f'{self.codigo_bipado} → {self.pedido_item.sku} (x{self.qtd})'
+
+
+class ErroSeparacao(models.Model):
+    """Sobra/falta física registrada na conclusão da conferência (DESIGN.md §4.2).
+
+    Atribuído ao separador apontado no pedido — fecha o ciclo de qualidade.
+    Falta (a_menos) complementa o Não Conforme; sobra (a_mais) deixa concluir,
+    com fechamento configurável pelo Sup. Pátio.
+    """
+
+    class Tipo(models.TextChoices):
+        A_MAIS = 'a_mais', 'Sobra (a mais)'
+        A_MENOS = 'a_menos', 'Falta (a menos)'
+
+    pedido = models.ForeignKey(Pedido, on_delete=models.CASCADE, related_name='erros_separacao')
+    pedido_item = models.ForeignKey(
+        PedidoItem, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='erros_separacao',
+    )
+    tipo = models.CharField(max_length=10, choices=Tipo.choices)
+    qtd = models.IntegerField()
+    separador = models.ForeignKey(
+        Separador, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='erros_separacao',
+    )
+    registrado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='erros_registrados',
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-criado_em']
+        verbose_name = 'Erro de separação'
+        verbose_name_plural = 'Erros de separação'
+
+    def __str__(self):
+        return f'{self.get_tipo_display()} x{self.qtd} — pedido {self.pedido_id}'
 
 
 class PedidoLog(models.Model):

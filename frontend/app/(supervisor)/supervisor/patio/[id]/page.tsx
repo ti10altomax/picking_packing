@@ -14,6 +14,7 @@ const STATUS_PEDIDO: Record<string, { label: string; cor: string }> = {
   selecionado: { label: 'Sem conferente', cor: 'bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300' },
   atribuido: { label: 'Atribuído', cor: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300' },
   conferindo: { label: 'Em conferência', cor: 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300' },
+  aguardando_fechamento: { label: 'Aguard. fechamento', cor: 'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300' },
   conferido: { label: 'Conferido', cor: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' },
   nao_conforme: { label: 'Não conforme', cor: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300' },
   cancelado: { label: 'Cancelado', cor: 'bg-zinc-200 text-zinc-600 dark:bg-zinc-500/15 dark:text-zinc-400' },
@@ -163,6 +164,12 @@ export default function SequenciaDetalhePage() {
               Excluir
             </button>
           )}
+          <button
+            onClick={() => router.push(`/supervisor/patio/${sequenciaId}/relatorio`)}
+            className="text-sm text-blue-600 dark:text-blue-400 min-h-[44px] px-2"
+          >
+            Relatório
+          </button>
           <button onClick={carregar} className="text-sm text-blue-600 dark:text-blue-400 min-h-[44px] px-2">
             Atualizar
           </button>

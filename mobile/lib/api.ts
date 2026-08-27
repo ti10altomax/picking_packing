@@ -65,7 +65,8 @@ export const conferenciaApi = {
     api.post(`/api/conferencia/pedidos/${id}/volumes/`, { tipo, identificador }).then((r) => r.data),
   bipar: (id: number, body: { item_id: number; qtd: number; codigo: string; volume_id: number }) =>
     api.post(`/api/conferencia/pedidos/${id}/bipar/`, body).then((r) => r.data),
-  concluir: (id: number) => api.post(`/api/conferencia/pedidos/${id}/concluir/`).then((r) => r.data),
+  concluir: (id: number, sobras: { item_id: number; qtd: number }[] = []) =>
+    api.post(`/api/conferencia/pedidos/${id}/concluir/`, { sobras }).then((r) => r.data),
   marcarNaoConforme: (id: number, motivo: string, detalhe?: string) =>
     api.post(`/api/conferencia/pedidos/${id}/nao_conforme/`, { motivo, detalhe }).then((r) => r.data),
   removerVolumeItem: (pedidoId: number, volumeId: number, volumeItemId: number) =>
@@ -123,6 +124,15 @@ export const sequenciasApi = {
     }).then((r) => r.data),
   excluir: (id: number) =>
     api.delete(`/api/sequencias/${id}/`).then((r) => r.data),
+  relatorio: (id: number) =>
+    api.get(`/api/sequencias/${id}/relatorio/`).then((r) => r.data as RelatorioSequencia),
+}
+
+export type RelatorioSequencia = {
+  sequencia: { id: number; numero: number; status: string; criado_em: string; concluida_em: string | null }
+  linhas: { sku: string; descricao: string; caixa: number; fardo: number; outro: number; total: number }[]
+  totais: { caixa: number; fardo: number; outro: number; total: number }
+  volumes: Record<string, number>
 }
 
 export type SeparadorCadastro = {

@@ -12,9 +12,10 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { Header } from '@/components/Header'
 import { useDialog } from '@/components/Dialog'
+import { ScrollView } from 'react-native'
 import {
   supervisorApi, sequenciasApi,
-  SequenciaResumo, SequenciaPedido,
+  SequenciaResumo, SequenciaPedido, RelatorioSequencia,
 } from '@/lib/api'
 
 type Conferente = { id: number; username: string; first_name: string; last_name: string }
@@ -24,6 +25,7 @@ const STATUS_PEDIDO: Record<string, { label: string; cor: string; texto: string 
   selecionado: { label: 'Sem conferente', cor: 'bg-orange-500/15', texto: 'text-orange-300' },
   atribuido: { label: 'Atribuído', cor: 'bg-amber-500/15', texto: 'text-amber-300' },
   conferindo: { label: 'Em conferência', cor: 'bg-blue-500/15', texto: 'text-blue-300' },
+  aguardando_fechamento: { label: 'Aguard. fechamento', cor: 'bg-violet-500/15', texto: 'text-violet-300' },
   conferido: { label: 'Conferido', cor: 'bg-emerald-500/15', texto: 'text-emerald-300' },
   nao_conforme: { label: 'Não conforme', cor: 'bg-red-500/15', texto: 'text-red-300' },
   cancelado: { label: 'Cancelado', cor: 'bg-zinc-500/15', texto: 'text-zinc-400' },
@@ -46,6 +48,17 @@ export default function SequenciaDetalhe() {
   const [refreshing, setRefreshing] = useState(false)
   const [selecionados, setSelecionados] = useState<Set<number>>(new Set())
   const [agindo, setAgindo] = useState(false)
+  const [relatorio, setRelatorio] = useState<RelatorioSequencia | null>(null)
+  const [relatorioAberto, setRelatorioAberto] = useState(false)
+
+  async function abrirRelatorio() {
+    try {
+      setRelatorio(await sequenciasApi.relatorio(sequenciaId))
+      setRelatorioAberto(true)
+    } catch {
+      await dialog.alert({ variant: 'danger', title: 'Erro', message: 'Não foi possível carregar o relatório.' })
+    }
+  }
 
   const carregar = useCallback(async () => {
     try {
@@ -143,9 +156,14 @@ export default function SequenciaDetalhe() {
           <Text className="text-sm text-ink-muted">
             {seq.qtd_pedidos} pedido(s) · {seq.qtd_sem_conferente} sem conf. · {seq.qtd_finalizados} final.
           </Text>
-          <Pressable onPress={() => router.back()} className="px-2 py-1">
-            <Text className="text-sm text-blue-400">← Voltar</Text>
-          </Pressable>
+          <View className="flex-row items-center gap-2">
+            <Pressable onPress={abrirRelatorio} className="px-2 py-1">
+              <Text className="text-sm text-blue-400">Relatório</Text>
+            </Pressable>
+            <Pressable onPress={() => router.back()} className="px-2 py-1">
+              <Text className="text-sm text-blue-400">← Voltar</Text>
+            </Pressable>
+          </View>
         </View>
         {seq.status !== 'concluida' && (
           <Pressable
@@ -256,6 +274,49 @@ export default function SequenciaDetalhe() {
           </View>
         </View>
       ) : null}
+
+      {/* Relatório produto × tipo de volume */}
+      <Modal visible={relatorioAberto} animationType="slide" transparent onRequestClose={() => setRelatorioAberto(false)}>
+        <Pressable className="flex-1 bg-black/60 justify-end" onPress={() => setRelatorioAberto(false)}>
+          <Pressable
+            className="bg-surface-card border-t border-surface-border rounded-t-2xl p-4"
+            style={{ paddingBottom: Math.max(insets.bottom, 16), maxHeight: '85%' }}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text className="font-bold text-lg text-ink mb-1">
+              Relatório — Sequência {relatorio?.sequencia.numero}
+            </Text>
+            <Text className="text-xs text-ink-subtle mb-3">
+              {relatorio
+                ? Object.entries(relatorio.volumes).map(([t, n]) => `${n} ${t}(s)`).join(' · ') || 'sem volumes'
+                : ''}
+            </Text>
+            <ScrollView>
+              {relatorio?.linhas.length === 0 ? (
+                <Text className="text-ink-subtle text-center py-8">Nenhuma bipagem registrada.</Text>
+              ) : (
+                relatorio?.linhas.map((l) => (
+                  <View key={l.sku} className="border-b border-surface-border py-2">
+                    <Text className="text-sm font-medium text-ink" numberOfLines={2}>
+                      {l.descricao || l.sku}
+                    </Text>
+                    <Text className="text-xs text-ink-subtle">{l.sku}</Text>
+                    <Text className="text-xs text-ink-muted mt-0.5">
+                      caixa {l.caixa} · fardo {l.fardo} · outro {l.outro} ·{' '}
+                      <Text className="font-bold text-ink">total {l.total}</Text>
+                    </Text>
+                  </View>
+                ))
+              )}
+              {relatorio && relatorio.linhas.length > 0 ? (
+                <Text className="text-sm font-bold text-ink py-3">
+                  Total geral: caixa {relatorio.totais.caixa} · fardo {relatorio.totais.fardo} · outro {relatorio.totais.outro} · {relatorio.totais.total} unid.
+                </Text>
+              ) : null}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Picker de conferente */}
       <Modal visible={pickerAberto} animationType="slide" transparent onRequestClose={() => setPickerAberto(false)}>

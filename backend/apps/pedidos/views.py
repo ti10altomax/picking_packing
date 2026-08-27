@@ -21,7 +21,11 @@ class PedidoViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         if self.action == 'list':
             # Listagem slim — sem prefetch de itens, com qtd_itens anotada
-            qs = Pedido.objects.select_related('conferente', 'separado_por', 'sequencia').annotate(qtd_itens=Count('itens'))
+            # (distinct nos dois Counts: joins múltiplos inflariam as contagens)
+            qs = Pedido.objects.select_related('conferente', 'separado_por', 'sequencia').annotate(
+                qtd_itens=Count('itens', distinct=True),
+                qtd_divergencias=Count('itens__divergencias', distinct=True),
+            )
         else:
             qs = Pedido.objects.select_related('marketplace', 'conferente', 'separado_por', 'sequencia').prefetch_related('itens')
 

@@ -11,6 +11,7 @@ from .models import (
     Pedido, PedidoItem, Marketplace, Impressora, Lote,
     PrintAgent, PrintJob, Volume, VolumeItem, PedidoLog,
     Separador, SeparadorLiberacao, Sequencia,
+    DivergenciaBarra, ErroSeparacao,
 )
 
 
@@ -24,6 +25,7 @@ STATUS_BADGES = {
     "selecionado":          ("Selecionado",     "warning"),
     "atribuido":            ("Atribuído",       "info"),
     "conferindo":           ("Em conferência",  "info"),
+    "aguardando_fechamento": ("Aguard. fechamento", "primary"),
     "conferido":            ("Conferido",       "success"),
     "nao_conforme":         ("Não conforme",    "danger"),
     "cancelado":            ("Cancelado",       "secondary"),
@@ -121,6 +123,7 @@ class PedidoAdmin(ModelAdmin):
             "Selecionado":     "warning",
             "Atribuído":       "info",
             "Em conferência":  "info",
+            "Aguard. fechamento": "primary",
             "Conferido":       "success",
             "Não conforme":    "danger",
             "Cancelado":       "secondary",
@@ -205,6 +208,31 @@ class SeparadorLiberacaoAdmin(ModelAdmin):
     search_fields = ('separador__nome', 'separador__apelido')
     autocomplete_fields = ('separador',)
     readonly_fields = ('criado_em',)
+
+
+# -----------------------------------------------------------------------------
+# Divergências de barra + erros de separação (DESIGN.md §4)
+# -----------------------------------------------------------------------------
+
+@admin.register(DivergenciaBarra)
+class DivergenciaBarraAdmin(ModelAdmin):
+    list_display = ('criado_em', 'codigo_bipado', 'item_sku', 'qtd', 'vinculado_por', 'observacao')
+    list_filter = (('criado_em', RangeDateFilter),)
+    search_fields = ('codigo_bipado', 'pedido_item__sku', 'pedido_item__pedido__numero_externo')
+    readonly_fields = ('pedido_item', 'codigo_bipado', 'qtd', 'vinculado_por', 'criado_em')
+
+    @display(description="Item")
+    def item_sku(self, obj):
+        return obj.pedido_item.sku
+
+
+@admin.register(ErroSeparacao)
+class ErroSeparacaoAdmin(ModelAdmin):
+    list_display = ('criado_em', 'pedido', 'tipo', 'qtd', 'separador', 'registrado_por')
+    list_filter = (('tipo', ChoicesDropdownFilter), ('criado_em', RangeDateFilter),
+                   ('separador', admin.RelatedOnlyFieldListFilter))
+    search_fields = ('pedido__numero_externo', 'separador__nome', 'separador__apelido')
+    readonly_fields = ('pedido', 'pedido_item', 'tipo', 'qtd', 'separador', 'registrado_por', 'criado_em')
 
 
 # -----------------------------------------------------------------------------

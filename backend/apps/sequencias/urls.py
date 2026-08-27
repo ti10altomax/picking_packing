@@ -7,4 +7,5 @@ urlpatterns = [
     path('sequencias/<int:pk>/adicionar/', views.adicionar, name='sequencias_adicionar'),
     path('sequencias/<int:pk>/remover/', views.remover, name='sequencias_remover'),
     path('sequencias/<int:pk>/atribuir/', views.atribuir, name='sequencias_atribuir'),
+    path('sequencias/<int:pk>/relatorio/', views.relatorio, name='sequencias_relatorio'),
 ]

@@ -98,6 +98,7 @@ export default function ConferenciaPedidoPage() {
 
   const [modalNovoVolume, setModalNovoVolume] = useState(false)
   const [modalNaoConforme, setModalNaoConforme] = useState(false)
+  const [modalConcluir, setModalConcluir] = useState(false)
   const [itemSelecionado, setItemSelecionado] = useState<ItemPedido | null>(null)
   const [codigoInicial, setCodigoInicial] = useState('')
 
@@ -211,16 +212,17 @@ export default function ConferenciaPedidoPage() {
     }
   }
 
-  const aoConcluir = async () => {
-    const ok = await dialog.confirm({
-      title: 'Concluir conferência?',
-      message: 'Os volumes serão enviados ao Senior.',
-      variant: 'success',
-      confirmText: 'Concluir',
-    })
-    if (!ok) return
+  const aoConcluir = async (sobras: { item_id: number; qtd: number }[]) => {
+    setModalConcluir(false)
     try {
-      await conferenciaApi.concluir(pedidoId)
+      const res = await conferenciaApi.concluir(pedidoId, sobras)
+      if (res.aguardando_fechamento) {
+        await dialog.alert({
+          title: 'Sobra registrada',
+          message: 'O pedido ficou aguardando o fechamento do Supervisor de Pátio.',
+          variant: 'info',
+        })
+      }
       router.replace('/conferencia')
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { erro?: string } } })?.response?.data?.erro
@@ -331,9 +333,9 @@ export default function ConferenciaPedidoPage() {
   // Re-foca o scanner principal sempre que sair de modal/iniciar
   useEffect(() => {
     if (loading) return
-    const algumModal = itemSelecionado || modalNovoVolume || modalNaoConforme || modalSeparadoPor
+    const algumModal = itemSelecionado || modalNovoVolume || modalNaoConforme || modalSeparadoPor || modalConcluir
     if (!algumModal && pedido?.status === 'conferindo') {
-      setTimeout(() => scanRef.current?.focus(), 100)
+      setTimeout(() => scanRef.current?.focus({ preventScroll: true }), 100)
     }
   }, [loading, itemSelecionado, modalNovoVolume, modalNaoConforme, pedido?.status])
 
@@ -495,8 +497,8 @@ export default function ConferenciaPedidoPage() {
               onChange={(e) => setScanValue(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleScan() }}
               onBlur={() => setTimeout(() => {
-                const algumModal = itemSelecionado || modalNovoVolume || modalNaoConforme || modalSeparadoPor
-                if (!algumModal) scanRef.current?.focus()
+                const algumModal = itemSelecionado || modalNovoVolume || modalNaoConforme || modalSeparadoPor || modalConcluir
+                if (!algumModal) scanRef.current?.focus({ preventScroll: true })
               }, 80)}
               className={`flex-1 min-w-0 outline-none bg-transparent text-base font-mono tracking-wider ${
                 scanFlash === 'erro'
@@ -569,6 +571,9 @@ export default function ConferenciaPedidoPage() {
                         {item.ean}
                       </code>
                       <button
+                        // preventDefault no mousedown: o botão não rouba o foco do scanner,
+                        // senão o auto-refoco rola a página pro topo e o clique se perde
+                        onMouseDown={(e) => e.preventDefault()}
                         onClick={(e) => {
                           e.stopPropagation()
                           navigator.clipboard?.writeText(item.ean)
@@ -609,7 +614,7 @@ export default function ConferenciaPedidoPage() {
           Não conforme
         </button>
         <button
-          onClick={aoConcluir}
+          onClick={() => setModalConcluir(true)}
           disabled={!tudo100 || volumes.length === 0}
           className={`flex-2 min-w-[160px] h-12 rounded-xl font-bold text-base active:scale-[0.98] transition-all ${
             tudo100 && volumes.length > 0
@@ -649,6 +654,14 @@ export default function ConferenciaPedidoPage() {
         <ModalNaoConforme
           onCancelar={() => setModalNaoConforme(false)}
           onConfirmar={aoMarcarNaoConforme}
+        />
+      )}
+
+      {modalConcluir && (
+        <ModalConcluir
+          itens={pedido.itens.filter((i) => i.status === 'ok')}
+          onCancelar={() => setModalConcluir(false)}
+          onConfirmar={aoConcluir}
         />
       )}
 
@@ -801,6 +814,113 @@ function ListaVolumes({
 // -----------------------------------------------------------------------------
 // Modal — Novo volume
 // -----------------------------------------------------------------------------
+
+// -----------------------------------------------------------------------------
+// Modal — Concluir (com registro opcional de sobras — DESIGN.md §4.2)
+// -----------------------------------------------------------------------------
+
+function ModalConcluir({ itens, onCancelar, onConfirmar }: {
+  itens: ItemPedido[]
+  onCancelar: () => void
+  onConfirmar: (sobras: { item_id: number; qtd: number }[]) => void
+}) {
+  const [sobras, setSobras] = useState<{ item_id: number; qtd: number }[]>([])
+  const [itemId, setItemId] = useState<number | ''>('')
+  const [qtd, setQtd] = useState('1')
+
+  function adicionarSobra() {
+    const id = Number(itemId)
+    const q = Number(qtd)
+    if (!id || q < 1) return
+    setSobras((prev) => {
+      const existente = prev.find((s) => s.item_id === id)
+      if (existente) return prev.map((s) => (s.item_id === id ? { ...s, qtd: s.qtd + q } : s))
+      return [...prev, { item_id: id, qtd: q }]
+    })
+    setItemId('')
+    setQtd('1')
+  }
+
+  const nomeItem = (id: number) => {
+    const i = itens.find((x) => x.id === id)
+    return i ? (i.descricao || i.sku) : `item ${id}`
+  }
+
+  return (
+    <div className="fixed inset-0 z-30 flex items-end justify-center">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onCancelar} />
+      <div className="relative bg-surface-card text-ink rounded-t-2xl w-full max-w-md p-6 pb-8 border-t border-surface-border shadow-2xl">
+        <h2 className="font-bold text-lg mb-1">Concluir conferência</h2>
+        <p className="text-sm text-ink-muted mb-4">Os volumes serão enviados ao Senior.</p>
+
+        <div className="bg-surface-elev/60 rounded-xl p-3 mb-4">
+          <p className="text-sm font-semibold text-ink mb-2">Sobrou mercadoria? (o separador trouxe a mais)</p>
+
+          {sobras.length > 0 && (
+            <ul className="space-y-1 mb-2">
+              {sobras.map((s) => (
+                <li key={s.item_id} className="flex items-center justify-between gap-2 text-sm bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-lg px-2.5 py-1.5">
+                  <span className="text-ink truncate"><strong>{s.qtd}×</strong> {nomeItem(s.item_id)}</span>
+                  <button
+                    onClick={() => setSobras((prev) => prev.filter((x) => x.item_id !== s.item_id))}
+                    className="text-xs text-red-500 px-1 shrink-0"
+                  >
+                    remover
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <div className="flex gap-2">
+            <select
+              value={itemId}
+              onChange={(e) => setItemId(e.target.value ? Number(e.target.value) : '')}
+              className="flex-1 min-w-0 h-11 px-2 rounded-lg bg-surface-card border border-surface-border text-ink text-sm outline-none"
+            >
+              <option value="">Escolher item…</option>
+              {itens.map((i) => (
+                <option key={i.id} value={i.id}>{i.descricao || i.sku}</option>
+              ))}
+            </select>
+            <input
+              value={qtd}
+              onChange={(e) => setQtd(e.target.value.replace(/\D/g, ''))}
+              inputMode="numeric"
+              size={1}
+              className="w-16 shrink-0 h-11 px-2 rounded-lg bg-surface-card border border-surface-border text-ink text-sm text-center outline-none"
+            />
+            <button
+              onClick={adicionarSobra}
+              disabled={!itemId || !Number(qtd)}
+              className="shrink-0 h-11 px-3 rounded-lg bg-amber-500 text-white text-sm font-semibold disabled:opacity-40"
+            >
+              +
+            </button>
+          </div>
+          <p className="text-xs text-ink-subtle mt-2">
+            Sem sobras, deixe em branco. Com sobras, o fechamento pode ficar com o Sup. Pátio.
+          </p>
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            onClick={onCancelar}
+            className="flex-1 h-12 bg-surface-elev text-ink rounded-xl font-medium hover:bg-surface-border transition-colors"
+          >
+            Voltar
+          </button>
+          <button
+            onClick={() => onConfirmar(sobras)}
+            className="flex-1 h-12 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold transition-colors shadow-lg shadow-emerald-600/30"
+          >
+            Concluir ✓
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 // -----------------------------------------------------------------------------
 // Apontamento "separado por" — seletor + modal de troca
@@ -982,7 +1102,7 @@ function ModalBipar({
         qtyRef.current?.focus()
         qtyRef.current?.select()
       } else {
-        scanRef.current?.focus()
+        scanRef.current?.focus({ preventScroll: true })
       }
     }, 50)
   }, [codigoInicial])
@@ -1032,7 +1152,7 @@ function ModalBipar({
         setMensagem(e?.response?.data?.erro ?? 'Erro ao bipar')
       }
       setCodigo('')
-      setTimeout(() => scanRef.current?.focus(), 80)
+      setTimeout(() => scanRef.current?.focus({ preventScroll: true }), 80)
     } finally {
       setEnviando(false)
     }

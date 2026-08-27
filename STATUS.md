@@ -42,6 +42,14 @@ Sessão de definição com direção/supervisão fechou um redesenho grande — 
 - Mobile: paridade completa (`patio` redesenhada, `supervisor/sequencia/[id]` nova, lista do conferente atualizada).
 - Validação: e2e via API (criar sequências → atribuir → trava 409 entre sequências → concluir libera a próxima → regra `ao_concluir_sequencia_inteira` bloqueando com 2 conferentes → tudo revertido); tsc web e mobile zerados; `makemigrations --check` limpo.
 
+**Fase 4 do redesenho implementada em 2026-08-27** (branch `develop`): divergência de barra + erros de separação + relatório por sequência.
+
+- **Divergência de barra** (§4.1): modelo `DivergenciaBarra`; `POST /api/conferencia/pedidos/<id>/liberar_divergencia/` (supervisores) — valida código ≠ EAN/SKU, respeita excesso, lança no último volume aberto e registra tudo; `GET /api/divergencias/` (relatório de etiquetagem errada); `qtd_divergencias` nos serializers de pedido. Tela web `/supervisor/divergencias` (busca pedido em conferência → item → barra+qtd → liberar, com histórico). **Web-only por decisão de design** (conferente fica travado no coletor e chama o supervisor).
+- **Erros de separação** (§4.2): modelo `ErroSeparacao` (a_mais/a_menos, atribuído ao `separado_por`). **Sobra**: `concluir` aceita `sobras: [{item_id, qtd}]`; com config `fechamento_sobra=supervisor_patio` (default) o pedido vai para o **status novo `aguardando_fechamento`** (WS Senior só no fechamento) — `GET /api/fechamentos/` + `POST /api/fechamentos/<id>/fechar/` (sup. pátio); com `conferente`, conclui direto. **Falta**: derivada automaticamente ao marcar Não Conforme com motivo divergência/ausente (qtd_pedida − qtd_separada por item). Status novo conta como final pra sequência (não trava colegas). Telas: modal de conclusão com registro de sobras (web+mobile), página `/supervisor/fechamentos` (web).
+- **Relatório por sequência** (§4.3): `GET /api/sequencias/<id>/relatorio/` — produto × tipo de volume (linhas, totais, contagem de volumes). Página imprimível `/supervisor/patio/<id>/relatorio` (web) e modal na tela da sequência (mobile). Consumidor: diretor.
+- Django admin: `DivergenciaBarra` e `ErroSeparacao` registrados; badge do status novo.
+- Validação: e2e via API (divergência com barra errada → lista; concluir com sobra → aguardando → fila → fechar → Conferido+WS; NC com faltas automáticas iguais aos itens incompletos; config `conferente` concluindo direto; relatório com totais corretos; sequência concluiu com o status novo); tsc web+mobile zerados; checks Django limpos; dados de teste revertidos.
+
 Nota: a **Fase I (mobile)** descrita abaixo ficou desatualizada — o app chegou a **paridade total de telas** (Expo SDK 54, RN 0.81.4, NativeWind 4: login, separação + detalhe, vendas, pátio, separados, não-conformes, admin) com APK release buildado localmente em `mobile/android/`.
 
 ---

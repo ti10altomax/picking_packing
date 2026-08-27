@@ -14,6 +14,12 @@ urlpatterns = [
     path('conferencia/pedidos/<int:pk>/bipar/', views.bipar, name='conferencia_bipar'),
     path('conferencia/pedidos/<int:pk>/concluir/', views.concluir, name='conferencia_concluir'),
     path('conferencia/pedidos/<int:pk>/nao_conforme/', views.marcar_nao_conforme, name='conferencia_nao_conforme'),
+    path('conferencia/pedidos/<int:pk>/liberar_divergencia/', views.liberar_divergencia, name='conferencia_liberar_divergencia'),
+
+    # Divergências de barra (relatório de etiquetagem errada) e fechamentos de sobra
+    path('divergencias/', views.listar_divergencias, name='listar_divergencias'),
+    path('fechamentos/', views.listar_fechamentos, name='listar_fechamentos'),
+    path('fechamentos/<int:pk>/fechar/', views.fechar_sobra, name='fechar_sobra'),
 
     # Lista de Não Conformes (supervisores)
     path('nao-conformes/', views.listar_nao_conformes, name='listar_nao_conformes'),

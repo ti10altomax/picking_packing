@@ -80,6 +80,7 @@ export default function ConferenciaDetalhe() {
   const [segundos, setSegundos] = useState(0)
   const [modalNovoVolume, setModalNovoVolume] = useState(false)
   const [modalNaoConforme, setModalNaoConforme] = useState(false)
+  const [modalConcluir, setModalConcluir] = useState(false)
   const [itemSelecionado, setItemSelecionado] = useState<ItemPedido | null>(null)
   const [codigoInicial, setCodigoInicial] = useState('')
   const [cameraGlobalAberta, setCameraGlobalAberta] = useState(false)
@@ -179,16 +180,17 @@ export default function ConferenciaDetalhe() {
     }
   }
 
-  async function aoConcluir() {
-    const ok = await dialog.confirm({
-      variant: 'success',
-      title: 'Concluir conferência?',
-      message: 'Os volumes serão enviados ao Senior e o pedido marcado como conferido.',
-      confirmText: 'Concluir',
-    })
-    if (!ok) return
+  async function aoConcluir(sobras: { item_id: number; qtd: number }[]) {
+    setModalConcluir(false)
     try {
-      await conferenciaApi.concluir(pedidoId)
+      const res = await conferenciaApi.concluir(pedidoId, sobras)
+      if (res.aguardando_fechamento) {
+        await dialog.alert({
+          variant: 'info',
+          title: 'Sobra registrada',
+          message: 'O pedido ficou aguardando o fechamento do Supervisor de Pátio.',
+        })
+      }
       router.replace('/conferencia')
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { erro?: string } } })?.response?.data?.erro
@@ -501,7 +503,7 @@ export default function ConferenciaDetalhe() {
           <Text className="text-red-300 font-medium text-sm">Não conforme</Text>
         </Pressable>
         <Pressable
-          onPress={aoConcluir}
+          onPress={() => setModalConcluir(true)}
           disabled={!tudo100 || volumes.length === 0}
           className={`flex-1 h-12 rounded-xl items-center justify-center ${
             tudo100 && volumes.length > 0
@@ -555,6 +557,14 @@ export default function ConferenciaDetalhe() {
         />
       ) : null}
 
+      {modalConcluir ? (
+        <ModalConcluir
+          itens={pedido.itens.filter((i) => i.status === 'ok')}
+          onCancelar={() => setModalConcluir(false)}
+          onConfirmar={aoConcluir}
+        />
+      ) : null}
+
       {modalSeparadoPor ? (
         <ModalSeparadoPor
           liberados={liberados}
@@ -564,6 +574,138 @@ export default function ConferenciaDetalhe() {
         />
       ) : null}
     </SafeAreaView>
+  )
+}
+
+// -----------------------------------------------------------------------------
+// Modal — Concluir (com registro opcional de sobras — DESIGN.md §4.2)
+// -----------------------------------------------------------------------------
+
+function ModalConcluir({ itens, onCancelar, onConfirmar }: {
+  itens: ItemPedido[]
+  onCancelar: () => void
+  onConfirmar: (sobras: { item_id: number; qtd: number }[]) => void
+}) {
+  const insets = useSafeAreaInsets()
+  const [sobras, setSobras] = useState<{ item_id: number; qtd: number }[]>([])
+  const [itemId, setItemId] = useState<number | null>(null)
+  const [qtd, setQtd] = useState('1')
+  const [pickerAberto, setPickerAberto] = useState(false)
+
+  function adicionarSobra() {
+    const q = Number(qtd)
+    if (!itemId || q < 1) return
+    setSobras((prev) => {
+      const existente = prev.find((s) => s.item_id === itemId)
+      if (existente) return prev.map((s) => (s.item_id === itemId ? { ...s, qtd: s.qtd + q } : s))
+      return [...prev, { item_id: itemId, qtd: q }]
+    })
+    setItemId(null)
+    setQtd('1')
+  }
+
+  const nomeItem = (id: number) => {
+    const i = itens.find((x) => x.id === id)
+    return i ? (i.descricao || i.sku) : `item ${id}`
+  }
+
+  return (
+    <Modal visible animationType="slide" transparent onRequestClose={onCancelar}>
+      <Pressable className="flex-1 bg-black/60 justify-end" onPress={onCancelar}>
+        <Pressable
+          className="bg-surface-card border-t border-surface-border rounded-t-2xl px-6 pt-6"
+          style={{ paddingBottom: Math.max(insets.bottom, 16) + 16 }}
+          onPress={(e) => e.stopPropagation()}
+        >
+          <Text className="font-bold text-lg text-ink mb-1">Concluir conferência</Text>
+          <Text className="text-sm text-ink-muted mb-4">Os volumes serão enviados ao Senior.</Text>
+
+          <View className="bg-surface-elev/60 rounded-xl p-3 mb-4">
+            <Text className="text-sm font-semibold text-ink mb-2">
+              Sobrou mercadoria? (o separador trouxe a mais)
+            </Text>
+
+            {sobras.map((s) => (
+              <View
+                key={s.item_id}
+                className="flex-row items-center justify-between gap-2 bg-amber-500/10 border border-amber-500/30 rounded-lg px-2.5 py-1.5 mb-1"
+              >
+                <Text className="text-sm text-ink flex-1" numberOfLines={1}>
+                  <Text className="font-bold">{s.qtd}×</Text> {nomeItem(s.item_id)}
+                </Text>
+                <Pressable onPress={() => setSobras((prev) => prev.filter((x) => x.item_id !== s.item_id))}>
+                  <Text className="text-xs text-red-400 px-1">remover</Text>
+                </Pressable>
+              </View>
+            ))}
+
+            <View className="flex-row gap-2 mt-1">
+              <Pressable
+                onPress={() => setPickerAberto(!pickerAberto)}
+                className="flex-1 h-11 px-3 bg-surface-card border border-surface-border rounded-lg flex-row items-center justify-between"
+              >
+                <Text className="text-ink text-sm flex-1" numberOfLines={1}>
+                  {itemId ? nomeItem(itemId) : 'Escolher item…'}
+                </Text>
+                <Text className="text-ink-subtle">▾</Text>
+              </Pressable>
+              <TextInput
+                value={qtd}
+                onChangeText={(t) => setQtd(t.replace(/\D/g, ''))}
+                keyboardType="numeric"
+                className="w-16 h-11 px-2 bg-surface-card border border-surface-border rounded-lg text-ink text-center"
+              />
+              <Pressable
+                onPress={adicionarSobra}
+                disabled={!itemId || !Number(qtd)}
+                className={`h-11 px-4 rounded-lg items-center justify-center ${
+                  !itemId || !Number(qtd) ? 'bg-surface-elev' : 'bg-amber-500 active:bg-amber-400'
+                }`}
+              >
+                <Text className={`font-bold ${!itemId || !Number(qtd) ? 'text-ink-subtle' : 'text-white'}`}>+</Text>
+              </Pressable>
+            </View>
+
+            {pickerAberto ? (
+              <View className="mt-2 border border-surface-border rounded-lg overflow-hidden" style={{ maxHeight: 220 }}>
+                <ScrollView>
+                  {itens.map((i) => (
+                    <Pressable
+                      key={i.id}
+                      onPress={() => { setItemId(i.id); setPickerAberto(false) }}
+                      className={`px-3 py-2.5 border-b border-surface-border ${
+                        itemId === i.id ? 'bg-blue-500/15' : 'active:bg-surface-elev'
+                      }`}
+                    >
+                      <Text className="text-sm text-ink" numberOfLines={2}>{i.descricao || i.sku}</Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </View>
+            ) : null}
+
+            <Text className="text-xs text-ink-subtle mt-2">
+              Sem sobras, deixe em branco. Com sobras, o fechamento pode ficar com o Sup. Pátio.
+            </Text>
+          </View>
+
+          <View className="flex-row gap-3">
+            <Pressable
+              onPress={onCancelar}
+              className="flex-1 h-12 bg-surface-elev rounded-xl items-center justify-center"
+            >
+              <Text className="text-ink font-medium">Voltar</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => onConfirmar(sobras)}
+              className="flex-1 h-12 bg-emerald-600 active:bg-emerald-500 rounded-xl items-center justify-center"
+            >
+              <Text className="text-white font-bold">Concluir ✓</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
   )
 }
 

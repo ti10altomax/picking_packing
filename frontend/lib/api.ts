@@ -87,8 +87,8 @@ export const conferenciaApi = {
     api.post(`/api/conferencia/pedidos/${id}/volumes/`, { tipo, identificador }).then((r) => r.data),
   bipar: (id: number, body: { item_id: number; qtd: number; codigo: string; volume_id: number }) =>
     api.post(`/api/conferencia/pedidos/${id}/bipar/`, body).then((r) => r.data),
-  concluir: (id: number) =>
-    api.post(`/api/conferencia/pedidos/${id}/concluir/`).then((r) => r.data),
+  concluir: (id: number, sobras: { item_id: number; qtd: number }[] = []) =>
+    api.post(`/api/conferencia/pedidos/${id}/concluir/`, { sobras }).then((r) => r.data),
   marcarNaoConforme: (id: number, motivo: string, detalhe?: string) =>
     api.post(`/api/conferencia/pedidos/${id}/nao_conforme/`, { motivo, detalhe }).then((r) => r.data),
   removerVolumeItem: (pedidoId: number, volumeId: number, volumeItemId: number) =>
@@ -96,6 +96,52 @@ export const conferenciaApi = {
       .then((r) => r.data),
   removerVolume: (pedidoId: number, volumeId: number) =>
     api.delete(`/api/conferencia/pedidos/${pedidoId}/volumes/${volumeId}/`).then((r) => r.data),
+}
+
+export type Divergencia = {
+  id: number
+  criado_em: string
+  codigo_bipado: string
+  qtd: number
+  observacao: string
+  vinculado_por: string | null
+  sku: string
+  descricao: string
+  ean: string
+  pedido_id: number
+  numero_externo: string
+}
+
+export type Fechamento = {
+  id: number
+  numero_externo: string
+  cliente: string
+  conferente: string | null
+  separado_por: string | null
+  separador_nao_identificado: boolean
+  sequencia_numero: number | null
+  sobras: { sku: string | null; descricao: string | null; qtd: number }[]
+}
+
+export const divergenciasApi = {
+  listar: () =>
+    api.get('/api/divergencias/').then((r) => r.data as Divergencia[]),
+  liberar: (pedidoId: number, dados: { item_id: number; codigo: string; qtd: number; observacao?: string }) =>
+    api.post(`/api/conferencia/pedidos/${pedidoId}/liberar_divergencia/`, dados).then((r) => r.data),
+}
+
+export const fechamentosApi = {
+  listar: () =>
+    api.get('/api/fechamentos/').then((r) => r.data as Fechamento[]),
+  fechar: (pedidoId: number) =>
+    api.post(`/api/fechamentos/${pedidoId}/fechar/`).then((r) => r.data),
+}
+
+export type RelatorioSequencia = {
+  sequencia: { id: number; numero: number; status: string; criado_em: string; concluida_em: string | null }
+  linhas: { sku: string; descricao: string; caixa: number; fardo: number; outro: number; total: number }[]
+  totais: { caixa: number; fardo: number; outro: number; total: number }
+  volumes: Record<string, number>
 }
 
 export type SequenciaResumo = {
@@ -142,6 +188,8 @@ export const sequenciasApi = {
     }).then((r) => r.data),
   excluir: (id: number) =>
     api.delete(`/api/sequencias/${id}/`).then((r) => r.data),
+  relatorio: (id: number) =>
+    api.get(`/api/sequencias/${id}/relatorio/`).then((r) => r.data as RelatorioSequencia),
 }
 
 export type SeparadorCadastro = {

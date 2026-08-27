@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.utils import timezone
 from django.utils.timesince import timesince
-from .models import Pedido, PedidoItem
+from .models import DivergenciaBarra, Pedido, PedidoItem
 
 
 class PedidoItemSerializer(serializers.ModelSerializer):
@@ -38,6 +38,7 @@ def _formatar_duracao(inicio, fim):
 class PedidoListSerializer(serializers.ModelSerializer):
     """Serializer slim para listagens (sem itens). Usa qtd_itens anotado no queryset."""
     qtd_itens = serializers.IntegerField(read_only=True)
+    qtd_divergencias = serializers.IntegerField(read_only=True)
     tempo_espera = serializers.SerializerMethodField()
     duracao_conferencia = serializers.SerializerMethodField()
     conferente_username = serializers.CharField(source='conferente.username', read_only=True)
@@ -52,7 +53,7 @@ class PedidoListSerializer(serializers.ModelSerializer):
             'conferente', 'conferente_username',
             'sequencia', 'sequencia_numero',
             'separado_por', 'separado_por_nome', 'separador_nao_identificado',
-            'qtd_itens', 'tempo_espera', 'duracao_conferencia',
+            'qtd_itens', 'qtd_divergencias', 'tempo_espera', 'duracao_conferencia',
         ]
 
     def get_separado_por_nome(self, obj):
@@ -74,6 +75,7 @@ class PedidoSerializer(serializers.ModelSerializer):
     conferente_username = serializers.CharField(source='conferente.username', read_only=True)
     separado_por_nome = serializers.SerializerMethodField()
     sequencia_numero = serializers.IntegerField(source='sequencia.numero', read_only=True)
+    qtd_divergencias = serializers.SerializerMethodField()
     percent_conferido = serializers.SerializerMethodField()
     qtd_itens = serializers.SerializerMethodField()
     tempo_espera = serializers.SerializerMethodField()
@@ -89,12 +91,16 @@ class PedidoSerializer(serializers.ModelSerializer):
             'selecionado_em', 'atribuido_em', 'conferente', 'conferente_username',
             'sequencia', 'sequencia_numero',
             'separado_por', 'separado_por_nome', 'separador_nao_identificado',
-            'percent_conferido', 'qtd_itens', 'tempo_espera', 'duracao_conferencia',
+            'percent_conferido', 'qtd_itens', 'qtd_divergencias',
+            'tempo_espera', 'duracao_conferencia',
             'itens',
         ]
 
     def get_separado_por_nome(self, obj):
         return _nome_separado_por(obj)
+
+    def get_qtd_divergencias(self, obj):
+        return DivergenciaBarra.objects.filter(pedido_item__pedido=obj).count()
 
     def get_percent_conferido(self, obj):
         itens = obj.itens.all()

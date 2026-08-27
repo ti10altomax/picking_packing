@@ -6,7 +6,7 @@ Sistema interno para **separação de pedidos no galpão da Altomax**. Não é m
 
 > Pivot do projeto: este sistema **era** um fluxo de expedição multi-marketplace com VTEX/CLICK/etiquetagem. Esses módulos **continuam no código preservados** (não apagar) mas estão fora do MVP atual. Ver "Módulos congelados".
 
-> **Redesenho 2026-08 (aprovado)** — ver `DESIGN.md` para a espec completa. **Fases 1, 2 e 3 implementadas em 2026-08-27**: o papel do sistema agora é o **conferente** (rename completo); o **separador físico** tem cadastro próprio com **liberação diária** e é apontado pelo conferente ao iniciar; o Sup. Pátio monta **sequências** e atribui pedido a pedido dentro delas (atribuição direta antiga desativada — 410), com **trava de sequência ativa** no conferente (regra de liberação configurável em `Configuracao`). Faltam: divergência de barra + erro de separação + relatório (Fase 4), APK novo (Fase 5).
+> **Redesenho 2026-08 (aprovado)** — ver `DESIGN.md` para a espec completa. **Fases 1, 2 e 3 implementadas em 2026-08-27**: o papel do sistema agora é o **conferente** (rename completo); o **separador físico** tem cadastro próprio com **liberação diária** e é apontado pelo conferente ao iniciar; o Sup. Pátio monta **sequências** e atribui pedido a pedido dentro delas (atribuição direta antiga desativada — 410), com **trava de sequência ativa** no conferente (regra de liberação configurável em `Configuracao`). **Fase 4 também implementada**: divergência de barra liberada pelo supervisor no web (`DivergenciaBarra`, só por ocorrência), erros de separação (`ErroSeparacao` — sobra com status novo `Aguardando fechamento` e fechamento pelo Sup. Pátio configurável; falta derivada automaticamente no Não Conforme) e relatório produto × volume por sequência. Falta: APK novo + deploy (Fase 5).
 
 Atores principais: **Supervisor de Vendas**, **Supervisor de Pátio**, **Conferente** e **Admin**.
 
@@ -65,7 +65,11 @@ Pendente
   → [Conferente inicia]       → Em conferência
   → [Conferente conclui]      → Conferido         (chama WS Senior)
                                 ou
-                                Não conforme       (entra na lista de exceções)
+                                Aguardando fechamento  (sobra registrada; Sup. Pátio
+                                                        fecha → Conferido + WS Senior)
+                                ou
+                                Não conforme       (entra na lista de exceções;
+                                                    faltas viram ErroSeparacao)
 ```
 
 Cores sugeridas no front:
@@ -73,6 +77,7 @@ Cores sugeridas no front:
 - Selecionado — **laranja**
 - Atribuído — **amarelo**
 - Em conferência — **azul**
+- Aguardando fechamento — **roxo/violeta**
 - Conferido — **verde**
 - Não conforme — **vermelho**
 
@@ -295,7 +300,7 @@ Não tocar nesses arquivos durante o trabalho do escopo atual. Podem voltar ao f
 
 ## Roadmap (novo escopo)
 
-> **2026-08**: as Fases A–F abaixo estão **concluídas** (detalhes em `STATUS.md`). O roadmap vigente é o do **redesenho 2026-08**, em `DESIGN.md`: 1) rename separador→conferente ✅ · 2) cadastro de Separador + liberação diária ✅ · 3) sequências ✅ (todas 2026-08-27) · 4) divergência de barra + erro de separação + relatório agrupado · 5) paridade mobile + APK · 6) futuros (finalizar sem conferência, DOM, Sisplan, imagens).
+> **2026-08**: as Fases A–F abaixo estão **concluídas** (detalhes em `STATUS.md`). O roadmap vigente é o do **redesenho 2026-08**, em `DESIGN.md`: 1) rename separador→conferente ✅ · 2) cadastro de Separador + liberação diária ✅ · 3) sequências ✅ · 4) divergência de barra + erro de separação + relatório agrupado ✅ (todas 2026-08-27) · 5) APK novo + deploy coordenado · 6) futuros (finalizar sem conferência, DOM, Sisplan, imagens).
 
 **Fase A — Fundação**
 - Refatorar perfis: `separador`, `supervisor_vendas`, `supervisor_patio`, `admin`

@@ -5,7 +5,7 @@ conferentes dentro delas (push — a supervisora decide quem pega o quê). Tudo
 passa por sequência; a antiga atribuição direta foi desativada.
 """
 from django.db import transaction
-from django.db.models import Count, Max, Q
+from django.db.models import Count, Max, Q, Sum
 from django.utils import timezone
 from rest_framework import status as http_status
 from rest_framework.decorators import api_view
@@ -13,9 +13,12 @@ from rest_framework.generics import get_object_or_404
 from rest_framework.response import Response
 
 from apps.core.models import User
-from apps.pedidos.models import Pedido, PedidoLog, Sequencia
+from apps.pedidos.models import Pedido, PedidoLog, Sequencia, Volume, VolumeItem
 
-STATUS_FINAIS = (Pedido.Status.CONFERIDO, Pedido.Status.NAO_CONFORME, Pedido.Status.CANCELADO)
+STATUS_FINAIS = (
+    Pedido.Status.CONFERIDO, Pedido.Status.NAO_CONFORME,
+    Pedido.Status.CANCELADO, Pedido.Status.AGUARDANDO_FECHAMENTO,
+)
 
 
 def _exige_patio(request):
@@ -207,6 +210,59 @@ def remover(request, pk):
     seq.recalcular_status()
     ignorados = [i for i in ids if i not in removidos]
     return Response({'removidos': removidos, 'ignorados': ignorados})
+
+
+# ---------------------------------------------------------------------------
+# Relatório agrupado por sequência (DESIGN.md §4.3) — produto × tipo de volume
+# ---------------------------------------------------------------------------
+
+@api_view(['GET'])
+def relatorio(request, pk):
+    """Total de cada produto por tipo de volume na sequência. Consumidor: diretor."""
+    if request.user.perfil not in ('supervisor_patio', 'supervisor_vendas', 'admin'):
+        return Response({'erro': 'sem permissão'}, status=http_status.HTTP_403_FORBIDDEN)
+
+    seq = get_object_or_404(Sequencia, pk=pk)
+
+    agregados = (
+        VolumeItem.objects
+        .filter(volume__pedido__sequencia=seq)
+        .values('pedido_item__sku', 'pedido_item__descricao', 'volume__tipo')
+        .annotate(total=Sum('qtd'))
+    )
+
+    por_produto: dict = {}
+    for linha in agregados:
+        sku = linha['pedido_item__sku']
+        row = por_produto.setdefault(sku, {
+            'sku': sku,
+            'descricao': linha['pedido_item__descricao'],
+            'caixa': 0, 'fardo': 0, 'outro': 0, 'total': 0,
+        })
+        row[linha['volume__tipo']] += linha['total']
+        row['total'] += linha['total']
+
+    linhas = sorted(por_produto.values(), key=lambda r: (r['descricao'] or '', r['sku']))
+    totais = {
+        'caixa': sum(r['caixa'] for r in linhas),
+        'fardo': sum(r['fardo'] for r in linhas),
+        'outro': sum(r['outro'] for r in linhas),
+        'total': sum(r['total'] for r in linhas),
+    }
+    volumes = {
+        v['tipo']: v['n']
+        for v in Volume.objects.filter(pedido__sequencia=seq).values('tipo').annotate(n=Count('id'))
+    }
+
+    return Response({
+        'sequencia': {
+            'id': seq.id, 'numero': seq.numero, 'status': seq.status,
+            'criado_em': seq.criado_em, 'concluida_em': seq.concluida_em,
+        },
+        'linhas': linhas,
+        'totais': totais,
+        'volumes': volumes,
+    })
 
 
 # ---------------------------------------------------------------------------

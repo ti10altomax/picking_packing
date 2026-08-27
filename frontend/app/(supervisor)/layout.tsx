@@ -68,6 +68,22 @@ export default function SupervisorLayout({ children }: { children: React.ReactNo
             )}
             {podeNaoConformes && (
               <NavLink
+                href="/supervisor/divergencias"
+                ativo={pathname?.startsWith('/supervisor/divergencias')}
+              >
+                Divergências
+              </NavLink>
+            )}
+            {podePatio && (
+              <NavLink
+                href="/supervisor/fechamentos"
+                ativo={pathname?.startsWith('/supervisor/fechamentos')}
+              >
+                Fechamentos
+              </NavLink>
+            )}
+            {podeNaoConformes && (
+              <NavLink
                 href="/supervisor/conferidos"
                 ativo={pathname?.startsWith('/supervisor/conferidos')}
               >
