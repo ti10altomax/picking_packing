@@ -4,28 +4,37 @@
 
 /* =========================================================================
    Theme tokens — light + dark
-   Light: zinc clean. Dark: zinc-950 com camadas e acentos saturados.
+   Neutros QUENTES (stone/creme) — trocam o zinc frio por temperatura de
+   papel. Light: creme #faf9f5. Dark: stone-950 com camadas quentes.
    ========================================================================= */
 
 :root {
-  --surface-bg: 249 250 251;       /* gray-50 */
+  --surface-bg: 250 249 245;       /* creme (quase stone-50) */
   --surface-card: 255 255 255;     /* white */
-  --surface-elev: 244 244 245;     /* zinc-100 */
-  --surface-border: 228 228 231;   /* zinc-200 */
-  --ink-default: 24 24 27;         /* zinc-900 */
-  --ink-muted: 82 82 91;           /* zinc-600 */
-  --ink-subtle: 161 161 170;       /* zinc-400 */
+  --surface-elev: 245 245 244;     /* stone-100 */
+  --surface-border: 231 229 228;   /* stone-200 */
+  --ink-default: 28 25 23;         /* stone-900 */
+  --ink-muted: 87 83 78;           /* stone-600 */
+  --ink-subtle: 168 162 158;       /* stone-400 */
 }
 
 .dark {
-  --surface-bg: 9 9 11;            /* zinc-950 */
-  --surface-card: 24 24 27;        /* zinc-900 */
-  --surface-elev: 39 39 42;        /* zinc-800 */
-  --surface-border: 39 39 42;      /* zinc-800 */
-  --ink-default: 244 244 245;      /* zinc-100 */
-  --ink-muted: 161 161 170;        /* zinc-400 */
-  --ink-subtle: 113 113 122;       /* zinc-500 */
+  --surface-bg: 12 10 9;           /* stone-950 */
+  --surface-card: 28 25 23;        /* stone-900 */
+  --surface-elev: 41 37 36;        /* stone-800 */
+  --surface-border: 41 37 36;      /* stone-800 */
+  --ink-default: 245 245 244;      /* stone-100 */
+  --ink-muted: 168 162 158;        /* stone-400 */
+  --ink-subtle: 120 113 108;       /* stone-500 */
   color-scheme: dark;
+}
+
+/* Títulos em serifa de display (Fraunces) — é o que dá a cara do sistema.
+   Texto operacional pequeno continua na sans (legibilidade no coletor). */
+h1, h2 {
+  font-family: var(--font-display), Georgia, serif;
+  letter-spacing: -0.015em;
+  font-weight: 600;
 }
 
 html, body {
@@ -46,9 +55,9 @@ html, body {
    mas autofill do Chrome insiste no fundo branco — overrideamos */
 .dark input:-webkit-autofill,
 .dark input:-webkit-autofill:focus {
-  -webkit-box-shadow: 0 0 0 1000px rgb(24 24 27) inset !important;
-  -webkit-text-fill-color: rgb(244 244 245) !important;
-  caret-color: rgb(244 244 245) !important;
+  -webkit-box-shadow: 0 0 0 1000px rgb(28 25 23) inset !important;
+  -webkit-text-fill-color: rgb(245 245 244) !important;
+  caret-color: rgb(245 245 244) !important;
 }
 
 /* Inputs "vidro" — usados sobre wallpapers escuros (login, etc.).

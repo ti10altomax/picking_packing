@@ -105,7 +105,7 @@ export default function SeparadoresPage() {
     <div className="max-w-4xl mx-auto p-4">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-xl font-bold text-ink">Separadores</h1>
+          <h1 className="text-2xl font-semibold text-ink">Separadores</h1>
           <p className="text-sm text-ink-muted">
             Cadastro e liberação do dia · <span className="font-semibold text-emerald-600 dark:text-emerald-400">{liberadosHoje} liberado{liberadosHoje === 1 ? '' : 's'} hoje</span>
           </p>

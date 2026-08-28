@@ -75,6 +75,10 @@ services:
       - "3000:3000"
     environment:
       - BACKEND_INTERNAL_URL=http://backend:8000
+      # Mount Windows→WSL não emite eventos de arquivo — sem polling, o Next
+      # não enxerga edições feitas do lado do Windows e o hot reload "morre"
+      - WATCHPACK_POLLING=true
+      - CHOKIDAR_USEPOLLING=true
     command: >
       sh -c "if [ -f /certs/cert.pem ] && [ -f /certs/key.pem ]; then
                echo '>>> HTTPS ligado (certs encontrados em /certs)' &&

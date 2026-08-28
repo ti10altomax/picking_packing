@@ -141,7 +141,7 @@ export default function SupervisorPatioPage() {
       {/* ------------------------------------------------------------ */}
       <div className="flex items-center justify-between mb-3">
         <div>
-          <h1 className="text-xl font-bold text-ink">Sequências</h1>
+          <h1 className="text-2xl font-semibold text-ink">Sequências</h1>
           <p className="text-sm text-ink-muted">Monte sequências e atribua os pedidos dentro delas</p>
         </div>
         <button

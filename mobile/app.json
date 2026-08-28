@@ -43,7 +43,8 @@
           "cameraPermission": "Permitir que o Separa use a câmera para ler códigos de barras.",
           "recordAudioAndroid": false
         }
-      ]
+      ],
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true

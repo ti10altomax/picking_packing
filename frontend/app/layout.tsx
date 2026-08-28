@@ -1,7 +1,20 @@
 import type { Metadata, Viewport } from 'next'
+import { Fraunces, Manrope, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 import { ThemeProvider } from '@/components/ThemeToggle'
 import { DialogProvider } from '@/components/Dialog'
+
+// Tipografia do sistema (self-hosted pelo next/font — zero CDN em runtime):
+// Fraunces = serifa de display (títulos, marca); Manrope = UI; JetBrains Mono = códigos/EAN
+const manrope = Manrope({ subsets: ['latin'], variable: '--font-sans', display: 'swap' })
+const fraunces = Fraunces({
+  subsets: ['latin'],
+  variable: '--font-display',
+  display: 'swap',
+  style: ['normal', 'italic'],
+  axes: ['opsz'],
+})
+const jetbrainsMono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-mono', display: 'swap' })
 
 export const metadata: Metadata = {
   title: 'Separa — Altomax',
@@ -41,7 +54,11 @@ const noFlashScript = `
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-BR" suppressHydrationWarning>
+    <html
+      lang="pt-BR"
+      suppressHydrationWarning
+      className={`${manrope.variable} ${fraunces.variable} ${jetbrainsMono.variable}`}
+    >
       <head>
         <script dangerouslySetInnerHTML={{ __html: noFlashScript }} />
       </head>

@@ -103,7 +103,7 @@ export default function DivergenciasPage() {
   return (
     <div className="max-w-4xl mx-auto p-4">
       <div className="mb-4">
-        <h1 className="text-xl font-bold text-ink">Divergências de barra</h1>
+        <h1 className="text-2xl font-semibold text-ink">Divergências de barra</h1>
         <p className="text-sm text-ink-muted">
           Mercadoria certa etiquetada errado na fábrica — o supervisor digita a barra lida e libera a bipagem.
           O vínculo vale só para esta ocorrência.

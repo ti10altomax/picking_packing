@@ -70,7 +70,7 @@ export default function ConferenciaListaPage() {
       <div className="px-4 pt-4 pb-3">
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-ink">Atribuídos a mim</h1>
+            <h1 className="text-2xl font-semibold text-ink">Atribuídos a mim</h1>
             {sequencia && (
               <span className="text-xs px-2 py-0.5 rounded-full font-semibold bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
                 Sequência {sequencia.numero}

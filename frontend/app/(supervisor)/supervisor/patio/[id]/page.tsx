@@ -155,7 +155,7 @@ export default function SequenciaDetalhePage() {
           >
             ←
           </button>
-          <h1 className="text-xl font-bold text-ink">Sequência {seq.numero}</h1>
+          <h1 className="text-2xl font-semibold text-ink">Sequência {seq.numero}</h1>
           <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${st.cor}`}>{st.label}</span>
         </div>
         <div className="flex items-center gap-1">

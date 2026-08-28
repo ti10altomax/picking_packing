@@ -103,7 +103,7 @@ export default function ConferidosPage() {
     <div className="max-w-4xl mx-auto p-4">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-xl font-bold text-ink">Pedidos conferidos</h1>
+          <h1 className="text-2xl font-semibold text-ink">Pedidos conferidos</h1>
           <p className="text-sm text-ink-muted">Concluídos pelos conferentes</p>
         </div>
         <button onClick={() => carregar(buscaAtiva, 1, false)} className="text-sm text-blue-600 dark:text-blue-400 min-h-[44px] px-2">

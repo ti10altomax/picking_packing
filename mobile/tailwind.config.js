@@ -8,6 +8,13 @@ module.exports = {
   presets: [require('nativewind/preset')],
   theme: {
     extend: {
+      fontFamily: {
+        // Fraunces = serifa de display (títulos, marca) — paridade com o web.
+        // Corpo continua na fonte do sistema (legibilidade no coletor).
+        display: ['Fraunces_600SemiBold'],
+        'display-italic': ['Fraunces_600SemiBold_Italic'],
+        mono: ['JetBrainsMono_500Medium'],
+      },
       colors: {
         // Tokens via CSS vars — light e dark trocam o valor das vars
         // (paridade com o frontend web)

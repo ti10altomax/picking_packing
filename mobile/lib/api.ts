@@ -77,7 +77,13 @@ export const conferenciaApi = {
 }
 
 export const pedidosApi = {
+  listar: (params?: Record<string, string>) =>
+    api.get('/api/pedidos/', { params }).then((r) => r.data),
   buscar: (id: number) => api.get(`/api/pedidos/${id}/`).then((r) => r.data),
+}
+
+export const fechamentosApi = {
+  listar: () => api.get('/api/fechamentos/').then((r) => r.data as unknown[]),
 }
 
 export type SequenciaResumo = {

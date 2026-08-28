@@ -33,7 +33,7 @@ export default function RelatorioSequenciaPage() {
           >
             ←
           </button>
-          <h1 className="text-xl font-bold text-ink">Relatório — Sequência {sequencia.numero}</h1>
+          <h1 className="text-2xl font-semibold text-ink">Relatório — Sequência {sequencia.numero}</h1>
         </div>
         <button
           onClick={() => window.print()}

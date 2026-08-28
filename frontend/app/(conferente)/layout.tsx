@@ -1,6 +1,8 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { destinoPorPerfil } from '@/lib/destino'
 import { useAuthStore } from '@/stores/authStore'
 import { useExitGuard } from '@/lib/useExitGuard'
 import { FullscreenOnFirstTap, FullscreenToggle } from '@/components/FullscreenLayer'
@@ -30,7 +32,7 @@ export default function ConferenteLayout({ children }: { children: React.ReactNo
     <div className="min-h-screen bg-surface-bg text-ink flex flex-col">
       <FullscreenOnFirstTap />
       <header className="bg-surface-card border-b border-surface-border px-4 h-14 flex items-center justify-between sticky top-0 z-10 shadow-sm dark:shadow-none">
-        <span className="font-bold text-lg tracking-tight">Separa</span>
+        <Link href={destinoPorPerfil(user?.perfil)} className="font-display italic font-semibold text-xl tracking-tight hover:opacity-70 transition-opacity">Separa</Link>
         <div className="flex items-center gap-2">
           <ThemeToggle />
           <FullscreenToggle />
