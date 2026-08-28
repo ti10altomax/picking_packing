@@ -135,6 +135,35 @@ export type RelatorioSequencia = {
   volumes: Record<string, number>
 }
 
+export type ErroSeparacaoResumo = {
+  separador_id: number | null
+  nome: string
+  nao_identificado: boolean
+  sobras: number
+  faltas: number
+  total: number
+  ocorrencias: number
+}
+
+export type ErroSeparacaoItem = {
+  id: number
+  criado_em: string
+  tipo: 'a_mais' | 'a_menos'
+  qtd: number
+  sku: string | null
+  descricao: string | null
+  pedido_id: number
+  numero_externo: string
+  separador: string | null
+  registrado_por: string | null
+}
+
+export const errosApi = {
+  listar: (params: { tipo?: string; separador?: string } = {}) =>
+    api.get('/api/erros-separacao/', { params })
+      .then((r) => r.data as { resumo: ErroSeparacaoResumo[]; erros: ErroSeparacaoItem[] }),
+}
+
 export type SeparadorCadastro = {
   id: number
   nome: string

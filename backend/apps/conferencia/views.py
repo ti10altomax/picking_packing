@@ -923,6 +923,87 @@ def listar_divergencias(request):
 
 
 # ---------------------------------------------------------------------------
+# Relatório de erros de separação — sobras/faltas por separador (DESIGN.md §4.2)
+# ---------------------------------------------------------------------------
+
+@api_view(['GET'])
+def listar_erros_separacao(request):
+    """Histórico de sobras/faltas + ranking por separador (ciclo de qualidade)."""
+    err = _exige_supervisor_ou_admin(request)
+    if err:
+        return err
+
+    def _parse_data(valor):
+        from datetime import date
+        try:
+            return date.fromisoformat(valor) if valor else None
+        except ValueError:
+            return None
+
+    data_inicio = _parse_data(request.query_params.get('data_inicio'))
+    data_fim = _parse_data(request.query_params.get('data_fim'))
+
+    base = ErroSeparacao.objects.all()
+    if data_inicio:
+        base = base.filter(criado_em__date__gte=data_inicio)
+    if data_fim:
+        base = base.filter(criado_em__date__lte=data_fim)
+
+    # Ranking por separador — sempre sobre o período inteiro (ignora filtro de tipo)
+    resumo_raw = (
+        base.values('separador_id', 'separador__nome', 'separador__apelido')
+        .annotate(
+            sobras=models.Sum('qtd', filter=models.Q(tipo=ErroSeparacao.Tipo.A_MAIS)),
+            faltas=models.Sum('qtd', filter=models.Q(tipo=ErroSeparacao.Tipo.A_MENOS)),
+            ocorrencias=models.Count('id'),
+        )
+    )
+    resumo = sorted(
+        (
+            {
+                'separador_id': r['separador_id'],
+                'nome': (r['separador__apelido'] or r['separador__nome'] or 'Não identificado'),
+                'nao_identificado': r['separador_id'] is None,
+                'sobras': r['sobras'] or 0,
+                'faltas': r['faltas'] or 0,
+                'total': (r['sobras'] or 0) + (r['faltas'] or 0),
+                'ocorrencias': r['ocorrencias'],
+            }
+            for r in resumo_raw
+        ),
+        key=lambda x: -x['total'],
+    )
+
+    qs = base.select_related('pedido', 'pedido_item', 'separador', 'registrado_por')
+    tipo = request.query_params.get('tipo')
+    if tipo in (ErroSeparacao.Tipo.A_MAIS, ErroSeparacao.Tipo.A_MENOS):
+        qs = qs.filter(tipo=tipo)
+    separador_param = request.query_params.get('separador')
+    if separador_param == 'nao_identificado':
+        qs = qs.filter(separador__isnull=True)
+    elif separador_param:
+        qs = qs.filter(separador_id=separador_param)
+
+    erros = [
+        {
+            'id': e.id,
+            'criado_em': e.criado_em,
+            'tipo': e.tipo,
+            'qtd': e.qtd,
+            'sku': e.pedido_item.sku if e.pedido_item else None,
+            'descricao': e.pedido_item.descricao if e.pedido_item else None,
+            'pedido_id': e.pedido_id,
+            'numero_externo': e.pedido.numero_externo,
+            'separador': str(e.separador) if e.separador else None,
+            'registrado_por': e.registrado_por.username if e.registrado_por else None,
+        }
+        for e in qs.order_by('-criado_em')[:200]
+    ]
+
+    return Response({'resumo': resumo, 'erros': erros})
+
+
+# ---------------------------------------------------------------------------
 # Fechamento de pedidos com sobra — Sup. Pátio (DESIGN.md §4.2)
 # ---------------------------------------------------------------------------
 

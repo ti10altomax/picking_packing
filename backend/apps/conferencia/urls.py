@@ -18,6 +18,7 @@ urlpatterns = [
 
     # Divergências de barra (relatório de etiquetagem errada) e fechamentos de sobra
     path('divergencias/', views.listar_divergencias, name='listar_divergencias'),
+    path('erros-separacao/', views.listar_erros_separacao, name='listar_erros_separacao'),
     path('fechamentos/', views.listar_fechamentos, name='listar_fechamentos'),
     path('fechamentos/<int:pk>/fechar/', views.fechar_sobra, name='fechar_sobra'),
 

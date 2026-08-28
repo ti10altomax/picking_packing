@@ -83,6 +83,11 @@ export default function SupervisorLayout({ children }: { children: React.ReactNo
               </NavLink>
             )}
             {podeNaoConformes && (
+              <NavLink href="/supervisor/erros" ativo={pathname?.startsWith('/supervisor/erros')}>
+                Erros
+              </NavLink>
+            )}
+            {podeNaoConformes && (
               <NavLink
                 href="/supervisor/conferidos"
                 ativo={pathname?.startsWith('/supervisor/conferidos')}

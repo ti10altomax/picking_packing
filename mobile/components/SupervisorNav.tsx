@@ -14,6 +14,7 @@ const ABAS: Aba[] = [
   { href: '/supervisor/separadores', label: 'Separadores', perfis: ['supervisor_patio', 'admin'] },
   { href: '/supervisor/conferidos', label: 'Conferidos' },
   { href: '/supervisor/nao-conformes', label: 'Não conformes' },
+  { href: '/supervisor/erros', label: 'Erros' },
 ]
 
 export function SupervisorNav() {

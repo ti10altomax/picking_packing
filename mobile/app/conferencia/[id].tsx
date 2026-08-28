@@ -609,6 +609,15 @@ function ModalConcluir({ itens, onCancelar, onConfirmar }: {
     return i ? (i.descricao || i.sku) : `item ${id}`
   }
 
+  // Se o conferente escolheu item+qtd mas esqueceu o "+", inclui na confirmação
+  function sobrasEfetivas() {
+    const q = Number(qtd)
+    if (!itemId || q < 1) return sobras
+    const existente = sobras.find((s) => s.item_id === itemId)
+    if (existente) return sobras.map((s) => (s.item_id === itemId ? { ...s, qtd: s.qtd + q } : s))
+    return [...sobras, { item_id: itemId, qtd: q }]
+  }
+
   return (
     <Modal visible animationType="slide" transparent onRequestClose={onCancelar}>
       <Pressable className="flex-1 bg-black/60 justify-end" onPress={onCancelar}>
@@ -697,7 +706,7 @@ function ModalConcluir({ itens, onCancelar, onConfirmar }: {
               <Text className="text-ink font-medium">Voltar</Text>
             </Pressable>
             <Pressable
-              onPress={() => onConfirmar(sobras)}
+              onPress={() => onConfirmar(sobrasEfetivas())}
               className="flex-1 h-12 bg-emerald-600 active:bg-emerald-500 rounded-xl items-center justify-center"
             >
               <Text className="text-white font-bold">Concluir ✓</Text>
