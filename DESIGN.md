@@ -2,7 +2,7 @@
 
 > Decisões fechadas em **2026-08-25/26** com direção e supervisão.
 > **Espec fechada** — todas as pendências resolvidas (histórico em [Pendências](#pendências-de-definição)).
-> **Fases 1 a 4 implementadas em 2026-08-27** na branch `develop`. Falta a Fase 5 (APK novo + deploy coordenado em produção).
+> **Redesenho completo**: Fases 1–4 implementadas em 2026-08-27 e **Fase 5 (deploy em produção + APK 0.2.0) concluída em 2026-08-28**, na branch `develop`.
 
 ---
 
@@ -178,7 +178,7 @@ Tabela de configuração nova (não existe ainda), editável pelo admin — nasc
 2. **Cadastro de Separador** + liberação diária + apontamento na conferência — ✅ implementado 2026-08-27
 3. **Sequências** + tela nova do Sup. Pátio — ✅ implementado 2026-08-27
 4. **Divergência de barra + erro de separação + relatório agrupado** — ✅ implementado 2026-08-27
-5. **Paridade mobile + APK novo** (re-sideload nos coletores)
+5. **Paridade mobile + APK novo** (re-sideload nos coletores) — ✅ deploy em produção 2026-08-28 (APK 0.2.0 buildado; falta só o sideload físico)
 6. **Futuros** (tabela acima)
 
 ---

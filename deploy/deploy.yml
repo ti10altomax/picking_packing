@@ -34,7 +34,10 @@
       ansible.posix.synchronize:
         src: "{{ playbook_dir }}/../"
         dest: "{{ deploy_path }}/"
-        delete: false
+        # delete: true — sem isso, renames de pastas (ex: (separador)→(conferente))
+        # deixam a versão antiga na VM e o next build quebra com rota duplicada.
+        # Os excludes abaixo também protegem os caminhos excluídos da deleção.
+        delete: true
         recursive: true
         checksum: true   # compara por hash, não mtime — evita problemas com WSL/Windows
         rsync_opts:

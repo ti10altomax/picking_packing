@@ -51,6 +51,13 @@ Sessão de definição com direção/supervisão fechou um redesenho grande — 
 - Django admin: `DivergenciaBarra` e `ErroSeparacao` registrados; badge do status novo.
 - Validação: e2e via API (divergência com barra errada → lista; concluir com sobra → aguardando → fila → fechar → Conferido+WS; NC com faltas automáticas iguais aos itens incompletos; config `conferente` concluindo direto; relatório com totais corretos; sequência concluiu com o status novo); tsc web+mobile zerados; checks Django limpos; dados de teste revertidos.
 
+**Fase 5 do redesenho concluída em 2026-08-28**: deploy em produção + APK novo.
+
+- **Deploy** via Ansible na VM 192.168.1.199: migrations 0003→0010 aplicadas, dados convertidos (2 usuários `separador`→`conferente`; status `separando`/`separado`→`conferindo`/`conferido`), endpoints novos no ar (`/api/conferencia/`, `/api/sequencias/`, `/api/separadores/`, `/api/fechamentos/`, `/api/divergencias/`, `/api/erros-separacao/`), antigo `/api/separacao/` morto (404), frontend :3003 servindo todas as rotas novas.
+- **Fix no playbook**: rsync agora com `delete: true` — sem isso, o rename `(separador)`→`(conferente)` deixou as duas pastas na VM e o `next build` quebrou com rota duplicada (primeira tentativa de deploy falhou por isso). Excludes protegem certs/.env.prod/dados da deleção.
+- **APK 0.2.0** (versionCode 2): build local `gradlew assembleRelease`, 39 MB, aponta pra `http://192.168.1.199:8003`; instala por cima do 0.1.0 nos coletores (sideload). Pedidos em andamento no momento do deploy (12 atribuídos, 5 em conferência) ficam como "fora de sequência" — visíveis e operáveis normalmente.
+- Pendência externa inalterada: contrato do **WS Senior** (`_enviar_volumes_ao_senior` segue placeholder, também em produção).
+
 Nota: a **Fase I (mobile)** descrita abaixo ficou desatualizada — o app chegou a **paridade total de telas** (Expo SDK 54, RN 0.81.4, NativeWind 4: login, separação + detalhe, vendas, pátio, separados, não-conformes, admin) com APK release buildado localmente em `mobile/android/`.
 
 ---
