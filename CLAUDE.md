@@ -211,7 +211,7 @@ VTEX, CLICK, marketplaces e o `embalagempfa` **saíram do escopo** — ver "Mód
 
 | Camada | Tecnologia |
 |---|---|
-| Frontend | **Next.js** (App Router) + **Zustand** |
+| Frontend | **Next.js** (App Router) + **Zustand** (só sessão/tema; dado de tela é `useState` + re-fetch) |
 | UI | Mobile-first; Tailwind/shadcn |
 | Backend | **Django REST Framework** |
 | Auth | **JWT** (`djangorestframework-simplejwt`) |
@@ -354,6 +354,7 @@ Variáveis em `.env`:
 - Manter UI em **pt-BR**.
 - Cores de status seguem a paleta acima.
 - Toda transição grava em `PedidoLog`.
+- **Zustand só para sessão e tema** (`authStore`, `themeStore`). Dado de tela é `useState` local + re-fetch (`carregar()`) após cada mutação — sem store de dados, sem cache. O `pedidosStore` é exclusivo do fluxo legado congelado `/pedidos`; não imitar. (Decisão registrada em 2026-08-31; o padrão existe desde o primeiro commit do fluxo novo.)
 - **Mobile-first sempre**: validar a 360px antes de pensar em desktop.
 - **Tudo em Docker**: novas dependências entram via `docker-compose.yml`.
 - **Oracle é read-only**: nenhum INSERT/UPDATE/DELETE no Senior.
