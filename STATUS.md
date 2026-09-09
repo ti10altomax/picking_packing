@@ -21,9 +21,9 @@ Mudança de escopo pequena, fechada com o usuário: além dos pedidos abertos, o
 
 ---
 
-## 2026-08-26 — Redesenho aprovado (ainda não implementado)
+## 2026-08-26 — Redesenho aprovado ✅ (Fases 1–5 implementadas e em produção em 2026-08-28)
 
-Sessão de definição com direção/supervisão fechou um redesenho grande — **espec completa em `DESIGN.md`**:
+Sessão de definição com direção/supervisão fechou um redesenho grande — **espec completa em `DESIGN.md`**. As decisões abaixo são o registro da espec; a implementação de cada fase está nos blocos "Fase N" logo em seguida.
 
 - **Rename**: perfil/campos/status/endpoints `separador`/`separação` → `conferente`/`conferência` (opção "tudo vira conferência"; "Separa" continua o nome do sistema).
 - **Cadastro de Separador** físico (extras, sem login, FK opcional pra User) + **liberação diária** (`SeparadorLiberacao` por data) + apontamento "separado por" registrado pelo conferente ao **iniciar** a conferência.
