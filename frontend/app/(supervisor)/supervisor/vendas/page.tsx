@@ -115,7 +115,7 @@ export default function SupervisorVendasPage() {
   const todosMarcadosNaPagina = pedidos.length > 0 && selecionados.size >= pedidos.length
 
   return (
-    <div className="max-w-5xl mx-auto p-4 pb-32">
+    <div className="p-4 pb-32">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-2xl font-semibold text-ink">Pedidos pendentes</h1>
@@ -236,7 +236,7 @@ export default function SupervisorVendasPage() {
 
       {selecionados.size > 0 && (
         <div className="fixed bottom-0 left-0 right-0 bg-surface-card border-t border-surface-border shadow-lg dark:shadow-2xl dark:shadow-black/40 px-4 py-3 z-20">
-          <div className="max-w-5xl mx-auto flex items-center justify-between gap-3">
+          <div className="flex items-center justify-between gap-3">
             <span className="text-sm text-ink-muted">
               {selecionados.size} pedido(s) selecionado(s)
             </span>

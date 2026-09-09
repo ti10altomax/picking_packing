@@ -146,7 +146,7 @@ export default function AdminPage() {
   ]
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="">
       {/* Saudação */}
       <h1 className="text-3xl font-semibold text-ink leading-tight">
         {saudacao}{user?.username ? `, ${user.username}` : ''}

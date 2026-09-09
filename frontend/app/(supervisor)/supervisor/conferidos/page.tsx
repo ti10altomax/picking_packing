@@ -12,6 +12,8 @@ type Pedido = {
   conferido_em: string | null
   conferente: number | null
   conferente_username: string | null
+  separado_por_nome: string | null
+  separador_nao_identificado: boolean
   qtd_itens: number
   duracao_conferencia: string | null
 }
@@ -103,7 +105,7 @@ export default function ConferidosPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-4">
+    <div className="p-4">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-2xl font-semibold text-ink">Pedidos conferidos</h1>
@@ -169,6 +171,14 @@ export default function ConferidosPage() {
                             {p.conferente_username
                               ? <>por <strong className="text-ink">{p.conferente_username}</strong></>
                               : 'sem conferente registrado'}
+                            {p.separado_por_nome && (
+                              <>
+                                {' · '}separado por{' '}
+                                <strong className={p.separador_nao_identificado ? 'text-amber-600 dark:text-amber-400' : 'text-ink'}>
+                                  {p.separado_por_nome}
+                                </strong>
+                              </>
+                            )}
                             {' · '}
                             {p.qtd_itens} {p.qtd_itens === 1 ? 'item' : 'itens'}
                             {p.duracao_conferencia && (
@@ -183,7 +193,7 @@ export default function ConferidosPage() {
                     </button>
 
                     {aberto && (
-                      <div className="bg-surface-elev/30 border-t border-surface-border px-4 py-3">
+                      <div className="bg-emerald-50 dark:bg-emerald-500/10 border-t border-emerald-200 dark:border-emerald-500/30 border-l-4 border-l-emerald-400 dark:border-l-emerald-500 pl-6 pr-4 py-3">
                         {carregandoEsse && !itens ? (
                           <p className="text-xs text-ink-subtle italic">Carregando itens…</p>
                         ) : !itens || itens.length === 0 ? (
@@ -198,7 +208,7 @@ export default function ConferidosPage() {
                                   className={`flex items-start gap-3 p-2 rounded-lg ${
                                     item.status === 'cancelado' ? 'bg-surface-elev/60 opacity-60' :
                                     item.status === 'falta' ? 'bg-orange-50 dark:bg-orange-500/10' :
-                                    'bg-surface-card'
+                                    'bg-surface-card shadow-sm border border-emerald-100 dark:border-emerald-500/20'
                                   }`}
                                 >
                                   <div className="flex-1 min-w-0">

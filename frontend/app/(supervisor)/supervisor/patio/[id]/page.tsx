@@ -147,7 +147,7 @@ export default function SequenciaDetalhePage() {
   const podeExcluir = seq.status === 'aberta' && seq.pedidos.length === 0
 
   return (
-    <div className="max-w-4xl mx-auto p-4 pb-32">
+    <div className="p-4 pb-32">
       <div className="flex items-center justify-between mb-1">
         <div className="flex items-center gap-2">
           <button
@@ -266,7 +266,7 @@ export default function SequenciaDetalhePage() {
 
       {editaveis.length > 0 && seq.status !== 'concluida' && selecionados.size > 0 && (
         <div className="fixed bottom-0 left-0 right-0 bg-surface-card border-t border-surface-border shadow-lg dark:shadow-2xl dark:shadow-black/40 px-4 py-3 z-20">
-          <div className="max-w-4xl mx-auto flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
             <span className="text-sm text-ink-muted">
               {selecionados.size} pedido(s) → <strong className="text-ink">{conferenteAtual?.username ?? '—'}</strong>
             </span>

@@ -138,7 +138,7 @@ export default function SupervisorPatioPage() {
   const sequenciasAbertas = sequencias.filter((s) => s.status !== 'concluida')
 
   return (
-    <div className="max-w-5xl mx-auto p-4 pb-32">
+    <div className="p-4 pb-32">
       {/* ------------------------------------------------------------ */}
       {/* Sequências em aberto                                          */}
       {/* ------------------------------------------------------------ */}
@@ -275,7 +275,7 @@ export default function SupervisorPatioPage() {
 
       {selecionados.size > 0 && (
         <div className="fixed bottom-0 left-0 right-0 bg-surface-card border-t border-surface-border shadow-lg dark:shadow-2xl dark:shadow-black/40 px-4 py-3 z-20">
-          <div className="max-w-5xl mx-auto flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-2">
               <span className="text-sm text-ink-muted">{selecionados.size} pedido(s) →</span>
               <select

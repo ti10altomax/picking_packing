@@ -23,6 +23,8 @@ type Pedido = {
   cliente: string
   conferido_em: string | null
   conferente_username: string | null
+  separado_por_nome: string | null
+  separador_nao_identificado: boolean
   qtd_itens: number
   duracao_conferencia: string | null
 }
@@ -200,6 +202,14 @@ export default function Conferidos() {
                         {p.conferente_username
                           ? <>por <Text className="text-ink">{p.conferente_username}</Text></>
                           : 'sem conferente'}
+                        {p.separado_por_nome ? (
+                          <>
+                            {' · '}separado por{' '}
+                            <Text className={p.separador_nao_identificado ? 'text-amber-300' : 'text-ink'}>
+                              {p.separado_por_nome}
+                            </Text>
+                          </>
+                        ) : null}
                         {' · '}
                         {p.qtd_itens} {p.qtd_itens === 1 ? 'item' : 'itens'}
                         {p.duracao_conferencia ? (
@@ -212,7 +222,7 @@ export default function Conferidos() {
                 </Pressable>
 
                 {aberto ? (
-                  <View className="bg-surface-elev/30 border-t border-surface-border px-4 py-3 gap-1.5">
+                  <View className="bg-emerald-500/10 border-t border-emerald-500/30 border-l-4 border-l-emerald-500 pl-6 pr-4 py-3 gap-1.5">
                     {carregandoEsse && !itens ? (
                       <Text className="text-xs text-ink-subtle italic">Carregando itens…</Text>
                     ) : !itens || itens.length === 0 ? (
@@ -226,7 +236,7 @@ export default function Conferidos() {
                             className={`p-2 rounded-lg ${
                               it.status === 'cancelado' ? 'bg-surface-elev/60 opacity-60' :
                               it.status === 'falta' ? 'bg-orange-500/10' :
-                              'bg-surface-card'
+                              'bg-surface-card border border-emerald-500/20'
                             }`}
                           >
                             <View className="flex-row items-start gap-3">
