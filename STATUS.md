@@ -1,6 +1,23 @@
 # Status de implementação — Sistema de separação interna
 
-> Snapshot em **2026-05-01** (último update do dia). Objetivo: amanhã (e nas próximas semanas) você consegue retomar o trabalho sem precisar reler tudo.
+> Snapshot em **2026-09-09** (último update do dia). Objetivo: amanhã (e nas próximas semanas) você consegue retomar o trabalho sem precisar reler tudo.
+
+---
+
+## 2026-09-09 — Notas fiscais no fluxo, refinos de UX e 4 deploys
+
+Mudança de escopo pequena, fechada com o usuário: além dos pedidos abertos, o galpão confere **notas fiscais de venda sem pedido de origem**. Commit `5a5a929` + 14 arquivos em stage no fim do dia (já em produção via rsync).
+
+- **Modelo**: mesma tabela `Pedido`, campo `tipo` (`pedido` | `nota_fiscal`) + `codfil`, `codsnf`, `frete`. Identidade Senior = `UniqueConstraint(tipo, codfil, codsnf, numero_externo)`, substituindo o `unique` de `numero_externo` — a numeração do Senior é por filial e, na NF, por série (empresa 1 hoje tem só filial 1 e série `NFE`; outras empresas têm mais). Migrations `pedidos/0011`, `pedidos/0012`, `core/0005`.
+- **Sync Oracle** (`sincronizar_pedidos_oracle`; `manage.py sync_oracle` chama a mesma rotina): duas fontes — E120PED `sitped=1` e E140NFV `sitnfv=2` **sem `numped` nos itens** (NOT EXISTS em E140IPV; ~66 de ~2300 NFs/30 dias caem nesse critério). Itens de NF vêm de E140IPV (`qtdfat`). Janela `TRUNC(SYSDATE) - N` nas duas listas, `N` em `Configuracao.janela_sync_dias` (default **5**, valor de produção; no dev há uma linha com 10). Pedidos importados antes de `codfil` existir (`codfil=''`) são **adotados** pelo sync em vez de duplicados (336 em produção, zero duplicatas).
+- **CIFFOB** → `Pedido.frete`: C = Entrega, F = Retira, **X = Sem frete** (confirmado pelo usuário). Entrega × retira é só filtro, sem regra de negócio.
+- **API**: `GET /api/pedidos/?tipo=&frete=`; `tipo`/`tipo_label`/`frete`/`frete_label` nos serializers e nos payloads de conferência, sequência, fechamentos, não conformes e divergências. Nos erros de separação a chave é **`tipo_doc`** (`tipo` ali já significa a_mais/a_menos). O placeholder do WS Senior loga tipo/filial/série.
+- **Performance**: lista de pedidos trocou `Count` com join por `Subquery` correlacionada — pendentes de ~975 ms para ~260 ms, filtrados 10–30 ms (12k pedidos no dev). O `COUNT(*)` da paginação deixou de arrastar os joins.
+- **Web**: `components/ui/DocBadges.tsx` (chips NF / Entrega / Retira / Sem frete) em todas as listas e no header da conferência; filtros por tipo e frete no Sup. Vendas; Conferidos mostra **"separado por"** (âmbar quando não identificado) e o acordeão aberto ganhou faixa esverdeada + barra na esquerda + recuo; **todas as telas do supervisor e do admin em largura total** (removido `max-w-*xl mx-auto`, igual à "Atribuídos a mim") — preferência explícita do usuário.
+- **Mobile**: paridade das badges, filtros e Conferidos; `components/CabecalhoLista.tsx` mostra "Atualizando lista…" com spinner e esmaece a lista enquanto a consulta roda (vendas, pátio, conferidos) — a troca de filtro deixava a lista antiga parada sem feedback. **APK 0.3.3** (versionCode 7), build local ~1 min; 0.3.0→0.3.2 foram intermediários não distribuídos.
+- **Deploy**: 4 rodadas de `ansible-playbook -i inventory.yml deploy.yml` no dia, todas ok=19 / failed=0; o backend leva 15–30 s para voltar (migrate + collectstatic). O beat importou 8 NFs na primeira rodada em produção.
+- **Docs**: `CLAUDE.md` atualizado (visão geral, glossário, modelo, integrações, pontos abertos).
+- **Pendente**: sideload do APK 0.3.3 nos coletores.
 
 ---
 
@@ -517,10 +534,10 @@ Pré-requisito: `certs/cert.pem` e `certs/key.pem` gerados via mkcert (ver Fase 
 - `GET /api/users/conferentes/` — lista conferentes ativos (era `/separadores/`)
 
 ### Pedidos
-- `GET /api/pedidos/?status=pendente|selecionado|...` — lista
+- `GET /api/pedidos/?status=pendente|selecionado|...&tipo=pedido|nota_fiscal&frete=C|F|X&search=` — lista (paginada)
 - `GET /api/pedidos/<id>/` — detalhe
 - `POST /api/pedidos/selecionar/` — sup_vendas
-- `POST /api/pedidos/atribuir/` — sup_patio
+- `POST /api/pedidos/atribuir/` — **410** desde a Fase 3 (atribuição é via `/api/sequencias/<id>/atribuir/`)
 - `POST /api/pedidos/<id>/bipar_item/` — LEGADO (escopo antigo)
 - `POST /api/pedidos/<id>/finalizar_separacao/` — LEGADO
 
@@ -550,7 +567,7 @@ Pré-requisito: `certs/cert.pem` e `certs/key.pem` gerados via mkcert (ver Fase 
 ## Pontos abertos / TODO
 
 ### Backend / integração
-- [ ] **WS Senior para atualizar volumes pós-separação** — contrato exato a definir. Implementar `_enviar_volumes_ao_senior` em `backend/apps/separacao/views.py` quando vier.
+- [ ] **WS Senior para atualizar volumes pós-separação** — contrato exato a definir. Implementar `_enviar_volumes_ao_senior` em `backend/apps/conferencia/views.py` quando vier. Precisa cobrir **NF além de pedido** (tipo/filial/série já estão no `Pedido`).
 - [ ] **Senior identifica tipos de volume?** Hoje é livre (`caixa/fardo/outro`). Precisa mapeamento para o WS?
 - [ ] **Refinar descrição do produto** — hoje uso só `pro.despro` (E075PRO). A view do Senior monta com marca/família — replicar se for melhor pro operador.
 - [ ] **Comando de seed** — criar `python manage.py seed_pedidos` pra facilitar dev sem Oracle.
@@ -684,4 +701,4 @@ Hot reload + DevTools funcionam igual a um web bundler.
 
 ## Em uma frase
 
-**Separa hoje** = Senior (Oracle leitura) → Sup. Vendas seleciona → Sup. Pátio atribui → Separador separa em volumes (com bipagem por leitor **ou câmera do celular**) → marca Separado (placeholder de WS Senior) ou Não Conforme. UI mobile-first com PWA fullscreen, exit guard, dark mode, login com wallpaper PICKMAX e formulário em vidro fosco, dialog reutilizável estilo SweetAlert, paginação server-side, autenticação JWT, dev em HTTPS via mkcert, **deploy de produção via Ansible** na VM 192.168.1.199 (frontend 3003 / backend 8003 com WhiteNoise, **Redis dedicado e blindado**, Postgres compartilhado com bootstrap automático, Caddy reverse proxy em HTTPS na 443), **Django admin com tema unfold** (Tailwind, dark auto, sidebar agrupada) em `/django-admin/`, **app nativo React Native em paralelo** (Expo + NativeWind, login funcionando, próximas telas vão sendo replicadas do web), código antigo congelado.
+**Separa hoje** = Senior (Oracle leitura: pedidos abertos **e notas fiscais sem pedido de origem**, janela configurável) → Sup. Vendas seleciona (filtros por tipo e frete) → Sup. Pátio monta sequências e atribui → Conferente confere em volumes (com bipagem por leitor **ou câmera do celular**) → marca Separado (placeholder de WS Senior) ou Não Conforme. UI mobile-first com PWA fullscreen, exit guard, dark mode, login com wallpaper PICKMAX e formulário em vidro fosco, dialog reutilizável estilo SweetAlert, paginação server-side, autenticação JWT, dev em HTTPS via mkcert, **deploy de produção via Ansible** na VM 192.168.1.199 (frontend 3003 / backend 8003 com WhiteNoise, **Redis dedicado e blindado**, Postgres compartilhado com bootstrap automático, Caddy reverse proxy em HTTPS na 443), **Django admin com tema unfold** (Tailwind, dark auto, sidebar agrupada) em `/django-admin/`, **app nativo React Native com paridade de telas** (Expo + NativeWind, APK 0.3.3 por sideload nos coletores), telas do supervisor em largura total, código antigo congelado.
