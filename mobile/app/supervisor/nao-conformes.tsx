@@ -11,12 +11,15 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Header } from '@/components/Header'
 import { SupervisorNav } from '@/components/SupervisorNav'
 import { useDialog } from '@/components/Dialog'
+import { DocBadges } from '@/components/DocBadges'
 import { supervisorApi } from '@/lib/api'
 
 // Contrato real de GET /api/nao-conformes/ — todos os itens estão em Não Conforme
 type NaoConforme = {
   id: number
   numero_externo: string
+  tipo?: string
+  frete?: string
   cliente: string
   criado_em: string
   nao_conforme_em: string
@@ -134,7 +137,10 @@ export default function NaoConformes() {
             <View className="border rounded-xl p-4 border-red-500/40 bg-red-500/10">
               <View className="flex-row items-start justify-between gap-2 mb-2">
                 <View className="flex-1">
-                  <Text className="font-bold text-ink">{nc.numero_externo}</Text>
+                  <View className="flex-row items-center gap-2 flex-wrap">
+                    <Text className="font-bold text-ink">{nc.numero_externo}</Text>
+                    <DocBadges tipo={nc.tipo} frete={nc.frete} />
+                  </View>
                   <Text className="text-sm text-ink-muted" numberOfLines={1}>
                     {nc.cliente || '—'}
                   </Text>

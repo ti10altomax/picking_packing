@@ -1,4 +1,5 @@
 'use client'
+import { nomeDoc } from '@/components/ui/DocBadges'
 import { useEffect, useState, useCallback } from 'react'
 import { errosApi, type ErroSeparacaoResumo, type ErroSeparacaoItem } from '@/lib/api'
 
@@ -148,7 +149,7 @@ export default function ErrosSeparacaoPage() {
                     <span className="text-sm text-ink truncate">{e.descricao || e.sku || 'item'}</span>
                   </div>
                   <p className="text-xs text-ink-subtle mt-1">
-                    pedido {e.numero_externo}
+                    {nomeDoc(e.tipo_doc)} {e.numero_externo}
                     {e.separador ? ` · separador: ${e.separador}` : ' · separador não identificado'}
                     {' · '}
                     {new Date(e.criado_em).toLocaleString('pt-BR', {

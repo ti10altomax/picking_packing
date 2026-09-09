@@ -44,11 +44,14 @@ class PedidoListSerializer(serializers.ModelSerializer):
     conferente_username = serializers.CharField(source='conferente.username', read_only=True)
     separado_por_nome = serializers.SerializerMethodField()
     sequencia_numero = serializers.IntegerField(source='sequencia.numero', read_only=True)
+    tipo_label = serializers.CharField(source='get_tipo_display', read_only=True)
+    frete_label = serializers.CharField(read_only=True)
 
     class Meta:
         model = Pedido
         fields = [
-            'id', 'numero_externo', 'cliente', 'status', 'criado_em',
+            'id', 'tipo', 'tipo_label', 'numero_externo', 'cliente', 'status', 'criado_em',
+            'frete', 'frete_label',
             'conferencia_iniciada_em', 'conferido_em', 'selecionado_em', 'atribuido_em',
             'conferente', 'conferente_username',
             'sequencia', 'sequencia_numero',
@@ -80,12 +83,15 @@ class PedidoSerializer(serializers.ModelSerializer):
     qtd_itens = serializers.SerializerMethodField()
     tempo_espera = serializers.SerializerMethodField()
     duracao_conferencia = serializers.SerializerMethodField()
+    tipo_label = serializers.CharField(source='get_tipo_display', read_only=True)
+    frete_label = serializers.CharField(read_only=True)
 
     class Meta:
         model = Pedido
         fields = [
-            'id', 'numero_externo', 'marketplace', 'marketplace_nome',
-            'cliente', 'status', 'criado_em',
+            'id', 'tipo', 'tipo_label', 'numero_externo', 'codfil', 'codsnf',
+            'marketplace', 'marketplace_nome',
+            'cliente', 'status', 'criado_em', 'frete', 'frete_label',
             'conferencia_iniciada_em', 'conferido_em', 'faturado_em',
             'endereco_fisico', 'ordem_pilha',
             'selecionado_em', 'atribuido_em', 'conferente', 'conferente_username',

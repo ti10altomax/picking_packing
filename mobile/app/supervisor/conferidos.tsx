@@ -11,11 +11,15 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Header } from '@/components/Header'
 import { SupervisorNav } from '@/components/SupervisorNav'
+import { DocBadges } from '@/components/DocBadges'
+import { CabecalhoLista } from '@/components/CabecalhoLista'
 import { supervisorApi, pedidosApi } from '@/lib/api'
 
 type Pedido = {
   id: number
   numero_externo: string
+  tipo?: string
+  frete?: string
   cliente: string
   conferido_em: string | null
   conferente_username: string | null
@@ -135,6 +139,8 @@ export default function Conferidos() {
       ) : (
         <FlatList
           data={pedidos}
+          style={{ opacity: carregando ? 0.45 : 1 }}
+          pointerEvents={carregando ? 'none' : 'auto'}
           keyExtractor={(p) => String(p.id)}
           contentContainerStyle={{
             paddingHorizontal: 16,
@@ -149,7 +155,7 @@ export default function Conferidos() {
             />
           }
           ListHeaderComponent={
-            <Text className="text-xs text-ink-subtle mb-2">{pedidos.length} de {count}</Text>
+            <CabecalhoLista carregando={carregando} exibidos={pedidos.length} total={count} />
           }
           ListEmptyComponent={
             <Text className="text-ink-subtle text-center py-12">Nenhum pedido conferido.</Text>
@@ -181,6 +187,7 @@ export default function Conferidos() {
                     <View className="flex-1">
                       <View className="flex-row items-center gap-2 flex-wrap">
                         <Text className="font-bold text-ink">{p.numero_externo}</Text>
+                        <DocBadges tipo={p.tipo} frete={p.frete} />
                         <View className="bg-emerald-500/15 px-2 py-0.5 rounded-full">
                           <Text className="text-xs text-emerald-300 font-medium">Conferido</Text>
                         </View>

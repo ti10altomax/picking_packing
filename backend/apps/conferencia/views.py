@@ -135,7 +135,10 @@ def _serializar_pedido(p: Pedido, com_volumes: bool = False) -> dict:
 
     dados = {
         'id': p.id,
+        'tipo': p.tipo,
         'numero_externo': p.numero_externo,
+        'frete': p.frete,
+        'frete_label': p.frete_label,
         'cliente': p.cliente,
         'status': p.status,
         'criado_em': p.criado_em,
@@ -598,7 +601,8 @@ def _enviar_volumes_ao_senior(pedido: Pedido) -> tuple[bool, str]:
     o ERP Senior e retornar (sucesso, mensagem_de_erro).
     """
     logger.info(
-        f"[Senior WS PLACEHOLDER] pedido {pedido.numero_externo} "
+        f"[Senior WS PLACEHOLDER] {pedido.get_tipo_display()} {pedido.numero_externo} "
+        f"(filial {pedido.codfil or '?'}{f', série {pedido.codsnf}' if pedido.codsnf else ''}) "
         f"com {pedido.volumes.count()} volume(s) — WS não configurado"
     )
     return True, ''
@@ -916,6 +920,7 @@ def listar_divergencias(request):
             'descricao': d.pedido_item.descricao,
             'ean': d.pedido_item.ean,
             'pedido_id': d.pedido_item.pedido_id,
+            'tipo': d.pedido_item.pedido.tipo,
             'numero_externo': d.pedido_item.pedido.numero_externo,
         }
         for d in qs
@@ -993,6 +998,7 @@ def listar_erros_separacao(request):
             'sku': e.pedido_item.sku if e.pedido_item else None,
             'descricao': e.pedido_item.descricao if e.pedido_item else None,
             'pedido_id': e.pedido_id,
+            'tipo_doc': e.pedido.tipo,
             'numero_externo': e.pedido.numero_externo,
             'separador': str(e.separador) if e.separador else None,
             'registrado_por': e.registrado_por.username if e.registrado_por else None,
@@ -1032,6 +1038,7 @@ def listar_fechamentos(request):
     return Response([
         {
             'id': p.id,
+            'tipo': p.tipo,
             'numero_externo': p.numero_externo,
             'cliente': p.cliente,
             'conferente': p.conferente.username if p.conferente else None,
@@ -1101,7 +1108,9 @@ def listar_nao_conformes(request):
     return Response([
         {
             'id': p.id,
+            'tipo': p.tipo,
             'numero_externo': p.numero_externo,
+            'frete': p.frete,
             'cliente': p.cliente,
             'criado_em': p.criado_em,
             'nao_conforme_em': p.nao_conforme_em,

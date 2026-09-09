@@ -1,6 +1,4 @@
-import datetime as dt
 from django.core.management.base import BaseCommand
-from django.utils import timezone
 
 
 class Command(BaseCommand):
@@ -13,8 +11,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        from apps.senior.oracle import fetch, QUERY_PEDIDOS_PENDENTES
-        from apps.pedidos.models import Pedido
+        from apps.senior.oracle import fetch
 
         if options['colunas']:
             self.stdout.write('Consultando E120PED (ROWNUM <= 1)...')
@@ -31,60 +28,13 @@ class Command(BaseCommand):
                 self.stdout.write(f'  {col} = {rows[0][col]!r}')
             return
 
-        self.stdout.write('Buscando pedidos no Oracle...')
-        try:
-            rows = fetch(QUERY_PEDIDOS_PENDENTES)
-        except Exception as exc:
-            self.stderr.write(self.style.ERROR(f'Erro ao conectar no Oracle: {exc}'))
-            return
+        # Mesma rotina do Celery Beat (pedidos + NFs sem pedido de origem), síncrona.
+        from apps.senior.tasks import sincronizar_pedidos_oracle
 
-        if not rows:
-            self.stdout.write(self.style.WARNING('Nenhuma linha retornada'))
-            return
-
-        self.stdout.write(f'{len(rows)} linhas recebidas. Colunas: {list(rows[0].keys())}')
-
-        criados = atualizados = ignorados = 0
-        for row in rows:
-            numero = str(
-                row.get('numpedven') or
-                row.get('numped') or
-                row.get('numpedido') or
-                ''
-            ).strip()
-            if not numero:
-                ignorados += 1
-                continue
-
-            cliente = str(
-                row.get('nomcli') or
-                row.get('nomclipdf') or
-                row.get('codcli') or
-                ''
-            ).strip()
-
-            criado_em = row.get('datemi')
-            if isinstance(criado_em, dt.datetime) and criado_em.tzinfo is None:
-                criado_em = timezone.make_aware(criado_em)
-            if not criado_em:
-                criado_em = timezone.now()
-
-            pedido, created = Pedido.objects.get_or_create(
-                numero_externo=numero,
-                defaults={
-                    'cliente': cliente,
-                    'criado_em': criado_em,
-                    'status': Pedido.Status.PENDENTE,
-                }
-            )
-            if created:
-                criados += 1
-            elif not pedido.cliente and cliente:
-                pedido.cliente = cliente
-                pedido.save(update_fields=['cliente'])
-                atualizados += 1
-
-        msg = f'Resultado: {criados} criados, {atualizados} atualizados'
-        if ignorados:
-            msg += f', {ignorados} ignorados (sem número de pedido)'
-        self.stdout.write(self.style.SUCCESS(msg))
+        self.stdout.write('Sincronizando pedidos e notas fiscais do Oracle...')
+        resultado = sincronizar_pedidos_oracle()
+        for chave, valor in resultado.items():
+            if isinstance(valor, dict) and 'erro' in valor:
+                self.stderr.write(self.style.ERROR(f'{chave}: {valor["erro"]}'))
+            else:
+                self.stdout.write(self.style.SUCCESS(f'{chave}: {valor}'))

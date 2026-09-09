@@ -100,6 +100,8 @@ export type SequenciaResumo = {
 
 export type SequenciaPedido = {
   id: number
+  tipo?: string
+  frete?: string
   numero_externo: string
   cliente: string
   status: string
@@ -159,6 +161,7 @@ export type ErroSeparacaoItem = {
   sku: string | null
   descricao: string | null
   pedido_id: number
+  tipo_doc?: string
   numero_externo: string
   separador: string | null
   registrado_por: string | null
@@ -200,7 +203,7 @@ export const separadoresApi = {
 }
 
 export const supervisorApi = {
-  listarPendentes: (params: { search?: string; page?: number } = {}) =>
+  listarPendentes: (params: { search?: string; page?: number; tipo?: string; frete?: string } = {}) =>
     api.get('/api/pedidos/', { params: { status: 'pendente', ...params } }).then((r) => r.data),
   selecionar: (pedidoIds: number[]) =>
     api.post('/api/pedidos/selecionar/', { pedido_ids: pedidoIds }).then((r) => r.data),

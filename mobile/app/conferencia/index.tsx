@@ -10,11 +10,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { Header } from '@/components/Header'
+import { DocBadges } from '@/components/DocBadges'
 import { conferenciaApi } from '@/lib/api'
 
 type Pedido = {
   id: number
   numero_externo: string
+  tipo?: string
+  frete?: string
   cliente: string
   status: 'atribuido' | 'conferindo' | 'conferido' | 'nao_conforme'
   qtd_itens: number
@@ -152,6 +155,7 @@ export default function ConferenciaLista() {
                 <View className="flex-1">
                   <View className="flex-row items-center gap-2 flex-wrap">
                     <Text className="font-bold text-ink">{p.numero_externo}</Text>
+                    <DocBadges tipo={p.tipo} frete={p.frete} />
                     <View
                       className={`px-2 py-0.5 rounded-full ${
                         p.status === 'conferindo'

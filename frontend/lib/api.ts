@@ -109,11 +109,13 @@ export type Divergencia = {
   descricao: string
   ean: string
   pedido_id: number
+  tipo?: string
   numero_externo: string
 }
 
 export type Fechamento = {
   id: number
+  tipo?: string
   numero_externo: string
   cliente: string
   conferente: string | null
@@ -148,6 +150,7 @@ export type ErroSeparacaoItem = {
   sku: string | null
   descricao: string | null
   pedido_id: number
+  tipo_doc?: string
   numero_externo: string
   separador: string | null
   registrado_por: string | null
@@ -187,6 +190,8 @@ export type SequenciaResumo = {
 
 export type SequenciaPedido = {
   id: number
+  tipo?: string
+  frete?: string
   numero_externo: string
   cliente: string
   status: string
@@ -258,7 +263,7 @@ export type Paginado<T> = {
 }
 
 export const supervisorApi = {
-  listarPendentes: (params: { search?: string; page?: number } = {}) =>
+  listarPendentes: (params: { search?: string; page?: number; tipo?: string; frete?: string } = {}) =>
     api.get('/api/pedidos/', {
       params: { status: 'pendente', ...params },
     }).then((r) => r.data),

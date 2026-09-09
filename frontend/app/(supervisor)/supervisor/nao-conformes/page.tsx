@@ -1,4 +1,5 @@
 'use client'
+import { DocBadges } from '@/components/ui/DocBadges'
 import { useEffect, useState, useCallback } from 'react'
 import { supervisorApi, pedidosApi } from '@/lib/api'
 import { useDialog } from '@/components/Dialog'
@@ -6,6 +7,8 @@ import { useDialog } from '@/components/Dialog'
 type NaoConforme = {
   id: number
   numero_externo: string
+  tipo?: string
+  frete?: string
   cliente: string
   criado_em: string
   nao_conforme_em: string
@@ -173,6 +176,7 @@ export default function NaoConformesPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-ink">{p.numero_externo}</span>
+                        <DocBadges tipo={p.tipo} frete={p.frete} />
                         <span
                           className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                             COR_MOTIVO[p.motivo] ?? 'bg-surface-elev text-ink-muted'

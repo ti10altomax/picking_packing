@@ -3,9 +3,10 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.generics import get_object_or_404
 from django.db import models
-from django.db.models import Count, Q
+from django.db.models import Count, IntegerField, OuterRef, Q, Subquery
+from django.db.models.functions import Coalesce
 from django.utils import timezone
-from .models import Pedido, PedidoItem, PedidoLog
+from .models import DivergenciaBarra, Pedido, PedidoItem, PedidoLog
 from .serializers import PedidoSerializer, PedidoListSerializer
 
 
@@ -20,21 +21,38 @@ class PedidoViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         if self.action == 'list':
-            # Listagem slim — sem prefetch de itens, com qtd_itens anotada
-            # (distinct nos dois Counts: joins múltiplos inflariam as contagens)
+            # Listagem slim — sem prefetch de itens, com qtd_itens anotada.
+            # Subqueries correlacionadas em vez de Count() com join: o Postgres só
+            # conta para as linhas da página (após ORDER BY/LIMIT) e o COUNT(*) da
+            # paginação não arrasta os joins — a lista de pendentes caía de ~1 s
+            # para dezenas de ms com 12k pedidos.
+            qtd_itens = (
+                PedidoItem.objects.filter(pedido=OuterRef('pk'))
+                .order_by().values('pedido').annotate(c=Count('id')).values('c')
+            )
+            qtd_divergencias = (
+                DivergenciaBarra.objects.filter(pedido_item__pedido=OuterRef('pk'))
+                .order_by().values('pedido_item__pedido').annotate(c=Count('id')).values('c')
+            )
             qs = Pedido.objects.select_related('conferente', 'separado_por', 'sequencia').annotate(
-                qtd_itens=Count('itens', distinct=True),
-                qtd_divergencias=Count('itens__divergencias', distinct=True),
+                qtd_itens=Coalesce(Subquery(qtd_itens, output_field=IntegerField()), 0),
+                qtd_divergencias=Coalesce(Subquery(qtd_divergencias, output_field=IntegerField()), 0),
             )
         else:
             qs = Pedido.objects.select_related('marketplace', 'conferente', 'separado_por', 'sequencia').prefetch_related('itens')
 
         status_filter = self.request.query_params.get('status')
         marketplace = self.request.query_params.get('marketplace')
+        tipo = self.request.query_params.get('tipo', '').strip()
+        frete = self.request.query_params.get('frete', '').strip().upper()
         search = self.request.query_params.get('search', '').strip()
 
         if status_filter:
             qs = qs.filter(status=status_filter)
+        if tipo:
+            qs = qs.filter(tipo=tipo)
+        if frete:
+            qs = qs.filter(frete=frete)
         if self.request.query_params.get('sem_sequencia') == '1':
             qs = qs.filter(sequencia__isnull=True)
         if marketplace:

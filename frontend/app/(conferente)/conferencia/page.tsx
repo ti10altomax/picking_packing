@@ -1,4 +1,5 @@
 'use client'
+import { DocBadges } from '@/components/ui/DocBadges'
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { conferenciaApi } from '@/lib/api'
@@ -6,6 +7,8 @@ import { conferenciaApi } from '@/lib/api'
 type PedidoLista = {
   id: number
   numero_externo: string
+  tipo?: string
+  frete?: string
   cliente: string
   status: 'atribuido' | 'conferindo'
   qtd_itens: number
@@ -119,6 +122,7 @@ export default function ConferenciaListaPage() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-bold text-ink">{p.numero_externo}</span>
+                  <DocBadges tipo={p.tipo} frete={p.frete} />
                   <span
                     className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                       p.status === 'conferindo'

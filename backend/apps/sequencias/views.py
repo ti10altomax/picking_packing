@@ -138,7 +138,9 @@ def detalhe_ou_excluir(request, pk):
     dados['pedidos'] = [
         {
             'id': p.id,
+            'tipo': p.tipo,
             'numero_externo': p.numero_externo,
+            'frete': p.frete,
             'cliente': p.cliente,
             'status': p.status,
             'conferente': p.conferente_id,

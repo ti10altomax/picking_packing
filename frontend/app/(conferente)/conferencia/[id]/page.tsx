@@ -1,4 +1,5 @@
 'use client'
+import { DocBadges } from '@/components/ui/DocBadges'
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { conferenciaApi, separadoresApi, SeparadorLiberado } from '@/lib/api'
@@ -38,6 +39,8 @@ type Volume = {
 type Pedido = {
   id: number
   numero_externo: string
+  tipo?: string
+  frete?: string
   cliente: string
   status: 'atribuido' | 'conferindo' | 'conferido' | 'nao_conforme'
   qtd_itens: number
@@ -696,7 +699,10 @@ function Header({ pedido, percent, segundos, onBack }: {
         ←
       </button>
       <div className="flex-1 min-w-0">
-        <p className="font-bold text-base leading-tight text-ink">#{pedido.numero_externo}</p>
+        <p className="font-bold text-base leading-tight text-ink flex items-center gap-2 flex-wrap">
+          #{pedido.numero_externo}
+          <DocBadges tipo={pedido.tipo} frete={pedido.frete} />
+        </p>
         <p className="text-sm text-ink-muted truncate">{pedido.cliente || '—'}</p>
       </div>
       <div className="text-right shrink-0">

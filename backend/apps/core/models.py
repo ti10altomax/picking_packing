@@ -12,11 +12,15 @@ class Configuracao(models.Model):
     class Chave(models.TextChoices):
         LIBERACAO_PROXIMA_SEQUENCIA = 'liberacao_proxima_sequencia', 'Liberação da próxima sequência'
         FECHAMENTO_SOBRA = 'fechamento_sobra', 'Fechamento de pedido com sobra'
+        JANELA_SYNC_DIAS = 'janela_sync_dias', 'Janela do sync Senior (dias)'
 
     # valores válidos por chave (documentação viva; o admin não valida à força)
     DEFAULTS = {
         'liberacao_proxima_sequencia': 'ao_terminar_meus_pedidos',  # | ao_concluir_sequencia_inteira
         'fechamento_sobra': 'supervisor_patio',                     # | conferente
+        # Só importa pedidos/NFs com datemi dentro dos últimos N dias.
+        # 5 = valor definido para produção (2026-09-09); ajustável no admin sem redeploy.
+        'janela_sync_dias': '5',
     }
 
     chave = models.CharField(max_length=50, choices=Chave.choices, unique=True)

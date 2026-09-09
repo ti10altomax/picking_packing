@@ -13,10 +13,14 @@ import { Header } from '@/components/Header'
 import { SupervisorNav } from '@/components/SupervisorNav'
 import { useDialog } from '@/components/Dialog'
 import { supervisorApi } from '@/lib/api'
+import { DocBadges } from '@/components/DocBadges'
+import { CabecalhoLista } from '@/components/CabecalhoLista'
 
 type Pedido = {
   id: number
   numero_externo: string
+  tipo?: string
+  frete?: string
   cliente: string
   qtd_itens: number
   tempo_espera: string
@@ -38,13 +42,19 @@ export default function SupervisorVendas() {
   const [busca, setBusca] = useState('')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const buscaAtivaRef = useRef('')
+  const [tipo, setTipo] = useState('')      // '' | 'pedido' | 'nota_fiscal'
+  const [frete, setFrete] = useState('')    // '' | 'C' (entrega) | 'F' (retira)
+  const filtrosRef = useRef({ tipo: '', frete: '' })
+  const primeiraCargaRef = useRef(true)
 
   const carregar = useCallback(async (search: string, page = 1, append = false) => {
     if (page === 1 && !append) setCarregando(true)
     else setCarregandoMais(true)
     buscaAtivaRef.current = search
     try {
-      const data: Paginado | Pedido[] = await supervisorApi.listarPendentes({ search, page })
+      const data: Paginado | Pedido[] = await supervisorApi.listarPendentes({
+        search, page, ...filtrosRef.current,
+      })
       if (Array.isArray(data)) {
         setPedidos(data); setCount(data.length); setProximaPagina(null)
       } else {
@@ -61,13 +71,15 @@ export default function SupervisorVendas() {
     }
   }, [])
 
-  useEffect(() => { carregar('', 1, false) }, [carregar])
-
+  // Busca (com debounce) e filtros de tipo/frete: uma única fonte de recarga
   useEffect(() => {
+    filtrosRef.current = { tipo, frete }
+    const atraso = primeiraCargaRef.current ? 0 : 300
+    primeiraCargaRef.current = false
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => carregar(busca, 1, false), 300)
+    debounceRef.current = setTimeout(() => carregar(busca, 1, false), atraso)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
-  }, [busca, carregar])
+  }, [busca, tipo, frete, carregar])
 
   function toggle(id: number) {
     setSelecionados((prev) => {
@@ -111,7 +123,7 @@ export default function SupervisorVendas() {
 
       <View className="px-4 pt-3 pb-2">
         <Text className="text-sm text-ink-muted mb-2">
-          Selecione pedidos pendentes pra enviar à conferência
+          Selecione pedidos e notas fiscais pendentes pra enviar à conferência
         </Text>
         <TextInput
           value={busca}
@@ -120,6 +132,18 @@ export default function SupervisorVendas() {
           placeholderTextColor="#52525b"
           className="h-11 px-3 bg-surface-card border border-surface-border rounded-lg text-ink"
         />
+        <View className="flex-row flex-wrap gap-2 mt-2">
+          <FiltroChips
+            valor={tipo}
+            onChange={setTipo}
+            opcoes={[['', 'Todos'], ['pedido', 'Pedidos'], ['nota_fiscal', 'Notas fiscais']]}
+          />
+          <FiltroChips
+            valor={frete}
+            onChange={setFrete}
+            opcoes={[['', 'Qualquer'], ['C', 'Entrega'], ['F', 'Retira'], ['X', 'Sem frete']]}
+          />
+        </View>
       </View>
 
       {carregando && pedidos.length === 0 ? (
@@ -129,6 +153,8 @@ export default function SupervisorVendas() {
       ) : (
         <FlatList
           data={pedidos}
+          style={{ opacity: carregando ? 0.45 : 1 }}
+          pointerEvents={carregando ? 'none' : 'auto'}
           keyExtractor={(p) => String(p.id)}
           contentContainerStyle={{
             paddingHorizontal: 16,
@@ -143,12 +169,10 @@ export default function SupervisorVendas() {
             />
           }
           ListHeaderComponent={
-            <Text className="text-xs text-ink-subtle mb-2">
-              {pedidos.length} de {count}
-            </Text>
+            <CabecalhoLista carregando={carregando} exibidos={pedidos.length} total={count} />
           }
           ListEmptyComponent={
-            <Text className="text-ink-subtle text-center py-12">Nenhum pedido pendente.</Text>
+            <Text className="text-ink-subtle text-center py-12">Nenhum documento pendente com esses filtros.</Text>
           }
           ListFooterComponent={
             proximaPagina ? (
@@ -183,6 +207,7 @@ export default function SupervisorVendas() {
                   <View className="flex-1">
                     <View className="flex-row items-center gap-2 flex-wrap">
                       <Text className="font-semibold text-ink">{p.numero_externo}</Text>
+                      <DocBadges tipo={p.tipo} frete={p.frete} />
                       <Text className="text-xs text-ink-subtle">{p.tempo_espera}</Text>
                     </View>
                     <Text className="text-sm text-ink-muted" numberOfLines={1}>
@@ -231,5 +256,31 @@ export default function SupervisorVendas() {
         </View>
       ) : null}
     </SafeAreaView>
+  )
+}
+
+function FiltroChips({
+  valor, onChange, opcoes,
+}: {
+  valor: string
+  onChange: (v: string) => void
+  opcoes: [string, string][]
+}) {
+  return (
+    <View className="flex-row rounded-lg border border-surface-border overflow-hidden">
+      {opcoes.map(([v, label]) => (
+        <Pressable
+          key={v}
+          onPress={() => onChange(v)}
+          className={`px-3 h-11 items-center justify-center ${
+            valor === v ? 'bg-orange-500' : 'bg-surface-card active:bg-surface-elev'
+          }`}
+        >
+          <Text className={`text-sm ${valor === v ? 'text-white font-semibold' : 'text-ink-muted'}`}>
+            {label}
+          </Text>
+        </Pressable>
+      ))}
+    </View>
   )
 }

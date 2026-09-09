@@ -16,6 +16,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import { conferenciaApi, separadoresApi, SeparadorLiberado } from '@/lib/api'
 import { CameraScanner } from '@/components/CameraScanner'
 import { useDialog } from '@/components/Dialog'
+import { DocBadges } from '@/components/DocBadges'
 
 // -----------------------------------------------------------------------------
 // Tipos
@@ -48,6 +49,8 @@ type Volume = {
 type Pedido = {
   id: number
   numero_externo: string
+  tipo?: string
+  frete?: string
   cliente: string
   status: 'atribuido' | 'conferindo' | 'conferido' | 'nao_conforme'
   qtd_itens: number
@@ -833,7 +836,10 @@ function CabecalhoSimples({
         <Text className="text-ink-muted text-xl">←</Text>
       </Pressable>
       <View className="flex-1">
-        <Text className="font-bold text-base text-ink">#{pedido.numero_externo}</Text>
+        <View className="flex-row items-center gap-2 flex-wrap">
+          <Text className="font-bold text-base text-ink">#{pedido.numero_externo}</Text>
+          <DocBadges tipo={pedido.tipo} frete={pedido.frete} />
+        </View>
         <Text className="text-sm text-ink-muted" numberOfLines={1}>
           {pedido.cliente || '—'}
         </Text>

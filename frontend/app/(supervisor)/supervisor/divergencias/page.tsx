@@ -1,4 +1,5 @@
 'use client'
+import { DocBadges, nomeDoc } from '@/components/ui/DocBadges'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { pedidosApi, divergenciasApi, type Divergencia, type Paginado } from '@/lib/api'
 import { useDialog } from '@/components/Dialog'
@@ -6,6 +7,8 @@ import { useDialog } from '@/components/Dialog'
 type PedidoBusca = {
   id: number
   numero_externo: string
+  tipo?: string
+  frete?: string
   cliente: string
   conferente_username: string | null
 }
@@ -116,7 +119,7 @@ export default function DivergenciasPage() {
         {pedido ? (
           <div className="flex items-center justify-between gap-2">
             <div>
-              <p className="font-bold text-ink">{pedido.numero_externo}</p>
+              <p className="font-bold text-ink flex items-center gap-2 flex-wrap">{pedido.numero_externo}<DocBadges tipo={pedido.tipo} frete={pedido.frete} /></p>
               <p className="text-sm text-ink-muted">
                 {pedido.cliente || '—'}
                 {pedido.conferente_username && ` · conferente: ${pedido.conferente_username}`}
@@ -147,6 +150,7 @@ export default function DivergenciasPage() {
                       className="w-full text-left px-3 py-2.5 hover:bg-surface-elev border-b border-surface-border last:border-b-0"
                     >
                       <span className="font-semibold text-ink">{p.numero_externo}</span>
+                      <DocBadges tipo={p.tipo} frete={p.frete} />
                       <span className="text-sm text-ink-muted"> · {p.cliente || '—'}</span>
                       {p.conferente_username && (
                         <span className="text-xs text-ink-subtle"> · {p.conferente_username}</span>
@@ -251,7 +255,7 @@ export default function DivergenciasPage() {
                   <span className="text-xs text-ink-muted">x{d.qtd}</span>
                 </div>
                 <p className="text-xs text-ink-subtle mt-1">
-                  pedido {d.numero_externo} ·{' '}
+                  {nomeDoc(d.tipo)} {d.numero_externo} ·{' '}
                   {new Date(d.criado_em).toLocaleString('pt-BR', {
                     day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
                   })}

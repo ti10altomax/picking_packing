@@ -15,11 +15,15 @@ import { useRouter } from 'expo-router'
 import { Header } from '@/components/Header'
 import { SupervisorNav } from '@/components/SupervisorNav'
 import { useDialog } from '@/components/Dialog'
+import { DocBadges } from '@/components/DocBadges'
+import { CabecalhoLista } from '@/components/CabecalhoLista'
 import { supervisorApi, sequenciasApi, SequenciaResumo } from '@/lib/api'
 
 type Pedido = {
   id: number
   numero_externo: string
+  tipo?: string
+  frete?: string
   cliente: string
   qtd_itens: number
   tempo_espera: string
@@ -200,6 +204,8 @@ export default function SupervisorPatio() {
       ) : (
         <FlatList
           data={pedidos}
+          style={{ opacity: carregando ? 0.45 : 1 }}
+          pointerEvents={carregando ? 'none' : 'auto'}
           keyExtractor={(p) => String(p.id)}
           contentContainerStyle={{
             paddingHorizontal: 16,
@@ -218,7 +224,7 @@ export default function SupervisorPatio() {
             />
           }
           ListHeaderComponent={
-            <Text className="text-xs text-ink-subtle mb-2">{pedidos.length} de {count}</Text>
+            <CabecalhoLista carregando={carregando} exibidos={pedidos.length} total={count} />
           }
           ListEmptyComponent={
             <Text className="text-ink-subtle text-center py-12">Nenhum pedido aguardando sequência.</Text>
@@ -256,6 +262,7 @@ export default function SupervisorPatio() {
                   <View className="flex-1">
                     <View className="flex-row items-center gap-2 flex-wrap">
                       <Text className="font-semibold text-ink">{p.numero_externo}</Text>
+                      <DocBadges tipo={p.tipo} frete={p.frete} />
                       <Text className="text-xs text-ink-subtle">{p.tempo_espera}</Text>
                     </View>
                     <Text className="text-sm text-ink-muted" numberOfLines={1}>

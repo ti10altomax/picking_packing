@@ -10,6 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Header } from '@/components/Header'
 import { SupervisorNav } from '@/components/SupervisorNav'
+import { nomeDoc } from '@/components/DocBadges'
 import { errosApi, ErroSeparacaoResumo, ErroSeparacaoItem } from '@/lib/api'
 
 type FiltroTipo = '' | 'a_mais' | 'a_menos'
@@ -131,7 +132,7 @@ export default function SupervisorErros() {
                 </Text>
               </View>
               <Text className="text-xs text-ink-subtle mt-1">
-                pedido {e.numero_externo}
+                {nomeDoc(e.tipo_doc)} {e.numero_externo}
                 {e.separador ? ` · ${e.separador}` : ' · não identificado'}
                 {' · '}
                 {new Date(e.criado_em).toLocaleString('pt-BR', {

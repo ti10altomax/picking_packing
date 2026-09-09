@@ -48,11 +48,13 @@ class PedidoItemInline(TabularInline):
 @admin.register(Pedido)
 class PedidoAdmin(ModelAdmin):
     list_display = (
-        'numero_externo', 'cliente_curto', 'status_badge',
+        'numero_externo', 'tipo', 'frete', 'cliente_curto', 'status_badge',
         'criado_em', 'conferente',
     )
     list_filter = (
         ('status', ChoicesDropdownFilter),
+        ('tipo', ChoicesDropdownFilter),
+        'frete',
         ('criado_em', RangeDateFilter),
         ('conferente', admin.RelatedOnlyFieldListFilter),
     )
@@ -70,7 +72,10 @@ class PedidoAdmin(ModelAdmin):
 
     fieldsets = (
         ("Pedido", {
-            "fields": ("numero_externo", "cliente", "marketplace", "status"),
+            "fields": (
+                "tipo", "numero_externo", "codfil", "codsnf", "frete",
+                "cliente", "marketplace", "status",
+            ),
         }),
         ("Atribuição", {
             "fields": (

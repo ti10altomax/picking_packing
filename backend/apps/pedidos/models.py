@@ -37,7 +37,25 @@ class Pedido(models.Model):
         PRODUTO_ERRADO = 'produto_errado', 'Produto errado'
         ITEM_AUSENTE = 'item_ausente', 'Item ausente'
 
-    numero_externo = models.CharField(max_length=100, unique=True)
+    class Tipo(models.TextChoices):
+        PEDIDO = 'pedido', 'Pedido'
+        NOTA_FISCAL = 'nota_fiscal', 'Nota fiscal'
+
+    class Frete(models.TextChoices):
+        # CIFFOB do Senior (E120PED / E140NFV)
+        CIF = 'C', 'Entrega'      # frete por conta do emitente — sai com transportadora
+        FOB = 'F', 'Retira'       # por conta do cliente — ele vem buscar
+        SEM = 'X', 'Sem frete'    # sem frete (confirmado pelo usuário em 2026-09-09)
+
+    # Documento de origem no Senior. Pedido (E120PED) e nota fiscal de venda sem
+    # pedido de origem (E140NFV) passam pelo mesmo fluxo de conferência. A identidade
+    # do documento é (tipo, codfil, codsnf, numero_externo) — a numeração do Senior
+    # é por filial e, no caso da NF, por série; ver constraint em Meta.
+    tipo = models.CharField(max_length=20, choices=Tipo.choices, default=Tipo.PEDIDO)
+    numero_externo = models.CharField(max_length=100)
+    codfil = models.CharField(max_length=10, blank=True)   # filial no Senior
+    codsnf = models.CharField(max_length=10, blank=True)   # série da NF ('' para pedido)
+    frete = models.CharField(max_length=1, choices=Frete.choices, blank=True)  # CIFFOB do Senior
     marketplace = models.ForeignKey(Marketplace, on_delete=models.PROTECT, null=True, blank=True)
     cliente = models.CharField(max_length=255, blank=True)
     status = models.CharField(max_length=30, choices=Status.choices, default=Status.PENDENTE)
@@ -112,9 +130,21 @@ class Pedido(models.Model):
 
     class Meta:
         ordering = ['criado_em']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['tipo', 'codfil', 'codsnf', 'numero_externo'],
+                name='pedido_identidade_senior',
+            ),
+        ]
 
     def __str__(self):
-        return f'Pedido {self.numero_externo} [{self.status}]'
+        return f'{self.get_tipo_display()} {self.numero_externo} [{self.status}]'
+
+    @property
+    def frete_label(self) -> str:
+        if not self.frete:
+            return ''
+        return dict(self.Frete.choices).get(self.frete, f'Frete {self.frete}')
 
 
 class PedidoItem(models.Model):

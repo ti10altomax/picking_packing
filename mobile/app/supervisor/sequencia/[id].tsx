@@ -12,6 +12,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { Header } from '@/components/Header'
 import { useDialog } from '@/components/Dialog'
+import { DocBadges } from '@/components/DocBadges'
 import { ScrollView } from 'react-native'
 import {
   supervisorApi, sequenciasApi,
@@ -222,6 +223,7 @@ export default function SequenciaDetalhe() {
                 <View className="flex-1">
                   <View className="flex-row items-center gap-2 flex-wrap">
                     <Text className="font-semibold text-ink">{p.numero_externo}</Text>
+                    <DocBadges tipo={p.tipo} frete={p.frete} />
                     <View className={`px-2 py-0.5 rounded-full ${cfg.cor}`}>
                       <Text className={`text-xs font-medium ${cfg.texto}`}>{cfg.label}</Text>
                     </View>

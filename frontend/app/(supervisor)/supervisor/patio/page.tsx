@@ -1,4 +1,5 @@
 'use client'
+import { DocBadges } from '@/components/ui/DocBadges'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supervisorApi, sequenciasApi, type Paginado, type SequenciaResumo } from '@/lib/api'
@@ -6,6 +7,8 @@ import { supervisorApi, sequenciasApi, type Paginado, type SequenciaResumo } fro
 type Pedido = {
   id: number
   numero_externo: string
+  tipo?: string
+  frete?: string
   cliente: string
   criado_em: string
   selecionado_em: string | null
@@ -242,6 +245,7 @@ export default function SupervisorPatioPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-ink">{p.numero_externo}</span>
+                        <DocBadges tipo={p.tipo} frete={p.frete} />
                         <span className="text-xs text-ink-subtle">{p.tempo_espera}</span>
                       </div>
                       <p className="text-sm text-ink-muted truncate">{p.cliente || '—'}</p>

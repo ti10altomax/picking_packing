@@ -1,10 +1,13 @@
 'use client'
+import { DocBadges } from '@/components/ui/DocBadges'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { supervisorApi, pedidosApi, type Paginado } from '@/lib/api'
 
 type Pedido = {
   id: number
   numero_externo: string
+  tipo?: string
+  frete?: string
   cliente: string
   conferido_em: string | null
   conferente: number | null
@@ -147,6 +150,7 @@ export default function ConferidosPage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-semibold text-ink">{p.numero_externo}</span>
+                            <DocBadges tipo={p.tipo} frete={p.frete} />
                             <span className="text-xs bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300 px-2 py-0.5 rounded-full font-medium">
                               Conferido
                             </span>

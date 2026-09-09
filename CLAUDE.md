@@ -8,6 +8,8 @@ Sistema interno para **separação de pedidos no galpão da Altomax**. Não é m
 
 > **Redesenho 2026-08 (aprovado)** — ver `DESIGN.md` para a espec completa. **Fases 1, 2 e 3 implementadas em 2026-08-27**: o papel do sistema agora é o **conferente** (rename completo); o **separador físico** tem cadastro próprio com **liberação diária** e é apontado pelo conferente ao iniciar; o Sup. Pátio monta **sequências** e atribui pedido a pedido dentro delas (atribuição direta antiga desativada — 410), com **trava de sequência ativa** no conferente (regra de liberação configurável em `Configuracao`). **Fase 4 também implementada**: divergência de barra liberada pelo supervisor no web (`DivergenciaBarra`, só por ocorrência), erros de separação (`ErroSeparacao` — sobra com status novo `Aguardando fechamento` e fechamento pelo Sup. Pátio configurável; falta derivada automaticamente no Não Conforme) e relatório produto × volume por sequência. **Fase 5 concluída em 2026-08-28**: tudo em produção (VM 192.168.1.199) e APK 0.2.0 buildado — o redesenho está completo.
 
+> **Notas fiscais (2026-09-09)** — além dos pedidos abertos (E120PED, sitped=1), o sync importa **NFs de venda fechadas sem pedido de origem** (E140NFV sitnfv=2, sem `numped` nos itens). Mesma tabela e mesmo fluxo: `Pedido.tipo` = `pedido` | `nota_fiscal`. Identidade Senior = (`tipo`, `codfil`, `codsnf`, `numero_externo`) — numeração é por filial e, na NF, por série. `CIFFOB` vai para `Pedido.frete` (C = entrega, F = retira, X = sem frete). Janela do sync (pedidos e NFs) em `Configuracao.janela_sync_dias` (default 5, valor de produção). Web e mobile mostram badge **NF** e **Entrega/Retira**; Sup. Vendas filtra por tipo e frete.
+
 Atores principais: **Supervisor de Vendas**, **Supervisor de Pátio**, **Conferente** e **Admin**.
 
 ### Fluxo geral
@@ -33,7 +35,8 @@ Atores principais: **Supervisor de Vendas**, **Supervisor de Pátio**, **Confere
 
 | Termo | Significado |
 |---|---|
-| Pedido | Unidade de venda originada no Senior; contém 1..N itens |
+| Pedido | Unidade de venda originada no Senior; contém 1..N itens. Desde 2026-09 a tabela também guarda **notas fiscais** (`tipo='nota_fiscal'`) |
+| Nota fiscal | NF de venda fechada **sem pedido de origem** (E140NFV); passa pelo mesmo fluxo de conferência que o pedido |
 | Volume | Embalagem física (caixa, fardo etc.) que agrupa parte dos itens separados de um pedido |
 | Conferente | Usuário do sistema que confere por bipagem e monta volumes (era chamado de "separador" até o rename de 2026-08) |
 | Separador | Trabalhador físico que separa a mercadoria no estoque — em geral extras; terá cadastro próprio sem login (Fase 2, ver `DESIGN.md`) |
@@ -173,7 +176,7 @@ User(id, username, perfil, ...)
   perfil: conferente | supervisor_vendas | supervisor_patio | admin
           (+ etiquetador, congelado)
 
-Pedido(id, numero_externo, status, criado_em, cliente,
+Pedido(id, tipo, numero_externo, codfil, codsnf, frete, status, criado_em, cliente,
        selecionado_em, selecionado_por_id,
        atribuido_em, atribuido_por_id, conferente_id,
        conferencia_iniciada_em,
@@ -197,7 +200,7 @@ PedidoLog(id, pedido_id, user_id, acao, payload, criado_em)
 
 ## Integrações
 
-- **Senior (Oracle, leitura)** — origem dos pedidos. Read-only. Polling periódico ou consulta sob demanda.
+- **Senior (Oracle, leitura)** — origem dos pedidos e das NFs sem pedido de origem. Read-only. Celery Beat a cada 2 min (`sincronizar_pedidos_oracle`), janela configurável.
   - Critério de "pedido pendente" no Oracle: a definir (filtros, status, empresa).
 - **Senior (SOAP, escrita)** — atualizar volumes após separação.
   - **WS exato a definir.** Tipicamente espera identificador do pedido + lista de volumes (tipo + qtd_itens? a confirmar).
@@ -295,6 +298,8 @@ Não tocar nesses arquivos durante o trabalho do escopo atual. Podem voltar ao f
 - [ ] Bipar item para um item já completo (`qtd_separada == qtd_pedida`) — bloqueia ou avisa?
 - [ ] Senior tem cadastro de "embalagem"? Os tipos de volume vêm de lá ou são livres no nosso lado?
 - [ ] Cadência de sincronização Senior → Postgres da lista de pendentes
+- [x] ~~Valor de produção da janela do sync~~ — 5 dias (2026-09-09)
+- [x] ~~Significado de `CIFFOB='X'` e regra entrega × retira~~ — X = sem frete; entrega × retira é só filtro na tela do Sup. Vendas (2026-09-09)
 
 ---
 

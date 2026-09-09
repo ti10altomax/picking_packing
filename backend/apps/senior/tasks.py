@@ -56,14 +56,25 @@ def _oracle_fetch_safe(query, params=None):
         return None
 
 
-def _importar_itens_do_pedido(pedido, numped_oracle):
-    """Busca itens em E120IPD + E075DER/PRO e popula PedidoItem."""
-    from .oracle import QUERY_ITENS_PEDIDO, SENIOR_CODEMP
+def _janela_dias() -> int:
+    """Janela do sync em dias (Configuracao 'janela_sync_dias'; default 3)."""
+    from apps.core.models import Configuracao
+    valor = Configuracao.obter(Configuracao.Chave.JANELA_SYNC_DIAS)
+    try:
+        return max(int(valor), 0)
+    except (TypeError, ValueError):
+        logger.warning(f"janela_sync_dias inválida ({valor!r}); usando 3")
+        return 3
+
+
+def _importar_itens(pedido, query, params, col_qtd):
+    """Busca os itens no Oracle (E120IPD ou E140IPV + E075DER/PRO) e popula PedidoItem."""
+    from .oracle import SENIOR_CODEMP
     from apps.pedidos.models import PedidoItem
 
-    rows = _oracle_fetch_safe(QUERY_ITENS_PEDIDO, [numped_oracle])
+    rows = _oracle_fetch_safe(query, params)
     if not rows:
-        logger.warning(f"Pedido {numped_oracle} sem itens em E120IPD")
+        logger.warning(f"{pedido} sem itens no Senior")
         return 0
 
     criados = 0
@@ -73,7 +84,7 @@ def _importar_itens_do_pedido(pedido, numped_oracle):
         if not codpro:
             continue
 
-        qtd = int(r.get('qtdabe') or 0)
+        qtd = int(r.get(col_qtd) or 0)
         if qtd <= 0:
             continue
 
@@ -95,64 +106,125 @@ def _importar_itens_do_pedido(pedido, numped_oracle):
     return criados
 
 
-@shared_task
-def sincronizar_pedidos_oracle():
+def _localizar_ou_criar(tipo, numero, codfil, codsnf, cliente, criado_em, frete):
+    """Localiza o documento pela identidade Senior (tipo, codfil, codsnf, numero) ou cria.
+
+    Compat: pedidos importados antes de codfil existir ficaram com codfil=''.
+    Se não houver linha com o codfil exato, adota a linha legada e preenche o codfil
+    em vez de duplicar. Devolve (pedido, criado, atualizado).
     """
-    Importa pedidos com sitPed=1 (Aberto Total) do Senior como Pendente no Postgres.
-    Para cada pedido novo, importa os itens (E120IPD + E075DER + E075PRO).
-    Roda a cada 2 minutos via Celery Beat.
-    """
-    from .oracle import QUERY_PEDIDOS_PENDENTES
+    from django.db import IntegrityError
     from apps.pedidos.models import Pedido
 
-    rows = _oracle_fetch_safe(QUERY_PEDIDOS_PENDENTES)
-    if rows is None:
-        return {'erro': 'falha_oracle'}
-    if not rows:
-        logger.info("sincronizar_pedidos_oracle: nenhuma linha retornada")
-        return {'criados': 0, 'atualizados': 0, 'itens_importados': 0}
+    base = Pedido.objects.filter(tipo=tipo, numero_externo=numero, codsnf=codsnf)
+    pedido = base.filter(codfil=codfil).first()
+    if pedido is None and codfil:
+        pedido = base.filter(codfil='').first()
 
-    logger.info(f"E120PED colunas disponíveis: {list(rows[0].keys())}")
+    if pedido is not None:
+        campos = []
+        if pedido.codfil != codfil:
+            pedido.codfil = codfil
+            campos.append('codfil')
+        if not pedido.cliente and cliente:
+            pedido.cliente = cliente
+            campos.append('cliente')
+        if not pedido.frete and frete:
+            pedido.frete = frete
+            campos.append('frete')
+        if campos:
+            pedido.save(update_fields=campos)
+        return pedido, False, bool(campos)
+
+    try:
+        pedido = Pedido.objects.create(
+            tipo=tipo, numero_externo=numero, codfil=codfil, codsnf=codsnf,
+            cliente=cliente, criado_em=criado_em, frete=frete,
+            status=Pedido.Status.PENDENTE,
+        )
+    except IntegrityError:
+        # sync concorrente (beat + disparo manual) criou primeiro
+        pedido = base.get(codfil=codfil)
+        return pedido, False, False
+    return pedido, True, False
+
+
+def _sincronizar_fonte(tipo, rows, col_numero, col_qtd, query_itens, params_itens):
+    """Importa as linhas de uma fonte (pedidos ou NFs) como Pendente + itens."""
+    from apps.pedidos.models import Pedido
+
     criados = atualizados = itens_importados = 0
-
     for row in rows:
-        numero = str(row.get('numped') or '').strip()
+        numero = str(row.get(col_numero) or '').strip()
         if not numero:
             continue
 
-        cliente = str(
-            row.get('nomcli') or row.get('codcli') or ''
-        ).strip()
-
+        codfil = str(row.get('codfil') or '').strip()
+        codsnf = str(row.get('codsnf') or '').strip() if tipo == Pedido.Tipo.NOTA_FISCAL else ''
+        cliente = str(row.get('nomcli') or row.get('codcli') or '').strip()
+        frete = str(row.get('ciffob') or '').strip().upper()[:1]
         criado_em = _make_aware(row.get('datemi'))
 
-        pedido, created = Pedido.objects.get_or_create(
-            numero_externo=numero,
-            defaults={
-                'cliente': cliente,
-                'criado_em': criado_em,
-                'status': Pedido.Status.PENDENTE,
-            }
+        pedido, created, updated = _localizar_ou_criar(
+            tipo, numero, codfil, codsnf, cliente, criado_em, frete,
         )
 
         if created:
             criados += 1
             try:
-                qtd = _importar_itens_do_pedido(pedido, numero)
+                qtd = _importar_itens(pedido, query_itens, params_itens(numero, codfil, codsnf), col_qtd)
                 itens_importados += qtd
-                logger.info(f"Pedido {numero}: {qtd} item(ns) importado(s)")
+                logger.info(f"{pedido}: {qtd} item(ns) importado(s)")
             except Exception as exc:
-                logger.error(f"Erro importando itens do pedido {numero}: {exc}")
-        elif not pedido.cliente and cliente:
-            pedido.cliente = cliente
-            pedido.save(update_fields=['cliente'])
+                logger.error(f"Erro importando itens de {pedido}: {exc}")
+        elif updated:
             atualizados += 1
 
-    logger.info(
-        f"sincronizar_pedidos_oracle: {criados} criados, {atualizados} atualizados, "
-        f"{itens_importados} itens"
-    )
     return {'criados': criados, 'atualizados': atualizados, 'itens_importados': itens_importados}
+
+
+@shared_task
+def sincronizar_pedidos_oracle():
+    """
+    Importa do Senior como Pendente no Postgres, dentro da janela configurada:
+      - pedidos com sitPed=1 (Aberto Total) — E120PED/E120IPD;
+      - notas fiscais de venda com sitNfv=2 e sem pedido de origem — E140NFV/E140IPV.
+    Para cada documento novo, importa os itens (+ E075DER + E075PRO).
+    Roda a cada 2 minutos via Celery Beat.
+    """
+    from .oracle import (
+        QUERY_PEDIDOS_PENDENTES, QUERY_ITENS_PEDIDO,
+        QUERY_NF_PENDENTES, QUERY_ITENS_NF,
+    )
+    from apps.pedidos.models import Pedido
+
+    janela = _janela_dias()
+    fontes = (
+        ('pedidos', Pedido.Tipo.PEDIDO, QUERY_PEDIDOS_PENDENTES, 'numped', 'qtdabe',
+         QUERY_ITENS_PEDIDO, lambda numero, codfil, codsnf: [numero, codfil]),
+        ('notas_fiscais', Pedido.Tipo.NOTA_FISCAL, QUERY_NF_PENDENTES, 'numnfv', 'qtdfat',
+         QUERY_ITENS_NF, lambda numero, codfil, codsnf: [numero, codfil, codsnf]),
+    )
+
+    resultado = {'janela_dias': janela}
+    for chave, tipo, query_lista, col_numero, col_qtd, query_itens, params_itens in fontes:
+        rows = _oracle_fetch_safe(query_lista, [janela])
+        if rows is None:
+            resultado[chave] = {'erro': 'falha_oracle'}
+            continue
+        if not rows:
+            logger.info(f"sincronizar_pedidos_oracle[{chave}]: nenhuma linha retornada")
+            resultado[chave] = {'criados': 0, 'atualizados': 0, 'itens_importados': 0}
+            continue
+
+        parcial = _sincronizar_fonte(tipo, rows, col_numero, col_qtd, query_itens, params_itens)
+        logger.info(
+            f"sincronizar_pedidos_oracle[{chave}]: {parcial['criados']} criados, "
+            f"{parcial['atualizados']} atualizados, {parcial['itens_importados']} itens"
+        )
+        resultado[chave] = parcial
+
+    return resultado
 
 
 @shared_task
