@@ -185,20 +185,22 @@ UNFOLD = {
     "THEME": None,  # None = segue preferência do navegador (light/dark auto)
     "BORDER_RADIUS": "8px",
     "COLORS": {
-        # Paleta zinc do Tailwind — combina com o frontend
+        # Paleta stone do Tailwind (neutros quentes) — mesma base do frontend
+        # desde o passe visual de 2026-08-28 (frontend/app/globals.css).
         "base": {
-            "50": "250 250 250",
-            "100": "244 244 245",
-            "200": "228 228 231",
-            "300": "212 212 216",
-            "400": "161 161 170",
-            "500": "113 113 122",
-            "600": "82 82 91",
-            "700": "63 63 70",
-            "800": "39 39 42",
-            "900": "24 24 27",
-            "950": "9 9 11",
+            "50": "250 250 249",
+            "100": "245 245 244",
+            "200": "231 229 228",
+            "300": "214 211 209",
+            "400": "168 162 158",
+            "500": "120 113 108",
+            "600": "87 83 78",
+            "700": "68 64 60",
+            "800": "41 37 36",
+            "900": "28 25 23",
+            "950": "12 10 9",
         },
+        # Azul continua como cor de ação — é a dominante nos botões do frontend
         "primary": {
             "50": "239 246 255",
             "100": "219 234 254",
@@ -227,9 +229,24 @@ UNFOLD = {
                         "link": "/django-admin/pedidos/pedido/",
                     },
                     {
+                        "title": "Sequências",
+                        "icon": "format_list_numbered",
+                        "link": "/django-admin/pedidos/sequencia/",
+                    },
+                    {
                         "title": "Volumes",
                         "icon": "inventory_2",
                         "link": "/django-admin/pedidos/volume/",
+                    },
+                    {
+                        "title": "Divergências de barra",
+                        "icon": "barcode_scanner",
+                        "link": "/django-admin/pedidos/divergenciabarra/",
+                    },
+                    {
+                        "title": "Erros de separação",
+                        "icon": "report",
+                        "link": "/django-admin/pedidos/erroseparacao/",
                     },
                 ],
             },
@@ -241,6 +258,16 @@ UNFOLD = {
                         "title": "Usuários",
                         "icon": "person",
                         "link": "/django-admin/core/user/",
+                    },
+                    {
+                        "title": "Separadores",
+                        "icon": "engineering",
+                        "link": "/django-admin/pedidos/separador/",
+                    },
+                    {
+                        "title": "Liberações diárias",
+                        "icon": "event_available",
+                        "link": "/django-admin/pedidos/separadorliberacao/",
                     },
                     {
                         "title": "Marketplaces (congelado)",
@@ -263,6 +290,11 @@ UNFOLD = {
                 "title": "Sistema",
                 "separator": True,
                 "items": [
+                    {
+                        "title": "Configurações",
+                        "icon": "tune",
+                        "link": "/django-admin/core/configuracao/",
+                    },
                     {
                         "title": "Tarefas Celery",
                         "icon": "schedule",
