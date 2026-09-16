@@ -143,7 +143,8 @@ do `.env` local.
 
 - [ ] Lista "atribuídos a mim" do separador (`app/separacao/index.tsx`)
 - [ ] Tela de separação por volumes (`app/separacao/[id].tsx`)
-- [ ] Câmera scanner com `expo-camera` ou `react-native-vision-camera`
+- [x] Câmera scanner com `expo-camera` (ícone na barra do scanner)
+- [x] Leitor de hardware do coletor (Zebra TC21 / DataWedge em modo teclado) — barra sempre focada na tela do pedido, sem teclado virtual (0.3.4)
 - [ ] Telas dos supervisores (vendas, pátio, separados, não conformes)
 - [ ] Dialog reutilizável estilo SweetAlert (Modal nativo)
 - [ ] Keystore de release própria (hoje o release usa a `debug.keystore`)

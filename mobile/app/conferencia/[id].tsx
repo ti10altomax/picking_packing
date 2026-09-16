@@ -88,6 +88,14 @@ export default function ConferenciaDetalhe() {
   const [codigoInicial, setCodigoInicial] = useState('')
   const [cameraGlobalAberta, setCameraGlobalAberta] = useState(false)
 
+  // Scanner de hardware (Zebra TC21 via DataWedge em modo teclado): um TextInput
+  // sempre focado recebe os caracteres + Enter. Sem teclado virtual
+  // (showSoftInputOnFocus=false). Mesma barra do web — a câmera é o ícone na ponta.
+  const scanRef = useRef<TextInput>(null)
+  const [scanValue, setScanValue] = useState('')
+  const [scanFlash, setScanFlash] = useState<'erro' | null>(null)
+  const [scanMsg, setScanMsg] = useState('')
+
   // Apontamento "separado por" (DESIGN.md §2)
   const [liberados, setLiberados] = useState<SeparadorLiberado[]>([])
   const [apontamento, setApontamento] = useState<number | 'nao_identificado' | null>(null)
@@ -262,13 +270,12 @@ export default function ConferenciaDetalhe() {
     }
   }
 
-  // Scanner global da lista — bipou um código, busca o item correspondente
+  // Scanner global da lista — bipou um código (leitor ou câmera), busca o item
   function processarCodigoLido(cod: string) {
     setCameraGlobalAberta(false)
     if (!pedido) return
     if (!volumeAtivo) {
-      setErro('Crie um volume antes de bipar')
-      Vibration.vibrate([0, 100, 50, 100])
+      falhaScan('Crie um volume antes de bipar')
       return
     }
     const item = pedido.itens.find(
@@ -278,13 +285,45 @@ export default function ConferenciaDetalhe() {
         (i.ean === cod || i.sku === cod),
     )
     if (item) {
+      setScanFlash(null)
+      setScanMsg('')
       setCodigoInicial(cod)
       setItemSelecionado(item)
     } else {
-      setErro(`Código ${cod} não corresponde a nenhum item pendente`)
-      Vibration.vibrate([0, 100, 50, 100])
+      falhaScan(`${cod} não bate com nenhum item pendente`)
     }
   }
+
+  // Barra fica vermelha + vibra; volta ao normal sozinha
+  const scanFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  function falhaScan(msg: string) {
+    setScanFlash('erro')
+    setScanMsg(msg)
+    Vibration.vibrate([0, 100, 50, 100])
+    if (scanFlashTimer.current) clearTimeout(scanFlashTimer.current)
+    scanFlashTimer.current = setTimeout(() => { setScanFlash(null); setScanMsg('') }, 2500)
+  }
+
+  // Enter do leitor (ou submit) — consome o que foi digitado na barra
+  function handleScan() {
+    const cod = scanValue.trim()
+    setScanValue('')
+    if (!cod) return
+    processarCodigoLido(cod)
+  }
+
+  // Re-foca a barra do scanner sempre que nenhum modal estiver aberto.
+  // Os modais (item, volume, NC, separado-por, concluir, câmera) têm os próprios
+  // inputs; quando fecham, o leitor volta a alimentar a barra sem toque.
+  const algumModalAberto =
+    !!itemSelecionado || modalNovoVolume || modalNaoConforme
+    || modalSeparadoPor || modalConcluir || cameraGlobalAberta
+  useEffect(() => {
+    if (loading || algumModalAberto) return
+    if (pedido?.status !== 'conferindo' || !volumeAtivo) return
+    const t = setTimeout(() => scanRef.current?.focus(), 120)
+    return () => clearTimeout(t)
+  }, [loading, algumModalAberto, pedido?.status, volumeAtivo?.id])
 
   // -------------------------------------------------------------------------
   // Render
@@ -402,15 +441,47 @@ export default function ConferenciaDetalhe() {
         </Pressable>
       </View>
 
-      {/* Botão grande de bipar — abre câmera direto, scanner global */}
-      {volumeAtivo ? (
-        <Pressable
-          onPress={() => setCameraGlobalAberta(true)}
-          className="mx-4 mt-3 bg-zinc-900 active:bg-zinc-800 border-2 border-zinc-700 rounded-xl h-14 flex-row items-center justify-center gap-2"
+      {/* Barra do scanner — leitor de hardware digita aqui; ícone abre a câmera */}
+      {volumeAtivo && pedido.status === 'conferindo' ? (
+        <View
+          className={`mx-4 mt-3 rounded-xl border-2 h-14 flex-row items-center pl-3 pr-1 ${
+            scanFlash === 'erro'
+              ? 'border-red-500 bg-red-500/15'
+              : 'border-zinc-700 bg-zinc-900'
+          }`}
         >
-          <Text className="text-2xl">📷</Text>
-          <Text className="text-white font-bold text-base">Bipar código de barras</Text>
-        </Pressable>
+          <Text className={`text-lg mr-2 ${scanFlash === 'erro' ? 'text-red-400' : 'text-zinc-400'}`}>⌥</Text>
+          <TextInput
+            ref={scanRef}
+            value={scanValue}
+            onChangeText={setScanValue}
+            onSubmitEditing={handleScan}
+            submitBehavior="submit"
+            showSoftInputOnFocus={false}
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="off"
+            importantForAutofill="no"
+            placeholder={scanMsg || 'Bipe o código…'}
+            placeholderTextColor={scanFlash === 'erro' ? '#f87171' : '#71717a'}
+            onBlur={() => {
+              // Toque em botão da tela não pode desarmar o leitor
+              if (!algumModalAberto && pedido.status === 'conferindo') {
+                setTimeout(() => scanRef.current?.focus(), 80)
+              }
+            }}
+            className={`flex-1 h-14 text-base font-mono tracking-wider ${
+              scanFlash === 'erro' ? 'text-red-300' : 'text-white'
+            }`}
+          />
+          <Pressable
+            onPress={() => setCameraGlobalAberta(true)}
+            className="w-12 h-12 items-center justify-center rounded-lg active:bg-zinc-800"
+            accessibilityLabel="Bipar com a câmera"
+          >
+            <Text className={`text-xl ${scanFlash === 'erro' ? 'text-red-400' : 'text-emerald-400'}`}>📷</Text>
+          </Pressable>
+        </View>
       ) : null}
 
       {/* Lista de volumes (acordeão) */}
@@ -1063,19 +1134,30 @@ function ModalBipar({
   const [cameraAberta, setCameraAberta] = useState(false)
   const codigoRef = useRef<TextInput>(null)
   const qtdRef = useRef<TextInput>(null)
+  // Captura invisível do leitor de hardware: fica focada sem teclado virtual.
+  // Os campos visíveis (qtd, código) só abrem o teclado quando tocados —
+  // no coletor quase sempre se usa +/- e o gatilho, não o teclado.
+  const capturaRef = useRef<TextInput>(null)
+  const [captura, setCaptura] = useState('')
   const restante = item.qtd_pedida - item.qtd_separada
   const qtdNum = Number(qtd) || 0
 
   useEffect(() => {
-    // Se veio com código preenchido (scanner da lista), foca direto na qtd
-    setTimeout(() => {
-      if (codigoInicial) qtdRef.current?.focus()
-      else codigoRef.current?.focus()
-    }, 200)
-  }, [codigoInicial])
+    const t = setTimeout(() => capturaRef.current?.focus(), 250)
+    return () => clearTimeout(t)
+  }, [])
 
-  async function enviar() {
-    const cod = codigo.trim()
+  // Leitor bipou dentro do modal: assume o código e confirma com a qtd atual
+  function aoCapturar() {
+    const cod = captura.trim()
+    setCaptura('')
+    if (!cod) return
+    setCodigo(cod)
+    enviar(cod)
+  }
+
+  async function enviar(codOverride?: string) {
+    const cod = (codOverride ?? codigo).trim()
     if (!cod || enviando) return
     if (qtdNum < 1) {
       setMensagem('Quantidade inválida')
@@ -1115,7 +1197,8 @@ function ModalBipar({
         setTipoMsg('erro')
       }
       setCodigo('')
-      setTimeout(() => codigoRef.current?.focus(), 80)
+      // Leitor continua armado pra tentar de novo, sem subir o teclado
+      setTimeout(() => capturaRef.current?.focus(), 80)
     } finally {
       setEnviando(false)
     }
@@ -1184,6 +1267,20 @@ function ModalBipar({
             </Pressable>
           </View>
 
+          {/* Captura do leitor de hardware — invisível, sem teclado */}
+          <TextInput
+            ref={capturaRef}
+            value={captura}
+            onChangeText={setCaptura}
+            onSubmitEditing={aoCapturar}
+            submitBehavior="submit"
+            showSoftInputOnFocus={false}
+            autoCapitalize="none"
+            autoCorrect={false}
+            caretHidden
+            style={{ position: 'absolute', opacity: 0, height: 1, width: 1, top: 0, left: 0 }}
+          />
+
           <Text className="text-xs text-ink-muted mb-1">Código de barras</Text>
           <View className="flex-row items-center bg-zinc-900 border-2 border-zinc-700 rounded-xl mb-2 pr-2">
             <TextInput
@@ -1194,7 +1291,7 @@ function ModalBipar({
               placeholderTextColor="#52525b"
               autoCapitalize="none"
               autoCorrect={false}
-              onSubmitEditing={enviar}
+              onSubmitEditing={() => enviar()}
               className="flex-1 h-14 px-4 text-white font-mono tracking-wider text-base"
             />
             <Pressable
@@ -1210,7 +1307,7 @@ function ModalBipar({
           ) : null}
 
           <Pressable
-            onPress={enviar}
+            onPress={() => enviar()}
             disabled={!codigo.trim() || enviando}
             className={`h-12 rounded-xl items-center justify-center ${
               !codigo.trim() || enviando ? 'bg-blue-500/40' : 'bg-blue-500 active:bg-blue-400'
