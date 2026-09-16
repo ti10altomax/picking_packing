@@ -71,7 +71,8 @@ services:
     depends_on:
       - backend
       - redis
-    command: celery -A config worker -l info
+    # -E: emite task events (necessário pro celery-exporter enxergar as tarefas)
+    command: celery -A config worker -l info -E
 
   celery-beat:
     image: separa-backend:prod
@@ -83,6 +84,32 @@ services:
       - backend
       - redis
     command: celery -A config beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+
+  # ---------------------------------------------------------------------------
+  # Exporters Prometheus — scrapados pelo mp-prometheus (stack de monitoramento
+  # da VM), que entra nesta rede via `separa_default` external. Sem `ports:` de
+  # propósito: só quem está na rede Docker do projeto enxerga os exporters.
+  # ---------------------------------------------------------------------------
+
+  # Tarefas Celery (sync Oracle a cada 2 min, monitorar_faturamento, envio Senior):
+  # estado, duração, falhas, tamanho da fila. Lê os eventos direto do broker.
+  celery-exporter:
+    image: danihodovic/celery-exporter:0.11.3
+    restart: unless-stopped
+    environment:
+      - CE_BROKER_URL=${REDIS_URL}
+    depends_on:
+      - redis
+      - celery
+
+  # Memória usada × maxmemory (256mb), evictions, clientes, hit-rate.
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.66.0-alpine
+    restart: unless-stopped
+    environment:
+      - REDIS_ADDR=${REDIS_URL}
+    depends_on:
+      - redis
 
   frontend:
     build:
