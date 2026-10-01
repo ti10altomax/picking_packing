@@ -13,6 +13,7 @@ const PERFIS_PERMITIDOS = ['supervisor_vendas', 'supervisor_patio', 'admin']
 // Páginas de gestão/relatórios — agrupadas num dropdown pra nav não estourar
 const GESTAO_ITEMS: { href: string; label: string; soPatio?: boolean }[] = [
   { href: '/supervisor/nao-conformes', label: 'Não conformes' },
+  { href: '/supervisor/cancelados', label: 'Cancelados' },
   { href: '/supervisor/divergencias', label: 'Divergências' },
   { href: '/supervisor/fechamentos', label: 'Fechamentos', soPatio: true },
   { href: '/supervisor/erros', label: 'Erros de separação' },

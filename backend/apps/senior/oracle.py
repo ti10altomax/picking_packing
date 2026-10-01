@@ -127,6 +127,27 @@ QUERY_SITPED_POR_NUMEROS = f"""
       AND NUMPED IN ({{placeholders}})
 """
 
+# Situação atual de documentos já importados — detecção de cancelamento (2026-09-30).
+# Pedido cancelado: sitPed=5 · NF cancelada: sitNfv=9 (valores confirmados pelo usuário).
+# O IN vai por número; a identidade completa (filial/série) é conferida no Python.
+# {placeholders} = :1,:2,... (blocos de até 500 — limite do Oracle é 1000 por lista)
+SITPED_CANCELADO = 5
+SITNFV_CANCELADO = 9
+
+QUERY_SITUACAO_PEDIDOS = f"""
+    SELECT codfil, numped, sitped
+    FROM E120PED
+    WHERE codemp = {SENIOR_CODEMP}
+      AND numped IN ({{placeholders}})
+"""
+
+QUERY_SITUACAO_NFS = f"""
+    SELECT codfil, codsnf, numnfv, sitnfv
+    FROM E140NFV
+    WHERE codemp = {SENIOR_CODEMP}
+      AND numnfv IN ({{placeholders}})
+"""
+
 # Notas fiscais de venda fechadas (sitNfv=2) SEM pedido de origem — as que vieram
 # de pedido já passaram (ou vão passar) pela conferência como pedido. A origem é
 # detectada pelos itens (E140IPV.numped). Numeração é por filial + série → ambos

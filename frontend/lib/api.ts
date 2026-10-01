@@ -281,6 +281,13 @@ export const supervisorApi = {
     api.post(`/api/nao-conformes/${id}/cancelar/`).then((r) => r.data),
   retornarNaoConforme: (id: number) =>
     api.post(`/api/nao-conformes/${id}/retornar/`).then((r) => r.data),
+  // Cancelados no Senior (ou pelo supervisor) com conferência a transferir
+  listarCancelados: () =>
+    api.get('/api/cancelados/').then((r) => r.data),
+  buscarDestinosTransferencia: (id: number, q: string) =>
+    api.get(`/api/cancelados/${id}/destinos/`, { params: { q } }).then((r) => r.data),
+  transferirConferencia: (id: number, destinoId: number) =>
+    api.post(`/api/cancelados/${id}/transferir/`, { destino_id: destinoId }).then((r) => r.data),
   listarConferidos: (params: { search?: string; page?: number } = {}) =>
     api.get('/api/pedidos/', {
       params: { status: 'conferido', ...params },

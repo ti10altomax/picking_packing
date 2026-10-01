@@ -13,6 +13,7 @@ type Contadores = {
   liberadosHoje: number | null
   emConferencia: number | null
   naoConformes: number | null
+  cancelados: number | null
   fechamentos: number | null
   conferidos: number | null
 }
@@ -28,6 +29,7 @@ const ICONES: Record<string, React.ReactNode> = {
   separadores: <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm13 10v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />,
   conferencia: <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 12h10" />,
   naoconformes: <path d="M12 9v4m0 4h.01M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.7 3.86a2 2 0 0 0-3.4 0Z" />,
+  cancelados: <path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20ZM4.9 4.9l14.2 14.2" />,
   fechamentos: <path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4" />,
   conferidos: <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14M22 4 12 14.01l-3-3" />,
   erros: <path d="M3 3v18h18M18.7 8l-5.1 5.2-2.8-2.7L7 14.3" />,
@@ -56,7 +58,7 @@ export default function AdminPage() {
   const { user, hydrate } = useAuthStore()
   const [c, setC] = useState<Contadores>({
     pendentes: null, aguardandoSequencia: null, liberadosHoje: null,
-    emConferencia: null, naoConformes: null, fechamentos: null, conferidos: null,
+    emConferencia: null, naoConformes: null, cancelados: null, fechamentos: null, conferidos: null,
   })
 
   useEffect(() => { hydrate() }, [hydrate])
@@ -70,6 +72,10 @@ export default function AdminPage() {
     separadoresApi.liberados().then((d) => definir('liberadosHoje')(d.length)).catch(() => {})
     pedidosApi.listar({ status: 'conferindo' }).then((d) => definir('emConferencia')(contar(d))).catch(() => {})
     supervisorApi.listarNaoConformes().then((d) => definir('naoConformes')(d.length)).catch(() => {})
+    // Só os cancelados com conferência ainda não transferida contam como pendência
+    supervisorApi.listarCancelados()
+      .then((d: { transferido_para: unknown }[]) => definir('cancelados')(d.filter((x) => !x.transferido_para).length))
+      .catch(() => {})
     fechamentosApi.listar().then((d) => definir('fechamentos')(d.length)).catch(() => {})
     supervisorApi.listarConferidos().then((d) => definir('conferidos')(contar(d))).catch(() => {})
   }, [])
@@ -125,6 +131,13 @@ export default function AdminPage() {
       titulo: 'Não conformes', icone: 'naoconformes',
       valor: c.naoConformes,
       alerta: (c.naoConformes ?? 0) > 0,
+      corAlerta: 'text-red-600 dark:text-red-400',
+    },
+    {
+      href: '/supervisor/cancelados',
+      titulo: 'Cancelados', icone: 'cancelados',
+      valor: c.cancelados,
+      alerta: (c.cancelados ?? 0) > 0,
       corAlerta: 'text-red-600 dark:text-red-400',
     },
     {

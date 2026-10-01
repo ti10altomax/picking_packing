@@ -1,6 +1,26 @@
 # Status de implementação — Sistema de separação interna
 
-> Snapshot em **2026-09-16** (último update do dia). Objetivo: amanhã (e nas próximas semanas) você consegue retomar o trabalho sem precisar reler tudo.
+> Snapshot em **2026-09-30** (último update do dia). Objetivo: amanhã (e nas próximas semanas) você consegue retomar o trabalho sem precisar reler tudo.
+
+---
+
+## 2026-09-30 — Cancelamento no Senior + transferência de conferência (ponto 9 da diretoria)
+
+**Contexto.** Reunião com a diretoria trouxe 9 pedidos de mudança (lista e leitura em `docs_pessoais/diretoria-2026-09.html`, fora do git). Primeiro atacado: **NF/pedido cancelado no Senior durante (ou depois) da conferência**, com transferência dos volumes já montados para o documento reemitido. Decisões do usuário: pedido cancelado = `E120PED.sitped = 5`, NF cancelada = `E140NFV.sitnfv = 9`; transferência **sempre confirmada por pessoa** (Sup. Pátio), o Senior não guarda vínculo entre a nota cancelada e a nova.
+
+**Detecção — beat, não tela.** Task nova `monitorar_cancelamentos` (`apps/senior/tasks.py`, molde da antiga `monitorar_faturamento`), a cada **60 s**: pega todo documento em andamento (Selecionado → Não conforme) + Pendentes e Conferidos **dentro da janela do sync**, uma query `IN (...)` por tipo em blocos de 500 (`QUERY_SITUACAO_PEDIDOS` / `QUERY_SITUACAO_NFS`), casa pela identidade completa (filial/série) e chama `cancelar()`. Pendentes fora da janela ficam de fora do beat — o dev tinha 15 mil acumulados (o sync não reconcilia) e a passada completa levava 33 s; achou **1.758 realmente cancelados**. `manage.py monitorar_cancelamentos --completa` faz a passada completa à mão (rodar uma vez após o deploy). Bounded: 914 documentos em 0,6 s.
+
+**Modelo** (`0013`): `Pedido.cancelado_em`, `cancelado_origem` (`senior` | `supervisor`), `status_anterior` (status na hora do cancelamento), `transferido_para` (FK self). `Status.CANCELADO` já existia. Serviço em **`apps/pedidos/cancelamento.py`**: `cancelar()` (preserva volumes/itens/apontamento, loga `cancelado`, recalcula a sequência — Cancelado conta como final), `comparar_itens()` (diff por SKU: `igual` / `qtd_diferente` / `so_na_origem` / `so_no_destino`), `transferir()` (atômico; só com itens 100% iguais; move `Volume.pedido`, re-aponta `VolumeItem.pedido_item` por SKU, copia `qtd_separada`, conferente, separador, tempos, sequência e o `status_anterior`; zera os campos do WS Senior no destino; logs `conferencia_transferida` / `conferencia_recebida`; reabre a sequência se ela tinha concluído). `cancelar_nao_conforme` passou a usar o mesmo serviço (origem `supervisor`).
+
+**Bloqueio no servidor é a garantia; o aviso é UX.** `_guard_pedido()` em `conferencia/views.py` substituiu a checagem de ownership repetida em 9 endpoints e devolve **`409 {resultado: 'pedido_cancelado'}`** para documento cancelado — inclusive em `bipar`, que não checava status nenhum (pendência antiga). `GET detalhe` não bloqueia (é por ele que a tela descobre). `liberar_divergencia` e `fechar_sobra` com checagem explícita. Endpoints novos: `GET /api/cancelados/` (só cancelados com `status_anterior` ≥ Atribuído; não transferidos primeiro), `GET /api/cancelados/<id>/destinos/?q=` (Pendente/Selecionado por número, já com a comparação de cada candidato), `POST /api/cancelados/<id>/transferir/ {destino_id}` (Sup. Pátio/admin; 409 com o diff quando não bate).
+
+**WebSocket: não agora.** O gargalo é a checagem no Oracle (60 s), não a entrega ao aparelho. Web e mobile fazem **polling do detalhe a cada 15 s** na tela do pedido (silencioso em falha de rede) e tratam o 409 em toda ação → **tela bloqueante vermelha** "Cancelado no Senior — pare a conferência" (som/vibração, único botão "Voltar à lista"). Reavaliar quando os pontos 1 (parar nota por pessoa) e 8 (liberação com mensageria) forem especificados — decisão única para os três.
+
+**Web**: `/supervisor/cancelados` (Gestão) com modal "Transferir conferência" (busca por número → candidatos com badge "itens batem / diferentes" → escolheu um, os outros somem e a tabela de comparação aparece embaixo → confirmação). Card no dashboard do admin. **Mobile**: paridade (`app/supervisor/cancelados.tsx`, aba na `SupervisorNav`, card no admin) + polling e `TelaCancelada` em `app/conferencia/[id].tsx`. `tsc` limpo nos dois. **APK 0.4.0** (versionCode 9), build local.
+
+**Validação**: cenário e2e via `APIClient` no container (32 checagens: fluxo real até em conferência com volume → cancelar → 409 em bipar/volume/concluir → some da lista → transferência recusa itens diferentes e Sup. Vendas, aceita gêmeo, move volume/VolumeItem/qtd_separada, reabre sequência → conferente bipa no documento novo) e no navegador (polling trocou a tela em ≤15 s; transferência pela UI).
+
+- **Pendente**: deploy (migration 0013 + beat novo + `--completa` uma vez); sideload do APK 0.4.0 (substitui 0.3.4, ainda não distribuído); os outros 8 pontos da diretoria seguem sem prioridade.
 
 ---
 
@@ -103,7 +123,9 @@ Os módulos antigos (etiquetagem, impressoras, VTEX, embalagempfa) **continuam n
 ### Estados do pedido (escopo atual)
 
 ```
-Pendente → Selecionado → Atribuído → Em separação → Separado | Não conforme
+Pendente → Selecionado → Atribuído → Em conferência → Conferido | Aguardando fechamento | Não conforme
+                                                                          ↘ Cancelado (Senior sitPed=5 / sitNfv=9, ou supervisor)
+                                                                             → transferência de conferência para o documento reemitido
 ```
 
 Estados antigos (`Faturado`, `Aguardando etiquetar`, `Concluído`) seguem no enum mas não são usados no fluxo atual.

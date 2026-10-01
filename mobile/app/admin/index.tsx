@@ -14,13 +14,14 @@ type Contadores = {
   liberadosHoje: number | null
   emConferencia: number | null
   naoConformes: number | null
+  cancelados: number | null
   fechamentos: number | null
   conferidos: number | null
 }
 
 const VAZIO: Contadores = {
   pendentes: null, aguardandoSequencia: null, liberadosHoje: null,
-  emConferencia: null, naoConformes: null, fechamentos: null, conferidos: null,
+  emConferencia: null, naoConformes: null, cancelados: null, fechamentos: null, conferidos: null,
 }
 
 function contar(data: { count?: number } | unknown[]): number {
@@ -51,6 +52,9 @@ export default function AdminHome() {
       separadoresApi.liberados().then((d) => definir('liberadosHoje')(d.length)),
       pedidosApi.listar({ status: 'conferindo' }).then((d) => definir('emConferencia')(contar(d))),
       supervisorApi.listarNaoConformes().then((d) => definir('naoConformes')(contar(d))),
+      // Só os cancelados com conferência ainda não transferida contam como pendência
+      supervisorApi.listarCancelados().then((d: { transferido_para: unknown }[]) =>
+        definir('cancelados')(d.filter((x) => !x.transferido_para).length)),
       fechamentosApi.listar().then((d) => definir('fechamentos')(d.length)),
       supervisorApi.listarConferidos().then((d) => definir('conferidos')(contar(d))),
     ]).finally(() => setRefreshing(false))
@@ -91,6 +95,10 @@ export default function AdminHome() {
     {
       href: '/supervisor/nao-conformes', titulo: 'Não conformes',
       valor: c.naoConformes, alerta: (c.naoConformes ?? 0) > 0, cor: 'text-red-400',
+    },
+    {
+      href: '/supervisor/cancelados', titulo: 'Cancelados',
+      valor: c.cancelados, alerta: (c.cancelados ?? 0) > 0, cor: 'text-red-400',
     },
     {
       href: '/supervisor/conferidos', titulo: 'Conferidos',

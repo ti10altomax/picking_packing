@@ -52,12 +52,20 @@ type Pedido = {
   tipo?: string
   frete?: string
   cliente: string
-  status: 'atribuido' | 'conferindo' | 'conferido' | 'nao_conforme'
+  status: 'atribuido' | 'conferindo' | 'conferido' | 'nao_conforme' | 'cancelado'
+  cancelado_em?: string | null
   qtd_itens: number
   separado_por: { id: number; nome: string; apelido: string } | null
   separador_nao_identificado: boolean
   itens: ItemPedido[]
   volumes: Volume[]
+}
+
+// 409 `pedido_cancelado`: o servidor bloqueou porque o documento foi cancelado no
+// Senior. Quem detecta é o beat; a tela descobre aqui ou no polling do detalhe.
+function foiCancelado(err: unknown) {
+  const e = err as { response?: { status?: number; data?: { resultado?: string } } }
+  return e?.response?.status === 409 && e?.response?.data?.resultado === 'pedido_cancelado'
 }
 
 const MOTIVOS = [
@@ -101,12 +109,13 @@ export default function ConferenciaDetalhe() {
   const [apontamento, setApontamento] = useState<number | 'nao_identificado' | null>(null)
   const [modalSeparadoPor, setModalSeparadoPor] = useState(false)
 
-  const carregar = useCallback(async () => {
+  const carregar = useCallback(async (silencioso = false) => {
     try {
       const data: Pedido = await conferenciaApi.detalhe(pedidoId)
       setPedido(data)
     } catch {
-      setErro('Erro ao carregar pedido')
+      // No polling, uma falha de rede passageira (wifi do galpão) não vira aviso
+      if (!silencioso) setErro('Erro ao carregar pedido')
     } finally {
       setLoading(false)
     }
@@ -118,6 +127,23 @@ export default function ConferenciaDetalhe() {
     const t = setInterval(() => setSegundos((s) => s + 1), 1000)
     return () => clearInterval(t)
   }, [])
+
+  // Polling do detalhe: é por aqui que a tela descobre um cancelamento no Senior
+  // (o beat marca o pedido a cada 60 s). Sem WebSocket de propósito.
+  const cancelado = pedido?.status === 'cancelado'
+  useEffect(() => {
+    if (loading || cancelado) return
+    const t = setInterval(() => carregar(true), 15_000)
+    return () => clearInterval(t)
+  }, [loading, cancelado, carregar])
+
+  // Qualquer ação recusada por cancelamento: recarrega (o status vira `cancelado`
+  // e a tela troca pelo bloqueio). Devolve true se tratou.
+  async function tratarCancelado(err: unknown) {
+    if (!foiCancelado(err)) return false
+    await carregar()
+    return true
+  }
 
   // Lista de separadores liberados hoje — usada no iniciar e no modal de troca
   useEffect(() => {
@@ -162,6 +188,7 @@ export default function ConferenciaDetalhe() {
       setErro('')
       await carregar()
     } catch (err: unknown) {
+      if (await tratarCancelado(err)) return
       const msg = (err as { response?: { data?: { erro?: string } } })?.response?.data?.erro
       setErro(msg ?? 'Erro ao iniciar conferência')
     }
@@ -176,6 +203,7 @@ export default function ConferenciaDetalhe() {
       )
       await carregar()
     } catch (err: unknown) {
+      if (await tratarCancelado(err)) return
       const msg = (err as { response?: { data?: { erro?: string } } })?.response?.data?.erro
       setErro(msg ?? 'Erro ao alterar o apontamento')
     }
@@ -186,7 +214,8 @@ export default function ConferenciaDetalhe() {
     try {
       await conferenciaApi.criarVolume(pedidoId, tipo, identificador)
       await carregar()
-    } catch {
+    } catch (err: unknown) {
+      if (await tratarCancelado(err)) return
       setErro('Erro ao criar volume')
     }
   }
@@ -204,6 +233,7 @@ export default function ConferenciaDetalhe() {
       }
       router.replace('/conferencia')
     } catch (e: unknown) {
+      if (await tratarCancelado(e)) return
       const msg = (e as { response?: { data?: { erro?: string } } })?.response?.data?.erro
       await dialog.alert({
         variant: 'danger',
@@ -218,7 +248,8 @@ export default function ConferenciaDetalhe() {
     try {
       await conferenciaApi.marcarNaoConforme(pedidoId, motivo, detalhe)
       router.replace('/conferencia')
-    } catch {
+    } catch (err: unknown) {
+      if (await tratarCancelado(err)) return
       setErro('Erro ao marcar como não conforme')
     }
   }
@@ -240,7 +271,8 @@ export default function ConferenciaDetalhe() {
     try {
       await conferenciaApi.removerVolumeItem(pedidoId, volumeId, volumeItemId)
       await carregar()
-    } catch {
+    } catch (err: unknown) {
+      if (await tratarCancelado(err)) return
       await dialog.alert({
         variant: 'danger',
         title: 'Erro',
@@ -261,6 +293,7 @@ export default function ConferenciaDetalhe() {
       await conferenciaApi.removerVolume(pedidoId, volumeId)
       await carregar()
     } catch (e: unknown) {
+      if (await tratarCancelado(e)) return
       const msg = (e as { response?: { data?: { erro?: string } } })?.response?.data?.erro
       await dialog.alert({
         variant: 'danger',
@@ -343,6 +376,11 @@ export default function ConferenciaDetalhe() {
         <Text className="text-red-400 text-center">{erro || 'Pedido não encontrado.'}</Text>
       </SafeAreaView>
     )
+  }
+
+  // Estado: documento cancelado no Senior — bloqueio total, só volta à lista
+  if (pedido.status === 'cancelado') {
+    return <TelaCancelada pedido={pedido} onVoltar={() => router.replace('/conferencia')} />
   }
 
   // Estado: ainda não iniciou conferência
@@ -610,6 +648,11 @@ export default function ConferenciaDetalhe() {
           codigoInicial={codigoInicial}
           onFechar={() => { setItemSelecionado(null); setCodigoInicial('') }}
           onSucesso={async () => {
+            setItemSelecionado(null)
+            setCodigoInicial('')
+            await carregar()
+          }}
+          onCancelado={async () => {
             setItemSelecionado(null)
             setCodigoInicial('')
             await carregar()
@@ -1115,8 +1158,50 @@ function ModalNovoVolume({
 // Modal — Bipar item
 // -----------------------------------------------------------------------------
 
+// -----------------------------------------------------------------------------
+// Tela bloqueante — documento cancelado no Senior durante a conferência
+// -----------------------------------------------------------------------------
+
+function TelaCancelada({ pedido, onVoltar }: { pedido: Pedido; onVoltar: () => void }) {
+  const insets = useSafeAreaInsets()
+  const vibrou = useRef(false)
+  useEffect(() => {
+    if (vibrou.current) return
+    vibrou.current = true
+    Vibration.vibrate([0, 200, 100, 200, 100, 400])
+  }, [])
+  const doc = pedido.tipo === 'nota_fiscal' ? 'Nota fiscal' : 'Pedido'
+  return (
+    <View className="flex-1 bg-red-600" style={{ paddingTop: insets.top }}>
+      <View className="flex-1 items-center justify-center px-6 py-10">
+        <View className="w-20 h-20 rounded-full bg-white/15 items-center justify-center mb-6">
+          <Text className="text-white text-5xl font-black">!</Text>
+        </View>
+        <Text className="text-red-100 text-xs font-bold uppercase tracking-widest mb-2">Cancelado no Senior</Text>
+        <Text className="text-white text-3xl font-extrabold text-center mb-3">
+          {doc} {pedido.numero_externo}
+        </Text>
+        <Text className="text-white text-lg font-semibold mb-1">Pare a conferência.</Text>
+        <Text className="text-red-100 text-sm text-center max-w-[320px]">
+          Este documento foi cancelado. Deixe as caixas como estão e avise o Supervisor de Pátio —
+          se a nota for reemitida, a conferência pode ser transferida sem desmontar nada.
+        </Text>
+        {!!pedido.cliente && <Text className="text-red-100 text-sm mt-4 text-center">{pedido.cliente}</Text>}
+      </View>
+      <View className="px-4" style={{ paddingBottom: Math.max(insets.bottom, 16) + 8 }}>
+        <Pressable
+          onPress={onVoltar}
+          className="h-14 rounded-2xl bg-white items-center justify-center active:opacity-90"
+        >
+          <Text className="text-red-700 font-bold text-base">Voltar à lista</Text>
+        </Pressable>
+      </View>
+    </View>
+  )
+}
+
 function ModalBipar({
-  item, volumeId, pedidoId, codigoInicial, onFechar, onSucesso,
+  item, volumeId, pedidoId, codigoInicial, onFechar, onSucesso, onCancelado,
 }: {
   item: ItemPedido
   volumeId: number
@@ -1124,6 +1209,7 @@ function ModalBipar({
   codigoInicial?: string
   onFechar: () => void
   onSucesso: () => void
+  onCancelado: () => void
 }) {
   const insets = useSafeAreaInsets()
   const [qtd, setQtd] = useState('1')
@@ -1183,6 +1269,10 @@ function ModalBipar({
       const status = e?.response?.status
       const resultado = e?.response?.data?.resultado
       Vibration.vibrate([0, 100, 50, 100])
+      if (foiCancelado(err)) {
+        onCancelado()
+        return
+      }
       if (status === 409 && resultado === 'codigo_divergente') {
         setMensagem('Código não corresponde ao item escolhido')
         setTipoMsg('erro')

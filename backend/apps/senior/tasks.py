@@ -227,6 +227,105 @@ def sincronizar_pedidos_oracle():
     return resultado
 
 
+def _blocos(lista, tamanho=500):
+    for i in range(0, len(lista), tamanho):
+        yield lista[i:i + tamanho]
+
+
+def _situacoes_no_senior(query, numeros, chave_fn):
+    """Consulta a situação dos números no Oracle em blocos; devolve {chave: situacao}.
+
+    Devolve None se alguma consulta falhar — melhor não cancelar nada do que
+    cancelar com informação parcial.
+    """
+    situacoes = {}
+    for bloco in _blocos(sorted(set(numeros))):
+        placeholders = ','.join(':' + str(i + 1) for i in range(len(bloco)))
+        rows = _oracle_fetch_safe(query.format(placeholders=placeholders), bloco)
+        if rows is None:
+            return None
+        for r in rows:
+            situacoes[chave_fn(r)] = r
+    return situacoes
+
+
+@shared_task
+def monitorar_cancelamentos(passada_completa: bool = False):
+    """
+    Detecta documentos cancelados no Senior depois de importados (2026-09-30).
+      - pedido: E120PED.sitPed = 5
+      - nota fiscal: E140NFV.sitNfv = 9
+    Olha todo documento em andamento (Selecionado … Não conforme), mais Pendentes e
+    Conferidos dentro da janela do sync. Quem foi cancelado vira Cancelado aqui,
+    preservando volumes e progresso para a transferência (apps.pedidos.cancelamento).
+    Roda a cada 60 s via Celery Beat. A tela do conferente descobre pelo polling do
+    detalhe e pelo 409 `pedido_cancelado` em qualquer ação.
+
+    Pendentes fora da janela são ignorados no beat — são milhares acumulados (o sync
+    não reconcilia) e a checagem levaria dezenas de segundos. `passada_completa=True`
+    inclui todos; usar à mão (`manage.py monitorar_cancelamentos --completa`).
+    """
+    from .oracle import (
+        QUERY_SITUACAO_PEDIDOS, QUERY_SITUACAO_NFS, SITPED_CANCELADO, SITNFV_CANCELADO,
+    )
+    from apps.pedidos.models import Pedido
+    from apps.pedidos.cancelamento import STATUS_MONITORADOS, cancelar
+
+    limite = timezone.now() - dt.timedelta(days=max(_janela_dias(), 1))
+    qs = Pedido.objects.filter(status__in=STATUS_MONITORADOS).select_related('sequencia')
+    qs = qs.exclude(status=Pedido.Status.CONFERIDO, conferido_em__lt=limite)
+    if not passada_completa:
+        qs = qs.exclude(status=Pedido.Status.PENDENTE, criado_em__lt=limite)
+    candidatos = list(qs)
+    if not candidatos:
+        return {'verificados': 0, 'cancelados': 0}
+
+    def _s(v):
+        return str(v or '').strip()
+
+    fontes = {
+        Pedido.Tipo.PEDIDO: (
+            QUERY_SITUACAO_PEDIDOS,
+            lambda r: (_s(r.get('codfil')), '', _s(r.get('numped'))),
+            lambda r: _s(r.get('sitped')) == str(SITPED_CANCELADO),
+        ),
+        Pedido.Tipo.NOTA_FISCAL: (
+            QUERY_SITUACAO_NFS,
+            lambda r: (_s(r.get('codfil')), _s(r.get('codsnf')), _s(r.get('numnfv'))),
+            lambda r: _s(r.get('sitnfv')) == str(SITNFV_CANCELADO),
+        ),
+    }
+
+    cancelados = 0
+    resultado = {'verificados': len(candidatos)}
+    for tipo, (query, chave_fn, cancelado_fn) in fontes.items():
+        do_tipo = [p for p in candidatos if p.tipo == tipo]
+        if not do_tipo:
+            continue
+        situacoes = _situacoes_no_senior(query, [p.numero_externo for p in do_tipo], chave_fn)
+        if situacoes is None:
+            resultado[tipo] = 'falha_oracle'
+            continue
+        for pedido in do_tipo:
+            # Compat: linhas antigas sem codfil casam só pelo número
+            row = situacoes.get((pedido.codfil, pedido.codsnf, pedido.numero_externo))
+            if row is None and not pedido.codfil:
+                row = next(
+                    (r for k, r in situacoes.items() if k[1] == pedido.codsnf and k[2] == pedido.numero_externo),
+                    None,
+                )
+            if row is None or not cancelado_fn(row):
+                continue
+            situacao = _s(row.get('sitped') or row.get('sitnfv'))
+            cancelar(pedido, Pedido.OrigemCancelamento.SENIOR, payload={'situacao_senior': situacao})
+            cancelados += 1
+            logger.info(f"{pedido} cancelado no Senior (situação {situacao}) → status CANCELADO")
+
+    resultado['cancelados'] = cancelados
+    logger.info(f"monitorar_cancelamentos: {len(candidatos)} verificados, {cancelados} cancelados")
+    return resultado
+
+
 @shared_task
 def monitorar_faturamento():
     """

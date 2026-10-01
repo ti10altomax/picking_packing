@@ -144,6 +144,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'apps.senior.tasks.sincronizar_pedidos_oracle',
         'schedule': 120.0,  # a cada 2 minutos — importa sitPed=1 como Pendente (CODEMP=1)
     },
+    'monitorar-cancelamentos': {
+        'task': 'apps.senior.tasks.monitorar_cancelamentos',
+        'schedule': 60.0,  # documentos cancelados no Senior (sitPed=5 / sitNfv=9) → Cancelado
+    },
     # CONGELADO — escopo antigo (Senior+CLICK+VTEX). Códigos preservados em apps/senior/tasks.py
     # e apps/vtex/tasks.py. Reativar removendo o comentário se voltar ao fluxo de marketplace.
     # 'monitorar-faturamento': {

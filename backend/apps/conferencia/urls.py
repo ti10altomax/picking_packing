@@ -26,4 +26,9 @@ urlpatterns = [
     path('nao-conformes/', views.listar_nao_conformes, name='listar_nao_conformes'),
     path('nao-conformes/<int:pk>/cancelar/', views.cancelar_nao_conforme, name='cancelar_nao_conforme'),
     path('nao-conformes/<int:pk>/retornar/', views.retornar_nao_conforme, name='retornar_nao_conforme'),
+
+    # Lista de Cancelados + transferência de conferência para o documento reemitido
+    path('cancelados/', views.listar_cancelados, name='listar_cancelados'),
+    path('cancelados/<int:pk>/destinos/', views.buscar_destino_transferencia, name='buscar_destino_transferencia'),
+    path('cancelados/<int:pk>/transferir/', views.transferir_conferencia, name='transferir_conferencia'),
 ]

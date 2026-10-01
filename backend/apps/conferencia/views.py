@@ -7,6 +7,9 @@ from rest_framework.generics import get_object_or_404
 from rest_framework.response import Response
 
 from apps.core.models import Configuracao
+from apps.pedidos.cancelamento import (
+    STATUS_DESTINO_TRANSFERENCIA, TransferenciaInvalida, cancelar, comparar_itens, transferir,
+)
 from apps.pedidos.models import (
     DivergenciaBarra, ErroSeparacao, Pedido, PedidoItem, PedidoLog,
     Separador, Sequencia, Volume, VolumeItem,
@@ -34,6 +37,33 @@ def _exige_supervisor_ou_admin(request):
 
 
 STATUS_PENDENTES = (Pedido.Status.ATRIBUIDO, Pedido.Status.CONFERINDO)
+
+
+def _resposta_cancelado(pedido):
+    """409 com `resultado: pedido_cancelado` — o cliente troca a tela por um bloqueio."""
+    return Response(
+        {
+            'resultado': 'pedido_cancelado',
+            'erro': 'documento cancelado no Senior — a conferência deve ser interrompida',
+            'cancelado_em': pedido.cancelado_em,
+            'cancelado_origem': pedido.cancelado_origem,
+        },
+        status=http_status.HTTP_409_CONFLICT,
+    )
+
+
+def _guard_pedido(request, pedido, bloquear_cancelado=True):
+    """Ownership (conferente do pedido ou admin) + bloqueio de documento cancelado.
+
+    O bloqueio no servidor é a garantia real: mesmo sem nenhum aviso chegar ao
+    coletor, o conferente não passa do próximo bipe. O GET de detalhe não bloqueia,
+    porque é por ele (polling) que a tela descobre o cancelamento.
+    """
+    if pedido.conferente_id != request.user.id and request.user.perfil != 'admin':
+        return Response({'erro': 'pedido não atribuído a você'}, status=http_status.HTTP_403_FORBIDDEN)
+    if bloquear_cancelado and pedido.status == Pedido.Status.CANCELADO:
+        return _resposta_cancelado(pedido)
+    return None
 
 
 def _minhas_sequencias(user):
@@ -152,6 +182,10 @@ def _serializar_pedido(p: Pedido, com_volumes: bool = False) -> dict:
             if p.separado_por else None
         ),
         'separador_nao_identificado': p.separador_nao_identificado,
+        'cancelado_em': p.cancelado_em,
+        'cancelado_origem': p.cancelado_origem,
+        'status_anterior': p.status_anterior,
+        'transferido_para_id': p.transferido_para_id,
         'qtd_itens': len(itens),
         'percent_conferido': percent,
         'itens': [
@@ -233,8 +267,9 @@ def detalhe(request, pk):
         Pedido.objects.select_related('separado_por', 'sequencia').prefetch_related('itens', 'volumes__itens'),
         pk=pk,
     )
-    if pedido.conferente_id != request.user.id and request.user.perfil != 'admin':
-        return Response({'erro': 'pedido não atribuído a você'}, status=http_status.HTTP_403_FORBIDDEN)
+    err = _guard_pedido(request, pedido, bloquear_cancelado=False)
+    if err:
+        return err
 
     return Response(_serializar_pedido(pedido, com_volumes=True))
 
@@ -250,8 +285,9 @@ def iniciar(request, pk):
         return err
 
     pedido = get_object_or_404(Pedido, pk=pk)
-    if pedido.conferente_id != request.user.id and request.user.perfil != 'admin':
-        return Response({'erro': 'pedido não atribuído a você'}, status=http_status.HTTP_403_FORBIDDEN)
+    err = _guard_pedido(request, pedido)
+    if err:
+        return err
 
     if pedido.status == Pedido.Status.CONFERINDO:
         return Response({'ok': True, 'ja_iniciado': True})
@@ -313,8 +349,9 @@ def alterar_separado_por(request, pk):
         return err
 
     pedido = get_object_or_404(Pedido, pk=pk)
-    if pedido.conferente_id != request.user.id and request.user.perfil != 'admin':
-        return Response({'erro': 'pedido não atribuído a você'}, status=http_status.HTTP_403_FORBIDDEN)
+    err = _guard_pedido(request, pedido)
+    if err:
+        return err
 
     if pedido.status != Pedido.Status.CONFERINDO:
         return Response(
@@ -364,8 +401,9 @@ def criar_volume(request, pk):
         return err
 
     pedido = get_object_or_404(Pedido, pk=pk)
-    if pedido.conferente_id != request.user.id and request.user.perfil != 'admin':
-        return Response({'erro': 'pedido não atribuído a você'}, status=http_status.HTTP_403_FORBIDDEN)
+    err = _guard_pedido(request, pedido)
+    if err:
+        return err
 
     if pedido.status != Pedido.Status.CONFERINDO:
         # A conferência precisa ser iniciada antes (apontando quem separou).
@@ -405,8 +443,9 @@ def bipar(request, pk):
         return err
 
     pedido = get_object_or_404(Pedido, pk=pk)
-    if pedido.conferente_id != request.user.id and request.user.perfil != 'admin':
-        return Response({'erro': 'pedido não atribuído a você'}, status=http_status.HTTP_403_FORBIDDEN)
+    err = _guard_pedido(request, pedido)
+    if err:
+        return err
 
     item_id = request.data.get('item_id')
     qtd = request.data.get('qtd')
@@ -497,8 +536,9 @@ def remover_volume_item(request, pk, volume_id, volume_item_id):
         return err
 
     pedido = get_object_or_404(Pedido, pk=pk)
-    if pedido.conferente_id != request.user.id and request.user.perfil != 'admin':
-        return Response({'erro': 'pedido não atribuído a você'}, status=http_status.HTTP_403_FORBIDDEN)
+    err = _guard_pedido(request, pedido)
+    if err:
+        return err
 
     if pedido.status != Pedido.Status.CONFERINDO:
         return Response(
@@ -561,8 +601,9 @@ def remover_volume(request, pk, volume_id):
         return err
 
     pedido = get_object_or_404(Pedido, pk=pk)
-    if pedido.conferente_id != request.user.id and request.user.perfil != 'admin':
-        return Response({'erro': 'pedido não atribuído a você'}, status=http_status.HTTP_403_FORBIDDEN)
+    err = _guard_pedido(request, pedido)
+    if err:
+        return err
 
     if pedido.status != Pedido.Status.CONFERINDO:
         return Response(
@@ -667,8 +708,9 @@ def concluir(request, pk):
         Pedido.objects.select_related('sequencia', 'separado_por').prefetch_related('itens', 'volumes'),
         pk=pk,
     )
-    if pedido.conferente_id != request.user.id and request.user.perfil != 'admin':
-        return Response({'erro': 'pedido não atribuído a você'}, status=http_status.HTTP_403_FORBIDDEN)
+    err = _guard_pedido(request, pedido)
+    if err:
+        return err
 
     if pedido.status != Pedido.Status.CONFERINDO:
         return Response(
@@ -749,8 +791,9 @@ def marcar_nao_conforme(request, pk):
         return err
 
     pedido = get_object_or_404(Pedido, pk=pk)
-    if pedido.conferente_id != request.user.id and request.user.perfil != 'admin':
-        return Response({'erro': 'pedido não atribuído a você'}, status=http_status.HTTP_403_FORBIDDEN)
+    err = _guard_pedido(request, pedido)
+    if err:
+        return err
 
     motivo = request.data.get('motivo', '').strip()
     detalhe = request.data.get('detalhe', '').strip()
@@ -823,6 +866,8 @@ def liberar_divergencia(request, pk):
         return err
 
     pedido = get_object_or_404(Pedido.objects.prefetch_related('itens', 'volumes'), pk=pk)
+    if pedido.status == Pedido.Status.CANCELADO:
+        return _resposta_cancelado(pedido)
     if pedido.status != Pedido.Status.CONFERINDO:
         return Response(
             {'erro': f'pedido em status "{pedido.status}" — só é possível liberar durante a conferência'},
@@ -1069,6 +1114,8 @@ def fechar_sobra(request, pk):
         Pedido.objects.select_related('sequencia').prefetch_related('volumes'),
         pk=pk,
     )
+    if pedido.status == Pedido.Status.CANCELADO:
+        return _resposta_cancelado(pedido)
     if pedido.status != Pedido.Status.AGUARDANDO_FECHAMENTO:
         return Response(
             {'erro': f'pedido em status "{pedido.status}", esperado "aguardando_fechamento"'},
@@ -1140,15 +1187,10 @@ def cancelar_nao_conforme(request, pk):
             status=http_status.HTTP_400_BAD_REQUEST,
         )
 
-    pedido.status = Pedido.Status.CANCELADO
-    pedido.save(update_fields=['status'])
-    PedidoLog.objects.create(
-        pedido=pedido, usuario=request.user,
-        acao='nao_conforme_cancelado',
+    cancelar(
+        pedido, Pedido.OrigemCancelamento.SUPERVISOR, usuario=request.user,
         payload={'motivo_anterior': pedido.nao_conforme_motivo},
     )
-    if pedido.sequencia:
-        pedido.sequencia.recalcular_status()
     return Response({'ok': True, 'status': pedido.status})
 
 
@@ -1197,3 +1239,147 @@ def retornar_nao_conforme(request, pk):
         payload={'motivo_anterior': motivo_anterior, 'detalhe_anterior': detalhe_anterior},
     )
     return Response({'ok': True, 'status': pedido.status})
+
+
+# ---------------------------------------------------------------------------
+# Lista de Cancelados — transferência de conferência (2026-09-30)
+# Documento cancelado no Senior (ou pelo supervisor) com volumes já montados:
+# o Sup. Pátio aponta o documento reemitido e a conferência é transferida.
+# ---------------------------------------------------------------------------
+
+def _serializar_cancelado(p: Pedido) -> dict:
+    status_label = dict(Pedido.Status.choices)
+    return {
+        'id': p.id,
+        'tipo': p.tipo,
+        'numero_externo': p.numero_externo,
+        'codfil': p.codfil,
+        'codsnf': p.codsnf,
+        'frete': p.frete,
+        'cliente': p.cliente,
+        'criado_em': p.criado_em,
+        'cancelado_em': p.cancelado_em,
+        'cancelado_origem': p.cancelado_origem,
+        'cancelado_origem_label': p.get_cancelado_origem_display() if p.cancelado_origem else '',
+        'status_anterior': p.status_anterior,
+        'status_anterior_label': status_label.get(p.status_anterior, p.status_anterior),
+        'sequencia': {'id': p.sequencia.id, 'numero': p.sequencia.numero} if p.sequencia else None,
+        'conferente': p.conferente.username if p.conferente else None,
+        'separado_por': str(p.separado_por) if p.separado_por else None,
+        'qtd_itens': p.qtd_itens,
+        'qtd_volumes': p.qtd_volumes,
+        'tem_conferencia': p.status_anterior in STATUS_COM_CONFERENCIA,
+        'transferido_para': (
+            {
+                'id': p.transferido_para.id,
+                'tipo': p.transferido_para.tipo,
+                'numero_externo': p.transferido_para.numero_externo,
+                'status': p.transferido_para.status,
+            }
+            if p.transferido_para else None
+        ),
+    }
+
+
+# Status anteriores em que existe conferência (volumes, apontamento) a transferir.
+# Pendente/Selecionado cancelados são só ruído para o supervisor — não entram na lista.
+STATUS_COM_CONFERENCIA = (
+    Pedido.Status.ATRIBUIDO, Pedido.Status.CONFERINDO, Pedido.Status.AGUARDANDO_FECHAMENTO,
+    Pedido.Status.NAO_CONFORME, Pedido.Status.CONFERIDO,
+)
+
+
+@api_view(['GET'])
+def listar_cancelados(request):
+    """Cancelados que tinham conferência; os ainda não transferidos vêm primeiro."""
+    err = _exige_supervisor_ou_admin(request)
+    if err:
+        return err
+
+    qs = (
+        Pedido.objects
+        .filter(status=Pedido.Status.CANCELADO, status_anterior__in=STATUS_COM_CONFERENCIA)
+        .select_related('conferente', 'separado_por', 'sequencia', 'transferido_para')
+        .annotate(
+            qtd_itens=models.Count('itens', distinct=True),
+            qtd_volumes=models.Count('volumes', distinct=True),
+        )
+        .order_by('-cancelado_em')
+    )
+    dados = [_serializar_cancelado(p) for p in qs]
+    dados.sort(key=lambda d: d['transferido_para'] is not None)
+    return Response(dados)
+
+
+@api_view(['GET'])
+def buscar_destino_transferencia(request, pk):
+    """Candidatos a destino: documentos Pendente/Selecionado cujo número contém `q`.
+
+    Devolve a comparação de itens de cada candidato para a tela mostrar se bate.
+    """
+    err = _exige_patio_ou_admin(request)
+    if err:
+        return err
+
+    origem = get_object_or_404(Pedido.objects.prefetch_related('itens'), pk=pk)
+    q = (request.query_params.get('q') or '').strip()
+    if not q:
+        return Response([])
+
+    candidatos = (
+        Pedido.objects
+        .filter(status__in=STATUS_DESTINO_TRANSFERENCIA, numero_externo__icontains=q)
+        .exclude(pk=origem.pk)
+        .prefetch_related('itens')
+        .order_by('-criado_em')[:10]
+    )
+    return Response([
+        {
+            'id': c.id,
+            'tipo': c.tipo,
+            'numero_externo': c.numero_externo,
+            'codfil': c.codfil,
+            'codsnf': c.codsnf,
+            'cliente': c.cliente,
+            'status': c.status,
+            'criado_em': c.criado_em,
+            'comparacao': comparar_itens(origem, c),
+        }
+        for c in candidatos
+    ])
+
+
+@api_view(['POST'])
+def transferir_conferencia(request, pk):
+    """Transfere a conferência do cancelado `pk` para `destino_id` (Sup. Pátio ou admin)."""
+    err = _exige_patio_ou_admin(request)
+    if err:
+        return err
+
+    origem = get_object_or_404(Pedido, pk=pk)
+    destino_id = request.data.get('destino_id')
+    if not destino_id:
+        return Response({'erro': 'destino_id é obrigatório'}, status=http_status.HTTP_400_BAD_REQUEST)
+    destino = get_object_or_404(Pedido, pk=destino_id)
+
+    try:
+        destino = transferir(origem, destino, request.user)
+    except TransferenciaInvalida as exc:
+        return Response(
+            {'erro': exc.erro, 'comparacao': exc.comparacao},
+            status=http_status.HTTP_409_CONFLICT,
+        )
+
+    return Response({
+        'ok': True,
+        'destino': {
+            'id': destino.id,
+            'tipo': destino.tipo,
+            'numero_externo': destino.numero_externo,
+            'status': destino.status,
+            'sequencia': (
+                {'id': destino.sequencia.id, 'numero': destino.sequencia.numero}
+                if destino.sequencia else None
+            ),
+        },
+    })

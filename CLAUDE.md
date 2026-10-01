@@ -8,6 +8,8 @@ Sistema interno para **separação de pedidos no galpão da Altomax**. Não é m
 
 > **Redesenho 2026-08 (aprovado)** — ver `DESIGN.md` para a espec completa. **Fases 1, 2 e 3 implementadas em 2026-08-27**: o papel do sistema agora é o **conferente** (rename completo); o **separador físico** tem cadastro próprio com **liberação diária** e é apontado pelo conferente ao iniciar; o Sup. Pátio monta **sequências** e atribui pedido a pedido dentro delas (atribuição direta antiga desativada — 410), com **trava de sequência ativa** no conferente (regra de liberação configurável em `Configuracao`). **Fase 4 também implementada**: divergência de barra liberada pelo supervisor no web (`DivergenciaBarra`, só por ocorrência), erros de separação (`ErroSeparacao` — sobra com status novo `Aguardando fechamento` e fechamento pelo Sup. Pátio configurável; falta derivada automaticamente no Não Conforme) e relatório produto × volume por sequência. **Fase 5 concluída em 2026-08-28**: tudo em produção (VM 192.168.1.199) e APK 0.2.0 buildado — o redesenho está completo.
 
+> **Cancelamento no Senior + transferência (2026-09-30)** — o beat `monitorar_cancelamentos` (60 s) detecta documento cancelado no Senior (`sitped=5` / `sitnfv=9`) e o marca `Cancelado` preservando volumes e progresso; todo endpoint da conferência devolve `409 pedido_cancelado` e a tela do conferente (polling de 15 s no detalhe, web e mobile) vira um bloqueio vermelho. O Sup. Pátio transfere a conferência para o documento reemitido em `/supervisor/cancelados` (só com itens 100% iguais; sempre confirmado por pessoa). Serviço em `apps/pedidos/cancelamento.py`. Sem WebSocket de propósito — reavaliar junto com os pontos 1 e 8 da diretoria (ver `STATUS.md` 2026-09-30).
+
 > **Notas fiscais (2026-09-09)** — além dos pedidos abertos (E120PED, sitped=1), o sync importa **NFs de venda fechadas sem pedido de origem** (E140NFV sitnfv=2, sem `numped` nos itens). Mesma tabela e mesmo fluxo: `Pedido.tipo` = `pedido` | `nota_fiscal`. Identidade Senior = (`tipo`, `codfil`, `codsnf`, `numero_externo`) — numeração é por filial e, na NF, por série. `CIFFOB` vai para `Pedido.frete` (C = entrega, F = retira, X = sem frete). Janela do sync (pedidos e NFs) em `Configuracao.janela_sync_dias` (default 5, valor de produção). Web e mobile mostram badge **NF** e **Entrega/Retira**; Sup. Vendas filtra por tipo e frete.
 
 Atores principais: **Supervisor de Vendas**, **Supervisor de Pátio**, **Conferente** e **Admin**.
@@ -73,6 +75,9 @@ Pendente
                                 ou
                                 Não conforme       (entra na lista de exceções;
                                                     faltas viram ErroSeparacao)
+  → [Senior cancela]          → Cancelado          (a qualquer momento após Selecionado;
+                                                    volumes ficam; Sup. Pátio pode
+                                                    transferir a conferência ao doc. novo)
 ```
 
 Cores sugeridas no front:
@@ -83,6 +88,7 @@ Cores sugeridas no front:
 - Aguardando fechamento — **roxo/violeta**
 - Conferido — **verde**
 - Não conforme — **vermelho**
+- Cancelado — **vermelho** (tela bloqueante no conferente)
 
 Toda transição grava em `PedidoLog` (quem, quando, ação, payload).
 
@@ -182,7 +188,8 @@ Pedido(id, tipo, numero_externo, codfil, codsnf, frete, status, criado_em, clien
        conferencia_iniciada_em,
        conferido_em,
        senior_atualizado_em, senior_tentativas, senior_ultimo_erro,
-       nao_conforme_em, nao_conforme_motivo, nao_conforme_detalhe)
+       nao_conforme_em, nao_conforme_motivo, nao_conforme_detalhe,
+       cancelado_em, cancelado_origem, status_anterior, transferido_para_id)
 
 PedidoItem(id, pedido_id, sku, descricao, ean, qtd_pedida, qtd_separada, status)
 
@@ -200,7 +207,7 @@ PedidoLog(id, pedido_id, user_id, acao, payload, criado_em)
 
 ## Integrações
 
-- **Senior (Oracle, leitura)** — origem dos pedidos e das NFs sem pedido de origem. Read-only. Celery Beat a cada 2 min (`sincronizar_pedidos_oracle`), janela configurável.
+- **Senior (Oracle, leitura)** — origem dos pedidos e das NFs sem pedido de origem. Read-only. Celery Beat a cada 2 min (`sincronizar_pedidos_oracle`), janela configurável; a cada 60 s `monitorar_cancelamentos` reconsulta `sitped`/`sitnfv` dos documentos em andamento (Pendentes só dentro da janela; `manage.py monitorar_cancelamentos --completa` para a passada total).
   - Critério de "pedido pendente" no Oracle: a definir (filtros, status, empresa).
 - **Senior (SOAP, escrita)** — atualizar volumes após separação.
   - **WS exato a definir.** Tipicamente espera identificador do pedido + lista de volumes (tipo + qtd_itens? a confirmar).
@@ -294,6 +301,8 @@ Não tocar nesses arquivos durante o trabalho do escopo atual. Podem voltar ao f
 - [ ] Critério no Oracle para "pedido pendente" (filtros, status, empresa) — possivelmente diferente do critério usado antes (CODEMP=8 era para o fluxo marketplace)
 - [x] ~~Comportamento quando a separação termina parcial~~ — resolvido no redesenho (`DESIGN.md` §4.2): falta → Não conforme + erro registrado; sobra → conclui com erro registrado e fechamento pelo Sup. Pátio
 - [ ] Lista completa de ações disponíveis na lista de Não Conformes
+- [x] ~~Nota cancelada no Senior durante a conferência~~ — detectada pelo beat, bloqueio no conferente e transferência de conferência pelo Sup. Pátio (2026-09-30)
+- [ ] Demais pontos da diretoria de 2026-09-30 (parar nota com notificação, lista por sequência, prioridade por transportadora, campo de NF no conferente, aviso de qtd, transportadora + CC-e, reimpressão de etiqueta de caixa, liberação com mensageria) — sem prioridade definida
 - [ ] Múltiplos volumes podem ficar abertos simultaneamente, ou só um por vez?
 - [ ] Bipar item para um item já completo (`qtd_separada == qtd_pedida`) — bloqueia ou avisa?
 - [ ] Senior tem cadastro de "embalagem"? Os tipos de volume vêm de lá ou são livres no nosso lado?

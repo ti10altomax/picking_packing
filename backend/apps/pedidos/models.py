@@ -41,6 +41,10 @@ class Pedido(models.Model):
         PEDIDO = 'pedido', 'Pedido'
         NOTA_FISCAL = 'nota_fiscal', 'Nota fiscal'
 
+    class OrigemCancelamento(models.TextChoices):
+        SENIOR = 'senior', 'Cancelado no Senior'       # detectado pelo monitorar_cancelamentos
+        SUPERVISOR = 'supervisor', 'Cancelado pelo supervisor'  # ação na lista de Não Conformes
+
     class Frete(models.TextChoices):
         # CIFFOB do Senior (E120PED / E140NFV)
         CIF = 'C', 'Entrega'      # frete por conta do emitente — sai com transportadora
@@ -108,6 +112,19 @@ class Pedido(models.Model):
         max_length=30, choices=MotivoNaoConforme.choices, blank=True
     )
     nao_conforme_detalhe = models.TextField(blank=True)
+
+    # Cancelamento (2026-09-30). O Senior cancela o documento (sitPed=5 / sitNfv=9) e o
+    # beat detecta; ou o supervisor cancela na lista de Não Conformes. Os volumes e o
+    # progresso ficam preservados para transferência ao documento reemitido.
+    cancelado_em = models.DateTimeField(null=True, blank=True)
+    cancelado_origem = models.CharField(
+        max_length=20, choices=OrigemCancelamento.choices, blank=True
+    )
+    status_anterior = models.CharField(max_length=30, blank=True)  # status na hora do cancelamento
+    transferido_para = models.ForeignKey(
+        'self', null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='transferido_de_set',
+    )
 
     # Senior — atualização pós-conferência (WS a definir)
     senior_atualizado_em = models.DateTimeField(null=True, blank=True)
