@@ -256,11 +256,57 @@ def relatorio(request, pk):
         for v in Volume.objects.filter(pedido__sequencia=seq).values('tipo').annotate(n=Count('id'))
     }
 
+    # Lista de documentos da sequência (ponto 2 da diretoria, 2026-10-01): cabeçalho
+    # do relatório — qual NF/pedido compõe a onda, com quem está, quantos volumes saíram.
+    # Volumes por tipo e unidades por documento vêm de duas agregações, sem N+1.
+    vol_por_doc: dict = {}
+    for v in Volume.objects.filter(pedido__sequencia=seq).values('pedido_id', 'tipo').annotate(n=Count('id')):
+        vol_por_doc.setdefault(v['pedido_id'], {'caixa': 0, 'fardo': 0, 'outro': 0})[v['tipo']] = v['n']
+    unid_por_doc: dict = {}
+    for r in (
+        seq.pedidos
+        .annotate(
+            unid_pedidas=Sum('itens__qtd_pedida', filter=Q(itens__status='ok')),
+            unid_conferidas=Sum('itens__qtd_separada', filter=Q(itens__status='ok')),
+        )
+        .values('id', 'unid_pedidas', 'unid_conferidas')
+    ):
+        unid_por_doc[r['id']] = r
+
+    status_label = dict(Pedido.Status.choices)
+    documentos = []
+    for p in (
+        seq.pedidos
+        .select_related('conferente', 'separado_por', 'transferido_para')
+        .order_by('atribuido_em', 'criado_em')
+    ):
+        vols = vol_por_doc.get(p.id, {'caixa': 0, 'fardo': 0, 'outro': 0})
+        unid = unid_por_doc.get(p.id, {})
+        documentos.append({
+            'id': p.id,
+            'tipo': p.tipo,
+            'numero_externo': p.numero_externo,
+            'frete': p.frete,
+            'frete_label': p.frete_label,
+            'cliente': p.cliente,
+            'status': p.status,
+            'status_label': status_label.get(p.status, p.status),
+            'conferente': p.conferente.username if p.conferente else None,
+            'separado_por': str(p.separado_por) if p.separado_por else None,
+            'separador_nao_identificado': p.separador_nao_identificado,
+            'volumes': {**vols, 'total': sum(vols.values())},
+            'unid_pedidas': unid.get('unid_pedidas') or 0,
+            'unid_conferidas': unid.get('unid_conferidas') or 0,
+            'conferido_em': p.conferido_em,
+            'transferido_para': p.transferido_para.numero_externo if p.transferido_para else None,
+        })
+
     return Response({
         'sequencia': {
             'id': seq.id, 'numero': seq.numero, 'status': seq.status,
             'criado_em': seq.criado_em, 'concluida_em': seq.concluida_em,
         },
+        'documentos': documentos,
         'linhas': linhas,
         'totais': totais,
         'volumes': volumes,

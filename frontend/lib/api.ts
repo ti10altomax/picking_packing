@@ -169,8 +169,28 @@ export const fechamentosApi = {
     api.post(`/api/fechamentos/${pedidoId}/fechar/`).then((r) => r.data),
 }
 
+export type RelatorioDocumento = {
+  id: number
+  tipo: string
+  numero_externo: string
+  frete: string
+  frete_label: string
+  cliente: string
+  status: string
+  status_label: string
+  conferente: string | null
+  separado_por: string | null
+  separador_nao_identificado: boolean
+  volumes: { caixa: number; fardo: number; outro: number; total: number }
+  unid_pedidas: number
+  unid_conferidas: number
+  conferido_em: string | null
+  transferido_para: string | null
+}
+
 export type RelatorioSequencia = {
   sequencia: { id: number; numero: number; status: string; criado_em: string; concluida_em: string | null }
+  documentos: RelatorioDocumento[]
   linhas: { sku: string; descricao: string; caixa: number; fardo: number; outro: number; total: number }[]
   totais: { caixa: number; fardo: number; outro: number; total: number }
   volumes: Record<string, number>

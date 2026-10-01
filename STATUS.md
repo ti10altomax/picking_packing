@@ -1,6 +1,16 @@
 # Status de implementação — Sistema de separação interna
 
-> Snapshot em **2026-09-30** (último update do dia). Objetivo: amanhã (e nas próximas semanas) você consegue retomar o trabalho sem precisar reler tudo.
+> Snapshot em **2026-10-01** (último update do dia). Objetivo: amanhã (e nas próximas semanas) você consegue retomar o trabalho sem precisar reler tudo.
+
+---
+
+## 2026-10-01 — Ponto 9 em produção + lista de documentos no relatório da sequência (ponto 2)
+
+**Ponto 9 em produção.** Deploy normal (migration 0013 aplicada, beat a 60 s verificando ~440 documentos por passada) + `manage.py monitorar_cancelamentos --completa` uma vez: 1.905 Pendentes antigos cancelados, mais 4 restos de teste (3 Selecionados de agosto e 1 "em conferência" de maio). Testado no TC21 com o **APK 0.4.0** contra o Oracle real: pedido que o Senior já tinha cancelado (`sitped=5`), devolvido a Pendente com o `celery-beat` pausado, passou por selecionar → sequência → atribuir → iniciar → volume; beat religado, cancelou em 15 s, tela vermelha apareceu pelo polling sem o conferente tocar em nada. Leitor embutido do TC21 confirmado funcionando pelo usuário — fecha a pendência do 0.3.4. Duas coisas aprendidas no teste: `APIClient` em produção precisa `HTTP_HOST='localhost'` (`ALLOWED_HOSTS`), e a **trava de sequência** esconde o pedido novo se o conferente ainda tem pendência numa sequência mais antiga (funcionou como desenhada; o teste foi movido para a sequência ativa).
+
+**Ponto 2 — lista de documentos no relatório da sequência.** O `GET /api/sequencias/<id>/relatorio/` ganhou `documentos`: cada NF/pedido da sequência com tipo, frete, cliente, status, conferente, separado por (ou "não identificado"), volumes por tipo (`{caixa, fardo, outro, total}`), unidades conferidas/pedidas, `conferido_em` e `transferido_para`. Duas agregações (volumes por documento e unidades por documento), sem N+1; ordem = `atribuido_em, criado_em`. Web: tabela "Documentos (N)" acima da "Produtos por tipo de volume" na página impressa (`/supervisor/patio/[id]/relatorio`), com rodapé de totais; na impressão os chips viram texto e o status perde a cor. Mobile: mesma lista no modal do relatório da sequência. `tsc` limpo nos dois. Não exige APK novo para o web; o mobile pega na próxima build.
+
+- **Pendente**: sideload do 0.4.0 nos demais coletores; os 7 pontos restantes da diretoria (1, 3–8) sem prioridade — 4 deles esperam resposta (ver `docs_pessoais/diretoria-2026-09.html`).
 
 ---
 
@@ -20,7 +30,7 @@
 
 **Validação**: cenário e2e via `APIClient` no container (32 checagens: fluxo real até em conferência com volume → cancelar → 409 em bipar/volume/concluir → some da lista → transferência recusa itens diferentes e Sup. Vendas, aceita gêmeo, move volume/VolumeItem/qtd_separada, reabre sequência → conferente bipa no documento novo) e no navegador (polling trocou a tela em ≤15 s; transferência pela UI).
 
-- **Pendente**: deploy (migration 0013 + beat novo + `--completa` uma vez); sideload do APK 0.4.0 (substitui 0.3.4, ainda não distribuído); os outros 8 pontos da diretoria seguem sem prioridade.
+- ~~Pendente: deploy + `--completa`; sideload do APK 0.4.0~~ — feito em 2026-10-01 (ver seção acima).
 
 ---
 

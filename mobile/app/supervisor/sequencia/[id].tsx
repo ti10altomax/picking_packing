@@ -294,6 +294,38 @@ export default function SequenciaDetalhe() {
                 : ''}
             </Text>
             <ScrollView>
+              {/* Documentos da sequência — ponto 2 da diretoria (2026-10-01) */}
+              <Text className="text-sm font-bold text-ink mb-1">
+                Documentos ({relatorio?.documentos.length ?? 0})
+              </Text>
+              {relatorio?.documentos.map((d) => {
+                const vols = [
+                  d.volumes.caixa && `${d.volumes.caixa} cx`,
+                  d.volumes.fardo && `${d.volumes.fardo} fd`,
+                  d.volumes.outro && `${d.volumes.outro} out`,
+                ].filter(Boolean).join(' · ') || 'sem volumes'
+                return (
+                  <View key={d.id} className={`border-b border-surface-border py-2 ${d.status === 'cancelado' ? 'opacity-60' : ''}`}>
+                    <View className="flex-row items-center gap-2 flex-wrap">
+                      <Text className="text-sm font-bold text-ink">{d.numero_externo}</Text>
+                      <DocBadges tipo={d.tipo} frete={d.frete} />
+                      <Text className="text-xs text-ink-muted">{d.status_label}</Text>
+                      <Text className="ml-auto text-sm text-ink">
+                        {d.unid_conferidas}<Text className="text-ink-subtle">/{d.unid_pedidas}</Text>
+                      </Text>
+                    </View>
+                    <Text className="text-xs text-ink-muted" numberOfLines={1}>{d.cliente || '—'}</Text>
+                    <Text className="text-xs text-ink-subtle">
+                      {vols}
+                      {d.conferente ? ` · ${d.conferente}` : ''}
+                      {d.separado_por ? ` · sep. ${d.separado_por}` : d.separador_nao_identificado ? ' · sep. não identificado' : ''}
+                      {d.transferido_para ? ` · → ${d.transferido_para}` : ''}
+                    </Text>
+                  </View>
+                )
+              })}
+
+              <Text className="text-sm font-bold text-ink mt-4 mb-1">Produtos por tipo de volume</Text>
               {relatorio?.linhas.length === 0 ? (
                 <Text className="text-ink-subtle text-center py-8">Nenhuma bipagem registrada.</Text>
               ) : (
