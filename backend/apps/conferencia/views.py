@@ -1,4 +1,5 @@
 import logging
+import re
 from django.db import models, transaction
 from django.utils import timezone
 from rest_framework import status as http_status
@@ -99,6 +100,90 @@ def _sequencia_ativa(user):
                 return None, anteriores[0]
         return seq, None
     return None, None
+
+
+def _trava_para_pegar(user, seq):
+    """Mensagem de bloqueio da trava de sequência para o conferente PEGAR um pedido
+    de `seq` (ponto 4 da diretoria, leitura B — 2026-10-06), ou None se pode.
+
+    Mesma regra do iniciar: só se mexe na sequência ativa. Sem pendências (ativa
+    nula) qualquer sequência serve; com a regra 'ao_concluir_sequencia_inteira',
+    toda sequência mais antiga precisa estar concluída.
+    """
+    if user.perfil == 'admin':
+        return None
+    ativa, aguardando = _sequencia_ativa(user)
+    if aguardando:
+        return f'aguarde a conclusão da sequência {aguardando.numero} para pegar da próxima'
+    if ativa and ativa.id != seq.id:
+        return f'termine a sequência {ativa.numero} primeiro'
+    regra = Configuracao.obter(Configuracao.Chave.LIBERACAO_PROXIMA_SEQUENCIA)
+    if regra == 'ao_concluir_sequencia_inteira':
+        anterior = (
+            Sequencia.objects.filter(numero__lt=seq.numero)
+            .exclude(status=Sequencia.Status.CONCLUIDA)
+            .order_by('numero').first()
+        )
+        if anterior:
+            return f'aguarde a conclusão da sequência {anterior.numero} para pegar da próxima'
+    return None
+
+
+def _disponiveis(seq):
+    """Pedidos da sequência ainda sem conferente (o Pátio sequenciou, ninguém pegou)."""
+    return (
+        seq.pedidos
+        .filter(status=Pedido.Status.SELECIONADO, conferente__isnull=True)
+        .select_related('sequencia')
+        .prefetch_related('itens')
+        .order_by('criado_em')
+    )
+
+
+def _sequencia_para_pegar(user):
+    """Sequência mais antiga com pedidos sem conferente de onde este conferente pode
+    pegar agora, ou None. Guia a lista "Disponíveis" do coletor."""
+    seqs = (
+        Sequencia.objects
+        .exclude(status=Sequencia.Status.CONCLUIDA)
+        .filter(pedidos__status=Pedido.Status.SELECIONADO, pedidos__conferente__isnull=True)
+        .distinct().order_by('numero')
+    )
+    for seq in seqs:
+        if _trava_para_pegar(user, seq) is None:
+            return seq
+    return None
+
+
+def _interpretar_codigo(codigo: str):
+    """Código bipado/digitado → (numero, serie | None, veio_de_chave).
+
+    Chave de acesso da NF-e (44 dígitos, código de barras do DANFE): série nas
+    posições 23-25 e número nas 26-34 (1-based). Qualquer outra coisa é tratada
+    como número do documento (NF ou pedido) digitado/bipado do papel.
+    """
+    digitos = re.sub(r'\D', '', codigo or '')
+    if len(digitos) == 44:
+        return str(int(digitos[25:34])), str(int(digitos[22:25])), True
+    if not digitos:
+        return None, None, False
+    return str(int(digitos)), None, False
+
+
+def _candidatos_por_codigo(numero, serie, veio_de_chave):
+    """Documentos locais que casam com o código lido. Pelo DANFE é sempre NF (e a série
+    confere); por número solto vale NF ou pedido — ambiguidade volta para o usuário."""
+    qs = Pedido.objects.filter(numero_externo=numero).select_related('conferente', 'sequencia')
+    if veio_de_chave:
+        qs = qs.filter(tipo=Pedido.Tipo.NOTA_FISCAL)
+    cands = list(qs.order_by('-criado_em'))
+    if serie is not None:
+        # codsnf do Senior pode ser alfanumérico ('NFE'); a série da chave só é
+        # comparada quando a nossa é numérica — senão não filtra por ela.
+        cands = [p for p in cands if not p.codsnf.strip().isdigit() or int(p.codsnf) == int(serie)]
+    # escopo antigo congelado não entra
+    cands = [p for p in cands if p.status not in ('faturado', 'aguardando_etiquetar', 'concluido')]
+    return cands
 
 
 def _resolver_apontamento(request):
@@ -244,6 +329,12 @@ def listar_atribuidos(request):
         .exclude(sequencia_id=ativa.id if ativa else 0)
         .count()
     )
+
+    # Ponto 4 (leitura B): pedidos sem conferente que ele pode pegar agora — bipando a
+    # nota ou tocando na lista. Só da sequência mais antiga liberada pela trava.
+    seq_pegar = _sequencia_para_pegar(request.user)
+    disponiveis = list(_disponiveis(seq_pegar)) if seq_pegar else []
+
     return Response({
         'sequencia': {'id': ativa.id, 'numero': ativa.numero} if ativa else None,
         'aguardando_sequencia': (
@@ -251,6 +342,10 @@ def listar_atribuidos(request):
         ),
         'pedidos': [_serializar_pedido(p) for p in pedidos],
         'outras_sequencias_pendentes': outras,
+        'sequencia_disponivel': (
+            {'id': seq_pegar.id, 'numero': seq_pegar.numero} if seq_pegar else None
+        ),
+        'disponiveis': [_serializar_pedido(p) for p in disponiveis],
     })
 
 
@@ -1386,3 +1481,126 @@ def transferir_conferencia(request, pk):
             ),
         },
     })
+
+
+# ---------------------------------------------------------------------------
+# Ponto 4 da diretoria (leitura B, 2026-10-06): o conferente bipa a nota e pega o pedido
+# ---------------------------------------------------------------------------
+
+def _opcao(p):
+    return {
+        'id': p.id, 'tipo': p.tipo, 'numero_externo': p.numero_externo, 'codsnf': p.codsnf,
+        'cliente': p.cliente, 'status': p.status, 'status_label': p.get_status_display(),
+        'conferente': p.conferente.username if p.conferente else None,
+        'sequencia': {'id': p.sequencia.id, 'numero': p.sequencia.numero} if p.sequencia else None,
+    }
+
+
+@api_view(['POST'])
+def pegar_documento(request):
+    """
+    `{codigo}` (chave do DANFE, número da NF ou do pedido) ou `{pedido_id}` (quando o
+    código deu mais de um documento). Resultados:
+      - `aberto`: o documento já é deste conferente → o cliente abre a tela dele;
+      - `atribuido`: estava sequenciado sem conferente → passou a ser dele agora
+        (Selecionado → Atribuído, log `pedido_atribuido` com `via: bipagem`);
+      - 404 `nao_encontrado`; 409 `ambiguo` (com `opcoes`), `outro_conferente`,
+        `trava` (sequência ativa), `indisponivel` (não selecionado, sem sequência,
+        cancelado, já finalizado).
+    O Pátio continua montando as sequências; a atribuição à mão segue existindo.
+    """
+    err = _exige_conferente(request)
+    if err:
+        return err
+
+    codigo = str(request.data.get('codigo') or '').strip()
+    pedido_id = request.data.get('pedido_id')
+    if pedido_id:
+        cands = list(Pedido.objects.filter(pk=pedido_id).select_related('conferente', 'sequencia'))
+    else:
+        numero, serie, veio_de_chave = _interpretar_codigo(codigo)
+        if not numero:
+            return Response({'erro': 'código vazio'}, status=http_status.HTTP_400_BAD_REQUEST)
+        cands = _candidatos_por_codigo(numero, serie, veio_de_chave)
+
+    if not cands:
+        return Response(
+            {'resultado': 'nao_encontrado', 'erro': 'documento não encontrado no Separa'},
+            status=http_status.HTTP_404_NOT_FOUND,
+        )
+    if len(cands) > 1:
+        return Response(
+            {'resultado': 'ambiguo', 'erro': 'mais de um documento com esse número — escolha',
+             'opcoes': [_opcao(p) for p in cands]},
+            status=http_status.HTTP_409_CONFLICT,
+        )
+
+    pedido = cands[0]
+    user = request.user
+
+    if pedido.status == Pedido.Status.CANCELADO:
+        return Response(
+            {'resultado': 'indisponivel', 'erro': 'documento cancelado no Senior'},
+            status=http_status.HTTP_409_CONFLICT,
+        )
+
+    if pedido.status in STATUS_PENDENTES:
+        if pedido.conferente_id == user.id or user.perfil == 'admin':
+            if pedido.status == Pedido.Status.ATRIBUIDO and pedido.sequencia_id:
+                trava = _trava_para_pegar(user, pedido.sequencia)
+                if trava:
+                    return Response({'resultado': 'trava', 'erro': trava}, status=http_status.HTTP_409_CONFLICT)
+            return Response({'resultado': 'aberto', 'pedido': _serializar_pedido(pedido)})
+        quem = pedido.conferente.username if pedido.conferente else 'outro conferente'
+        return Response(
+            {'resultado': 'outro_conferente', 'erro': f'já está com {quem}'},
+            status=http_status.HTTP_409_CONFLICT,
+        )
+
+    if pedido.status == Pedido.Status.PENDENTE:
+        return Response(
+            {'resultado': 'indisponivel', 'erro': 'ainda não foi selecionado para separação (Sup. Vendas)'},
+            status=http_status.HTTP_409_CONFLICT,
+        )
+    if pedido.status != Pedido.Status.SELECIONADO:
+        return Response(
+            {'resultado': 'indisponivel', 'erro': f'documento já está em "{pedido.get_status_display()}"'},
+            status=http_status.HTTP_409_CONFLICT,
+        )
+    if not pedido.sequencia_id:
+        return Response(
+            {'resultado': 'indisponivel', 'erro': 'ainda não entrou em sequência — fale com o Pátio'},
+            status=http_status.HTTP_409_CONFLICT,
+        )
+
+    trava = _trava_para_pegar(user, pedido.sequencia)
+    if trava:
+        return Response({'resultado': 'trava', 'erro': trava}, status=http_status.HTTP_409_CONFLICT)
+
+    # Dois coletores bipando a mesma nota: o primeiro leva, o segundo recebe 409.
+    with transaction.atomic():
+        # of=('self',): o FOR UPDATE não pode pegar o lado nulo do join com sequencia
+        pedido = Pedido.objects.select_for_update(of=('self',)).select_related('sequencia').get(pk=pedido.pk)
+        if pedido.status != Pedido.Status.SELECIONADO or pedido.conferente_id:
+            quem = pedido.conferente.username if pedido.conferente else 'outro conferente'
+            return Response(
+                {'resultado': 'outro_conferente', 'erro': f'já está com {quem}'},
+                status=http_status.HTTP_409_CONFLICT,
+            )
+        pedido.status = Pedido.Status.ATRIBUIDO
+        pedido.conferente = user
+        pedido.atribuido_em = timezone.now()
+        pedido.atribuido_por = user
+        pedido.save(update_fields=['status', 'conferente', 'atribuido_em', 'atribuido_por'])
+        PedidoLog.objects.create(
+            pedido=pedido, usuario=user,
+            acao='pedido_atribuido',
+            payload={
+                'conferente_id': user.id, 'conferente': user.username,
+                'sequencia_id': pedido.sequencia.id, 'numero': pedido.sequencia.numero,
+                'reatribuicao': False, 'via': 'bipagem', 'codigo': codigo[:60],
+            },
+        )
+    pedido = Pedido.objects.select_related('sequencia', 'separado_por').prefetch_related('itens').get(pk=pedido.pk)
+    return Response({'resultado': 'atribuido', 'pedido': _serializar_pedido(pedido)})
+

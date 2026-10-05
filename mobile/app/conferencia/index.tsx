@@ -1,11 +1,13 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import {
   View,
   Text,
   Pressable,
+  TextInput,
   FlatList,
   RefreshControl,
   ActivityIndicator,
+  Vibration,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
@@ -24,6 +26,7 @@ type Pedido = {
   percent_conferido: number
   atribuido_em: string | null
   sequencia: { id: number; numero: number } | null
+  transportadora?: string
 }
 
 type ListaResposta = {
@@ -31,6 +34,15 @@ type ListaResposta = {
   aguardando_sequencia: { id: number; numero: number } | null
   pedidos: Pedido[]
   outras_sequencias_pendentes: number
+  sequencia_disponivel: { id: number; numero: number } | null
+  disponiveis: Pedido[]
+}
+
+// Ponto 4 da diretoria (leitura B): quando o código bipado bate com mais de um documento
+type Opcao = {
+  id: number; tipo: string; numero_externo: string; codsnf: string; cliente: string
+  status: string; status_label: string; conferente: string | null
+  sequencia: { id: number; numero: number } | null
 }
 
 function tempoDesde(iso: string | null): string {
@@ -53,6 +65,17 @@ export default function ConferenciaLista() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [lastSync, setLastSync] = useState<Date | null>(null)
+  const [seqDisponivel, setSeqDisponivel] = useState<{ id: number; numero: number } | null>(null)
+  const [disponiveis, setDisponiveis] = useState<Pedido[]>([])
+
+  // Barra de bipagem da nota — mesma barra da tela do pedido: recebe o leitor do TC21
+  // (DataWedge em modo teclado + Enter), sem teclado virtual.
+  const scanRef = useRef<TextInput>(null)
+  const [scanValue, setScanValue] = useState('')
+  const [scanMsg, setScanMsg] = useState('')
+  const [scanFlash, setScanFlash] = useState<'erro' | null>(null)
+  const [pegando, setPegando] = useState(false)
+  const [opcoes, setOpcoes] = useState<Opcao[] | null>(null)
 
   const carregar = useCallback(async (refresh = false) => {
     if (refresh) setRefreshing(true)
@@ -63,6 +86,8 @@ export default function ConferenciaLista() {
       setSequencia(data.sequencia)
       setAguardando(data.aguardando_sequencia)
       setOutras(data.outras_sequencias_pendentes)
+      setSeqDisponivel(data.sequencia_disponivel ?? null)
+      setDisponiveis(data.disponiveis ?? [])
       setLastSync(new Date())
     } catch {
       // mostrar erro depois com Dialog
@@ -70,6 +95,46 @@ export default function ConferenciaLista() {
       setLoading(false)
       setRefreshing(false)
     }
+  }, [])
+
+  function erroScan(msg: string) {
+    setScanFlash('erro')
+    setScanMsg(msg)
+    setScanValue('')
+    Vibration.vibrate(200)
+    setTimeout(() => { setScanFlash(null); setScanMsg('') }, 3000)
+  }
+
+  const pegar = useCallback(async (body: { codigo?: string; pedido_id?: number }) => {
+    if (pegando) return
+    setPegando(true)
+    try {
+      const res = await conferenciaApi.pegarDocumento(body)
+      setOpcoes(null)
+      setScanValue('')
+      router.push(`/conferencia/${res.pedido.id}` as never)
+    } catch (e: unknown) {
+      const data = (e as { response?: { data?: { resultado?: string; erro?: string; opcoes?: Opcao[] } } })?.response?.data
+      if (data?.resultado === 'ambiguo' && data.opcoes) {
+        setOpcoes(data.opcoes)
+        setScanValue('')
+      } else {
+        erroScan(data?.erro || 'Erro ao buscar o documento')
+      }
+    } finally {
+      setPegando(false)
+    }
+  }, [pegando, router])
+
+  function handleScan() {
+    const cod = scanValue.trim()
+    if (!cod) return
+    pegar({ codigo: cod })
+  }
+
+  useEffect(() => {
+    const t = setTimeout(() => scanRef.current?.focus(), 300)
+    return () => clearTimeout(t)
   }, [])
 
   useEffect(() => {
@@ -115,6 +180,59 @@ export default function ConferenciaLista() {
         </View>
       </View>
 
+      {/* Bipar a nota para pegar (ou abrir) o pedido — ponto 4 da diretoria */}
+      <View
+        className={`mx-4 mb-2 rounded-xl border-2 h-14 flex-row items-center pl-3 pr-1 ${
+          scanFlash === 'erro' ? 'border-red-500 bg-red-500/15' : 'border-zinc-700 bg-zinc-900'
+        }`}
+      >
+        <Text className={`text-lg mr-2 ${scanFlash === 'erro' ? 'text-red-400' : 'text-zinc-400'}`}>⌥</Text>
+        <TextInput
+          ref={scanRef}
+          value={scanValue}
+          onChangeText={setScanValue}
+          onSubmitEditing={handleScan}
+          submitBehavior="submit"
+          showSoftInputOnFocus={false}
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="off"
+          importantForAutofill="no"
+          placeholder={scanMsg || 'Bipe a nota para pegar…'}
+          placeholderTextColor={scanFlash === 'erro' ? '#f87171' : '#71717a'}
+          onBlur={() => { if (!opcoes) setTimeout(() => scanRef.current?.focus(), 80) }}
+          className={`flex-1 h-14 text-base font-mono tracking-wider ${scanFlash === 'erro' ? 'text-red-300' : 'text-white'}`}
+        />
+      </View>
+
+      {opcoes ? (
+        <View className="mx-4 mb-2 bg-surface-card border border-amber-500/60 rounded-xl p-3">
+          <View className="flex-row items-center justify-between mb-2">
+            <Text className="text-sm font-semibold text-ink flex-1">Mais de um documento com esse número — qual é?</Text>
+            <Pressable onPress={() => { setOpcoes(null); scanRef.current?.focus() }} className="h-9 px-2 justify-center">
+              <Text className="text-sm text-ink-muted">Cancelar</Text>
+            </Pressable>
+          </View>
+          {opcoes.map((o) => (
+            <Pressable
+              key={o.id}
+              onPress={() => pegar({ pedido_id: o.id })}
+              className="bg-surface-elev border border-surface-border rounded-lg px-3 py-2 mb-2 active:border-blue-400"
+            >
+              <View className="flex-row items-center gap-2 flex-wrap">
+                <Text className="font-semibold text-ink">{o.numero_externo}</Text>
+                <DocBadges tipo={o.tipo} />
+                {o.codsnf ? <Text className="text-xs text-ink-subtle">série {o.codsnf}</Text> : null}
+                <Text className="text-xs text-ink-muted">
+                  {o.status_label}{o.conferente ? ` · ${o.conferente}` : ''}{o.sequencia ? ` · seq. ${o.sequencia.numero}` : ''}
+                </Text>
+              </View>
+              <Text className="text-sm text-ink-muted" numberOfLines={1}>{o.cliente || '—'}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+
       {loading && pedidos.length === 0 ? (
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color="#a1a1aa" />
@@ -140,11 +258,36 @@ export default function ConferenciaLista() {
                   Aguardando a conclusão da sequência {aguardando.numero} para liberar a próxima.
                 </Text>
               </View>
-            ) : (
+            ) : disponiveis.length === 0 ? (
               <View className="py-20 items-center">
                 <Text className="text-ink-subtle">Nenhum pedido atribuído.</Text>
               </View>
-            )
+            ) : null
+          }
+          ListFooterComponent={
+            seqDisponivel && disponiveis.length > 0 ? (
+              <View className="pt-3">
+                <Text className="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-2">
+                  Disponíveis na sequência {seqDisponivel.numero} · {disponiveis.length} · bipe a nota ou toque para pegar
+                </Text>
+                {disponiveis.map((p) => (
+                  <Pressable
+                    key={`d-${p.id}`}
+                    onPress={() => pegar({ pedido_id: p.id })}
+                    disabled={pegando}
+                    className="bg-surface-card border border-dashed border-surface-border rounded-xl p-3 mb-2 active:border-amber-400"
+                  >
+                    <View className="flex-row items-center gap-2 flex-wrap">
+                      <Text className="font-semibold text-ink">{p.numero_externo}</Text>
+                      <DocBadges tipo={p.tipo} frete={p.frete} />
+                      <Text className="text-xs text-ink-subtle">{p.qtd_itens} {p.qtd_itens === 1 ? 'item' : 'itens'}</Text>
+                    </View>
+                    <Text className="text-sm text-ink-muted" numberOfLines={1}>{p.cliente || '—'}</Text>
+                    {p.transportadora ? <Text className="text-xs text-ink-subtle" numberOfLines={1}>{p.transportadora}</Text> : null}
+                  </Pressable>
+                ))}
+              </View>
+            ) : null
           }
           renderItem={({ item: p }) => (
             <Pressable

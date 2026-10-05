@@ -56,6 +56,9 @@ export const authApi = {
 
 export const conferenciaApi = {
   listarAtribuidos: () => api.get('/api/conferencia/pedidos/').then((r) => r.data),
+  // Ponto 4 (leitura B): bipa a nota (chave do DANFE ou número) e pega/abre o pedido
+  pegarDocumento: (body: { codigo?: string; pedido_id?: number }) =>
+    api.post('/api/conferencia/pegar/', body).then((r) => r.data),
   detalhe: (id: number) => api.get(`/api/conferencia/pedidos/${id}/`).then((r) => r.data),
   iniciar: (id: number, apontamento: { separado_por?: number; nao_identificado?: boolean }) =>
     api.post(`/api/conferencia/pedidos/${id}/iniciar/`, apontamento).then((r) => r.data),

@@ -14,6 +14,8 @@ Sistema interno para **separação de pedidos no galpão da Altomax**. Não é m
 
 > **Transportadora (2026-10-05)** — o sync traz `codtra` + nome (`E073TRA.nomtra`) de pedidos e NFs para `Pedido.codtra` / `Pedido.transportadora` (vazios em retira/sem frete). O beat `monitorar_cancelamentos` preenche de carona os documentos em andamento que ainda não têm. Pré-requisito dos pontos 3, 6 e 7 da diretoria. O ponto 3 está feito em cima disso: `GET /api/pedidos/?ordem=transportadora` ordena a fila do Pátio pela transportadora com mais documentos (contagem sobre a fila, sem a busca), e web/mobile mostram cabeçalho de grupo por transportadora.
 
+> **Conferente pega a nota bipando (2026-10-05, ponto 4 da diretoria, leitura B)** — o Pátio continua montando sequências, mas atribuir conferente virou **opcional**: a lista "Atribuídos a mim" tem uma barra de bipagem (chave do DANFE ou número da NF/pedido) e uma seção "Disponíveis na sequência N". `POST /api/conferencia/pegar/` abre o que já é dele ou pega um pedido sequenciado sem conferente (Selecionado → Atribuído, log `pedido_atribuido` com `via: bipagem`), respeitando a trava de sequência; dois coletores na mesma nota → o primeiro leva. Pendente, sem sequência, de outro conferente ou cancelado → 409 com motivo.
+
 Atores principais: **Supervisor de Vendas**, **Supervisor de Pátio**, **Conferente** e **Admin**.
 
 ### Fluxo geral
@@ -112,8 +114,8 @@ Toda transição grava em `PedidoLog` (quem, quando, ação, payload).
 1. **Montar sequências** (Fase 3)
    - Pedidos `Selecionado` sem sequência entram em **sequências de separação** (criar nova ou adicionar a uma aberta).
    - Tudo passa por sequência — a atribuição direta antiga foi desativada.
-2. **Atribuir dentro da sequência**
-   - Na tela da sequência, escolher pedidos (multi-seleção) e um conferente ativo — a supervisora decide quem pega o quê.
+2. **Atribuir dentro da sequência** (opcional desde 2026-10-05)
+   - Na tela da sequência, escolher pedidos (multi-seleção) e um conferente ativo — quando a supervisora quer decidir quem pega o quê. O que ficar sem conferente pode ser **pego pelo próprio conferente bipando a nota** (ponto 4).
    - Status passa para `Atribuído`, registra `atribuido_em`/`atribuido_por`/`conferente`; reatribuir e remover são permitidos até o pedido entrar em conferência.
 3. **Trava do conferente**
    - O conferente só confere pedidos da sua sequência ativa (a mais antiga com pendências dele); a liberação da próxima é configurável (`ao_terminar_meus_pedidos` default | `ao_concluir_sequencia_inteira`).
@@ -126,6 +128,7 @@ Toda transição grava em `PedidoLog` (quem, quando, ação, payload).
 1. **Lista "Atribuídos a mim"**
    - Pedidos com status `Atribuído` ou `Em conferência` cujo `conferente` é o usuário logado.
    - FIFO por `atribuido_em`.
+   - **Barra de bipagem da nota** (sempre focada, recebe o leitor do coletor): chave do DANFE ou número → abre o pedido se já é dele, ou **pega** um pedido sequenciado sem conferente. Abaixo da lista, "Disponíveis na sequência N" (toque = pegar).
 2. **Selecionar pedido**
    - Status passa para `Em conferência` na primeira ação relevante (abrir volume).
 3. **Tela de conferência**
@@ -305,7 +308,8 @@ Não tocar nesses arquivos durante o trabalho do escopo atual. Podem voltar ao f
 - [x] ~~Comportamento quando a separação termina parcial~~ — resolvido no redesenho (`DESIGN.md` §4.2): falta → Não conforme + erro registrado; sobra → conclui com erro registrado e fechamento pelo Sup. Pátio
 - [ ] Lista completa de ações disponíveis na lista de Não Conformes
 - [x] ~~Nota cancelada no Senior durante a conferência~~ — detectada pelo beat, bloqueio no conferente e transferência de conferência pelo Sup. Pátio (2026-09-30)
-- [ ] Demais pontos da diretoria de 2026-09-30 (parar nota com notificação, campo de NF no conferente, aviso de qtd, transportadora + CC-e, reimpressão de etiqueta de caixa, liberação com mensageria) — sem prioridade definida
+- [ ] Demais pontos da diretoria de 2026-09-30 (parar nota com notificação, aviso de qtd, transportadora + CC-e, reimpressão de etiqueta de caixa, liberação com mensageria) — sem prioridade definida
+- [x] ~~Ponto 4 — campo para o conferente selecionar a nota~~ — diretoria escolheu a leitura B em 2026-10-05; implementado como pull dentro da sequência (bipar a nota pega o pedido sem conferente; atribuição do Pátio continua existindo, opcional)
 - [x] ~~Ponto 3 — prioridade por transportadora~~ — respondido e implementado em 2026-10-05: fila do Sup. Pátio (`?ordem=transportadora`) ordenada pela transportadora com mais notas/pedidos, com cabeçalho de grupo no web e no mobile; valor não conta. Falta só deploy + APK
 - [ ] Múltiplos volumes podem ficar abertos simultaneamente, ou só um por vez?
 - [ ] Bipar item para um item já completo (`qtd_separada == qtd_pedida`) — bloqueia ou avisa?

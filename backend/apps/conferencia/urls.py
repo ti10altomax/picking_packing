@@ -3,6 +3,7 @@ from . import views
 
 urlpatterns = [
     path('conferencia/pedidos/', views.listar_atribuidos, name='conferencia_listar_atribuidos'),
+    path('conferencia/pegar/', views.pegar_documento, name='conferencia_pegar_documento'),
     path('conferencia/pedidos/<int:pk>/', views.detalhe, name='conferencia_detalhe'),
     path('conferencia/pedidos/<int:pk>/iniciar/', views.iniciar, name='conferencia_iniciar'),
     path('conferencia/pedidos/<int:pk>/separado_por/', views.alterar_separado_por, name='conferencia_separado_por'),

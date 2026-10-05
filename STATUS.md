@@ -4,6 +4,20 @@
 
 ---
 
+## 2026-10-05 — Conferente pega a nota bipando (ponto 4 da diretoria, leitura B)
+
+**Decisão.** A diretoria escolheu a leitura B do ponto 4: o conferente **escolhe a nota** que vai conferir, bipando o DANFE. O modelo *pull* tinha sido rejeitado no desenho das sequências; o que entrou é o meio-termo que preserva tudo: o **Pátio continua montando sequências** (e pode atribuir à mão quando quiser decidir), mas o pedido que ficar sem conferente dentro da sequência **é pego por quem bipar primeiro**. Trava de sequência, apontamento do separador, erros, relatórios: inalterados.
+
+**Backend.** `POST /api/conferencia/pegar/` `{codigo}` ou `{pedido_id}`. `_interpretar_codigo()`: 44 dígitos = chave de acesso da NF-e (série nas posições 23-25, número nas 26-34) → só NF; senão número solto → NF ou pedido. A série da chave só é comparada quando o nosso `codsnf` é numérico (no Senior ele pode ser `'NFE'`). Resultados: `aberto` (já é dele, inclusive em conferência), `atribuido` (Selecionado com sequência e sem conferente → Atribuído, `atribuido_por` = ele mesmo, log `pedido_atribuido` com `via: bipagem` e o código), 404 `nao_encontrado`, 409 `ambiguo` (+`opcoes`, o cliente manda `pedido_id`), `outro_conferente` ("já está com fulano"), `trava` (`_trava_para_pegar()`: mesma regra do iniciar — sequência ativa, `aguardando`, e na regra `ao_concluir_sequencia_inteira` toda sequência anterior concluída), `indisponivel` (Pendente, sem sequência, cancelado, já finalizado). Concorrência: `select_for_update(of=('self',))` re-checa status/conferente — dois coletores na mesma nota, o primeiro leva. `GET /api/conferencia/pedidos/` ganhou `sequencia_disponivel` + `disponiveis` (`_sequencia_para_pegar()`: a sequência mais antiga com pedidos sem conferente que a trava deixa este conferente pegar).
+
+**Web + mobile** (`conferencia/page.tsx`, `app/conferencia/index.tsx`): barra de bipagem no topo da lista "Atribuídos a mim" — mesma barra da tela do pedido (sempre focada, sem teclado virtual no mobile, Enter dispara); sucesso navega para o pedido; erro pinta de vermelho com a mensagem do servidor por 3 s (vibra no mobile); `ambiguo` abre uma caixa "qual é?" com as opções. Seção "Disponíveis na sequência N · bipe a nota ou toque para pegar" abaixo dos meus pedidos (cards tracejados; toque = `pegar({pedido_id})`). `tsc` limpo nos dois.
+
+**Teste em dev** (script com rollback, 11 cenários): lista com disponíveis da sequência mais antiga liberada; chave DANFE pega a NF; segundo conferente na mesma nota → 409 já está com joao; bipar de novo → aberto; pedido por número → atribuído; inexistente → 404; Pendente → 409; Selecionado sem sequência → 409; nota de sequência nova com pendência na antiga → 409 trava; número duplicado NF × pedido → 409 ambíguo com 2 opções → `pedido_id` resolve. Bug achado no teste: `select_for_update()` + `select_related('sequencia')` (FK nula) dá `FOR UPDATE cannot be applied to the nullable side of an outer join` — corrigido com `of=('self',)`.
+
+**Pendente**: deploy + APK 0.6.0 (a barra é mobile). Sem migration.
+
+---
+
 ## 2026-10-05 — Transportadora no sync e no Pedido + fila do Pátio ordenada por transportadora (ponto 3 da diretoria)
 
 **Contexto.** Diretoria respondeu o ponto 3: a prioridade vale na tela do **Sup. Pátio** e o critério é a transportadora com **maior número de notas/pedidos** em aberto — **valor não entra**. Decisão tomada em cima de consultas rodadas no DBeaver (`docs_pessoais/consultas-oracle.html`, fora do git). Transportadora não existia no modelo (só `frete` C/F/X); este passo coloca ela no domínio. Os passos 2 (ordenação da lista do Pátio) e 3 (badge web + mobile) ficam para depois.
