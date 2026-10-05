@@ -106,7 +106,23 @@ def _importar_itens(pedido, query, params, col_qtd):
     return criados
 
 
-def _localizar_ou_criar(tipo, numero, codfil, codsnf, cliente, criado_em, frete):
+def _transportadora(row) -> tuple[str, str]:
+    """(codtra, nome) a partir da linha do Oracle. CODTRA é numérico no Senior e vem
+    como int/Decimal; 0/None = sem transportadora (retira, sem frete). Sem nome no
+    cadastro, usa o próprio código para não ficar vazio na tela."""
+    bruto = row.get('codtra')
+    try:
+        codigo = int(bruto) if bruto is not None else 0
+    except (TypeError, ValueError):
+        codigo = 0
+    if not codigo:
+        return '', ''
+    nome = str(row.get('nomtra') or '').strip()
+    return str(codigo), (nome or f'Transportadora {codigo}')[:255]
+
+
+def _localizar_ou_criar(tipo, numero, codfil, codsnf, cliente, criado_em, frete,
+                        codtra='', transportadora=''):
     """Localiza o documento pela identidade Senior (tipo, codfil, codsnf, numero) ou cria.
 
     Compat: pedidos importados antes de codfil existir ficaram com codfil=''.
@@ -132,6 +148,10 @@ def _localizar_ou_criar(tipo, numero, codfil, codsnf, cliente, criado_em, frete)
         if not pedido.frete and frete:
             pedido.frete = frete
             campos.append('frete')
+        if not pedido.codtra and codtra:
+            pedido.codtra = codtra
+            pedido.transportadora = transportadora
+            campos += ['codtra', 'transportadora']
         if campos:
             pedido.save(update_fields=campos)
         return pedido, False, bool(campos)
@@ -140,6 +160,7 @@ def _localizar_ou_criar(tipo, numero, codfil, codsnf, cliente, criado_em, frete)
         pedido = Pedido.objects.create(
             tipo=tipo, numero_externo=numero, codfil=codfil, codsnf=codsnf,
             cliente=cliente, criado_em=criado_em, frete=frete,
+            codtra=codtra, transportadora=transportadora,
             status=Pedido.Status.PENDENTE,
         )
     except IntegrityError:
@@ -163,10 +184,12 @@ def _sincronizar_fonte(tipo, rows, col_numero, col_qtd, query_itens, params_iten
         codsnf = str(row.get('codsnf') or '').strip() if tipo == Pedido.Tipo.NOTA_FISCAL else ''
         cliente = str(row.get('nomcli') or row.get('codcli') or '').strip()
         frete = str(row.get('ciffob') or '').strip().upper()[:1]
+        codtra, transportadora = _transportadora(row)
         criado_em = _make_aware(row.get('datemi'))
 
         pedido, created, updated = _localizar_ou_criar(
             tipo, numero, codfil, codsnf, cliente, criado_em, frete,
+            codtra, transportadora,
         )
 
         if created:
@@ -264,6 +287,10 @@ def monitorar_cancelamentos(passada_completa: bool = False):
     Pendentes fora da janela são ignorados no beat — são milhares acumulados (o sync
     não reconcilia) e a checagem levaria dezenas de segundos. `passada_completa=True`
     inclui todos; usar à mão (`manage.py monitorar_cancelamentos --completa`).
+
+    De carona (2026-10-05): a mesma consulta traz codtra/nomtra, e documentos em
+    andamento ainda sem transportadora (importados antes do campo existir, ou fora
+    da janela do sync) são preenchidos aqui — sem passada extra no Oracle.
     """
     from .oracle import (
         QUERY_SITUACAO_PEDIDOS, QUERY_SITUACAO_NFS, SITPED_CANCELADO, SITNFV_CANCELADO,
@@ -296,7 +323,7 @@ def monitorar_cancelamentos(passada_completa: bool = False):
         ),
     }
 
-    cancelados = 0
+    cancelados = transportadoras = 0
     resultado = {'verificados': len(candidatos)}
     for tipo, (query, chave_fn, cancelado_fn) in fontes.items():
         do_tipo = [p for p in candidatos if p.tipo == tipo]
@@ -314,7 +341,15 @@ def monitorar_cancelamentos(passada_completa: bool = False):
                     (r for k, r in situacoes.items() if k[1] == pedido.codsnf and k[2] == pedido.numero_externo),
                     None,
                 )
-            if row is None or not cancelado_fn(row):
+            if row is None:
+                continue
+            if not pedido.codtra:
+                codtra, transportadora = _transportadora(row)
+                if codtra:
+                    pedido.codtra, pedido.transportadora = codtra, transportadora
+                    pedido.save(update_fields=['codtra', 'transportadora'])
+                    transportadoras += 1
+            if not cancelado_fn(row):
                 continue
             situacao = _s(row.get('sitped') or row.get('sitnfv'))
             cancelar(pedido, Pedido.OrigemCancelamento.SENIOR, payload={'situacao_senior': situacao})
@@ -322,6 +357,7 @@ def monitorar_cancelamentos(passada_completa: bool = False):
             logger.info(f"{pedido} cancelado no Senior (situação {situacao}) → status CANCELADO")
 
     resultado['cancelados'] = cancelados
+    resultado['transportadoras_preenchidas'] = transportadoras
     logger.info(f"monitorar_cancelamentos: {len(candidatos)} verificados, {cancelados} cancelados")
     return resultado
 

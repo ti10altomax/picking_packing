@@ -60,6 +60,10 @@ class Pedido(models.Model):
     codfil = models.CharField(max_length=10, blank=True)   # filial no Senior
     codsnf = models.CharField(max_length=10, blank=True)   # série da NF ('' para pedido)
     frete = models.CharField(max_length=1, choices=Frete.choices, blank=True)  # CIFFOB do Senior
+    # Transportadora do documento no Senior (E120PED.codtra / E140NFV.codtra → E073TRA.nomtra).
+    # Vazia em retira/sem frete. Pré-requisito dos pontos 3, 6 e 7 da diretoria (2026-10-05).
+    codtra = models.CharField(max_length=20, blank=True)
+    transportadora = models.CharField(max_length=255, blank=True)
     marketplace = models.ForeignKey(Marketplace, on_delete=models.PROTECT, null=True, blank=True)
     cliente = models.CharField(max_length=255, blank=True)
     status = models.CharField(max_length=30, choices=Status.choices, default=Status.PENDENTE)

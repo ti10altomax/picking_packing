@@ -48,7 +48,7 @@ class PedidoItemInline(TabularInline):
 @admin.register(Pedido)
 class PedidoAdmin(ModelAdmin):
     list_display = (
-        'numero_externo', 'tipo', 'frete', 'cliente_curto', 'status_badge',
+        'numero_externo', 'tipo', 'frete', 'transportadora', 'cliente_curto', 'status_badge',
         'criado_em', 'conferente',
     )
     list_filter = (
@@ -60,7 +60,7 @@ class PedidoAdmin(ModelAdmin):
     )
     list_filter_submit = True       # botão "Aplicar" — não recarrega a cada clique
     list_per_page = 50
-    search_fields = ('numero_externo', 'cliente')
+    search_fields = ('numero_externo', 'cliente', 'transportadora')
     date_hierarchy = 'criado_em'
     readonly_fields = (
         'criado_em', 'selecionado_em', 'atribuido_em',
@@ -74,6 +74,7 @@ class PedidoAdmin(ModelAdmin):
         ("Pedido", {
             "fields": (
                 "tipo", "numero_externo", "codfil", "codsnf", "frete",
+                "codtra", "transportadora",
                 "cliente", "marketplace", "status",
             ),
         }),

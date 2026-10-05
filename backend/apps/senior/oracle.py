@@ -76,6 +76,7 @@ SENIOR_CODEMP = 1
 # Busca pedidos abertos (sitPed=1) para importar como Pendente.
 # JOIN com E085CLI (clientes) para trazer o nome. Numeração é por filial → codfil
 # entra na identidade local. CIFFOB: C = entrega (frete), F = retira (cliente busca), X = sem frete.
+# CODTRA + E073TRA (nome da transportadora) — LEFT JOIN porque retira/sem frete não têm.
 # :1 = janela em dias (Configuracao 'janela_sync_dias'); TRUNC pega o dia inteiro.
 QUERY_PEDIDOS_PENDENTES = f"""
     SELECT
@@ -84,10 +85,14 @@ QUERY_PEDIDOS_PENDENTES = f"""
         ped.codcli,
         ped.datemi,
         ped.ciffob,
+        ped.codtra,
+        tra.nomtra,
         cli.nomcli
     FROM E120PED ped
     LEFT JOIN E085CLI cli
         ON cli.codcli = ped.codcli
+    LEFT JOIN E073TRA tra
+        ON tra.codtra = ped.codtra
     WHERE ped.codemp = {SENIOR_CODEMP}
       AND ped.sitped = 1
       AND ped.datemi >= TRUNC(SYSDATE) - :1
@@ -131,21 +136,27 @@ QUERY_SITPED_POR_NUMEROS = f"""
 # Pedido cancelado: sitPed=5 · NF cancelada: sitNfv=9 (valores confirmados pelo usuário).
 # O IN vai por número; a identidade completa (filial/série) é conferida no Python.
 # {placeholders} = :1,:2,... (blocos de até 500 — limite do Oracle é 1000 por lista)
+# codtra/nomtra vêm junto para o beat preencher a transportadora dos documentos
+# importados antes de 2026-10-05 (ou fora da janela do sync) sem passada extra.
 SITPED_CANCELADO = 5
 SITNFV_CANCELADO = 9
 
 QUERY_SITUACAO_PEDIDOS = f"""
-    SELECT codfil, numped, sitped
-    FROM E120PED
-    WHERE codemp = {SENIOR_CODEMP}
-      AND numped IN ({{placeholders}})
+    SELECT ped.codfil, ped.numped, ped.sitped, ped.codtra, tra.nomtra
+    FROM E120PED ped
+    LEFT JOIN E073TRA tra
+        ON tra.codtra = ped.codtra
+    WHERE ped.codemp = {SENIOR_CODEMP}
+      AND ped.numped IN ({{placeholders}})
 """
 
 QUERY_SITUACAO_NFS = f"""
-    SELECT codfil, codsnf, numnfv, sitnfv
-    FROM E140NFV
-    WHERE codemp = {SENIOR_CODEMP}
-      AND numnfv IN ({{placeholders}})
+    SELECT nfv.codfil, nfv.codsnf, nfv.numnfv, nfv.sitnfv, nfv.codtra, tra.nomtra
+    FROM E140NFV nfv
+    LEFT JOIN E073TRA tra
+        ON tra.codtra = nfv.codtra
+    WHERE nfv.codemp = {SENIOR_CODEMP}
+      AND nfv.numnfv IN ({{placeholders}})
 """
 
 # Notas fiscais de venda fechadas (sitNfv=2) SEM pedido de origem — as que vieram
@@ -160,10 +171,14 @@ QUERY_NF_PENDENTES = f"""
         nfv.codcli,
         nfv.datemi,
         nfv.ciffob,
+        nfv.codtra,
+        tra.nomtra,
         cli.nomcli
     FROM E140NFV nfv
     LEFT JOIN E085CLI cli
         ON cli.codcli = nfv.codcli
+    LEFT JOIN E073TRA tra
+        ON tra.codtra = nfv.codtra
     WHERE nfv.codemp = {SENIOR_CODEMP}
       AND nfv.sitnfv = 2
       AND nfv.datemi >= TRUNC(SYSDATE) - :1

@@ -12,6 +12,8 @@ Sistema interno para **separação de pedidos no galpão da Altomax**. Não é m
 
 > **Notas fiscais (2026-09-09)** — além dos pedidos abertos (E120PED, sitped=1), o sync importa **NFs de venda fechadas sem pedido de origem** (E140NFV sitnfv=2, sem `numped` nos itens). Mesma tabela e mesmo fluxo: `Pedido.tipo` = `pedido` | `nota_fiscal`. Identidade Senior = (`tipo`, `codfil`, `codsnf`, `numero_externo`) — numeração é por filial e, na NF, por série. `CIFFOB` vai para `Pedido.frete` (C = entrega, F = retira, X = sem frete). Janela do sync (pedidos e NFs) em `Configuracao.janela_sync_dias` (default 5, valor de produção). Web e mobile mostram badge **NF** e **Entrega/Retira**; Sup. Vendas filtra por tipo e frete.
 
+> **Transportadora (2026-10-05)** — o sync traz `codtra` + nome (`E073TRA.nomtra`) de pedidos e NFs para `Pedido.codtra` / `Pedido.transportadora` (vazios em retira/sem frete). O beat `monitorar_cancelamentos` preenche de carona os documentos em andamento que ainda não têm. Pré-requisito dos pontos 3, 6 e 7 da diretoria; o ponto 3 (lista do Sup. Pátio ordenada pela transportadora com mais pedidos) vem em cima disso.
+
 Atores principais: **Supervisor de Vendas**, **Supervisor de Pátio**, **Conferente** e **Admin**.
 
 ### Fluxo geral
@@ -182,7 +184,8 @@ User(id, username, perfil, ...)
   perfil: conferente | supervisor_vendas | supervisor_patio | admin
           (+ etiquetador, congelado)
 
-Pedido(id, tipo, numero_externo, codfil, codsnf, frete, status, criado_em, cliente,
+Pedido(id, tipo, numero_externo, codfil, codsnf, frete, codtra, transportadora,
+       status, criado_em, cliente,
        selecionado_em, selecionado_por_id,
        atribuido_em, atribuido_por_id, conferente_id,
        conferencia_iniciada_em,
@@ -302,7 +305,8 @@ Não tocar nesses arquivos durante o trabalho do escopo atual. Podem voltar ao f
 - [x] ~~Comportamento quando a separação termina parcial~~ — resolvido no redesenho (`DESIGN.md` §4.2): falta → Não conforme + erro registrado; sobra → conclui com erro registrado e fechamento pelo Sup. Pátio
 - [ ] Lista completa de ações disponíveis na lista de Não Conformes
 - [x] ~~Nota cancelada no Senior durante a conferência~~ — detectada pelo beat, bloqueio no conferente e transferência de conferência pelo Sup. Pátio (2026-09-30)
-- [ ] Demais pontos da diretoria de 2026-09-30 (parar nota com notificação, lista por sequência, prioridade por transportadora, campo de NF no conferente, aviso de qtd, transportadora + CC-e, reimpressão de etiqueta de caixa, liberação com mensageria) — sem prioridade definida
+- [ ] Demais pontos da diretoria de 2026-09-30 (parar nota com notificação, campo de NF no conferente, aviso de qtd, transportadora + CC-e, reimpressão de etiqueta de caixa, liberação com mensageria) — sem prioridade definida
+- [ ] Ponto 3 — prioridade por transportadora: **respondido em 2026-10-05** (tela do Sup. Pátio, critério = transportadora com mais notas/pedidos, valor não conta); transportadora já está no `Pedido`, falta a ordenação e o badge na lista do Pátio (web + mobile)
 - [ ] Múltiplos volumes podem ficar abertos simultaneamente, ou só um por vez?
 - [ ] Bipar item para um item já completo (`qtd_separada == qtd_pedida`) — bloqueia ou avisa?
 - [ ] Senior tem cadastro de "embalagem"? Os tipos de volume vêm de lá ou são livres no nosso lado?

@@ -1,6 +1,20 @@
 # Status de implementação — Sistema de separação interna
 
-> Snapshot em **2026-10-01** (último update do dia). Objetivo: amanhã (e nas próximas semanas) você consegue retomar o trabalho sem precisar reler tudo.
+> Snapshot em **2026-10-05** (último update do dia). Objetivo: amanhã (e nas próximas semanas) você consegue retomar o trabalho sem precisar reler tudo.
+
+---
+
+## 2026-10-05 — Transportadora no sync e no Pedido (pré-requisito do ponto 3 da diretoria)
+
+**Contexto.** Diretoria respondeu o ponto 3: a prioridade vale na tela do **Sup. Pátio** e o critério é a transportadora com **maior número de notas/pedidos** em aberto — **valor não entra**. Decisão tomada em cima de consultas rodadas no DBeaver (`docs_pessoais/consultas-oracle.html`, fora do git). Transportadora não existia no modelo (só `frete` C/F/X); este passo coloca ela no domínio. Os passos 2 (ordenação da lista do Pátio) e 3 (badge web + mobile) ficam para depois.
+
+**Oracle.** `E120PED.codtra` / `E140NFV.codtra` + `E073TRA.nomtra` (nomes confirmados no DBeaver). `QUERY_PEDIDOS_PENDENTES` e `QUERY_NF_PENDENTES` ganharam `codtra`, `nomtra` e `LEFT JOIN E073TRA` (retira/sem frete não têm transportadora). `QUERY_SITUACAO_PEDIDOS` / `QUERY_SITUACAO_NFS` também, para o backfill abaixo.
+
+**Modelo** (`0014`): `Pedido.codtra` (char 20) e `Pedido.transportadora` (char 255), vazios quando o Senior traz `codtra` 0/nulo. `_transportadora(row)` em `apps/senior/tasks.py` normaliza (CODTRA é numérico no Senior; sem nome no cadastro usa "Transportadora N"). `_localizar_ou_criar()` grava na criação e preenche quando vazio, como já fazia com `cliente`/`frete`. **Backfill de carona no `monitorar_cancelamentos`**: o beat já reconsulta todo documento em andamento a cada 60 s; agora, quando a linha volta e o `Pedido` ainda não tem `codtra`, preenche ali mesmo (`transportadoras_preenchidas` no retorno). Sem comando novo, sem passada extra no Oracle — documentos importados antes deste commit (ou fora da janela do sync) ganham transportadora em até 60 s depois do deploy.
+
+**API.** `codtra` e `transportadora` nos serializers de lista e detalhe de pedidos; `transportadora` nos payloads à mão do conferente (detalhe, não conformes, cancelados) e das sequências (detalhe e relatório). Django Admin: coluna, busca e campo no fieldset.
+
+**Validação em dev.** `makemigrations --check` limpo; sync de uma passada: 29 documentos com transportadora (pedidos e NF, nomes vindos do cadastro); beat uma passada: 881 verificados, 105 preenchidos. Sem suíte de testes no backend (0 testes) — `manage.py check` ok.
 
 ---
 

@@ -51,7 +51,7 @@ class PedidoListSerializer(serializers.ModelSerializer):
         model = Pedido
         fields = [
             'id', 'tipo', 'tipo_label', 'numero_externo', 'cliente', 'status', 'criado_em',
-            'frete', 'frete_label',
+            'frete', 'frete_label', 'codtra', 'transportadora',
             'conferencia_iniciada_em', 'conferido_em', 'selecionado_em', 'atribuido_em',
             'conferente', 'conferente_username',
             'sequencia', 'sequencia_numero',
@@ -91,7 +91,7 @@ class PedidoSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'tipo', 'tipo_label', 'numero_externo', 'codfil', 'codsnf',
             'marketplace', 'marketplace_nome',
-            'cliente', 'status', 'criado_em', 'frete', 'frete_label',
+            'cliente', 'status', 'criado_em', 'frete', 'frete_label', 'codtra', 'transportadora',
             'conferencia_iniciada_em', 'conferido_em', 'faturado_em',
             'endereco_fisico', 'ordem_pilha',
             'selecionado_em', 'atribuido_em', 'conferente', 'conferente_username',
