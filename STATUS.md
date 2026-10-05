@@ -20,7 +20,7 @@
 
 **Transportadora também na tela da sequência** (web `/supervisor/patio/[id]` e mobile `supervisor/sequencia/[id]`: linha discreta abaixo do cliente) e no **relatório impresso** (coluna "Transportadora" depois de Cliente no web; no modal do mobile vai na linha de detalhes). O payload já trazia desde o primeiro commit do dia.
 
-**O que falta do ponto 3**: deploy (`6d65cfd` + `a6a1a96` + este, migration 0014) e APK novo (ponto 2 + agrupamento + transportadora na sequência).
+**Deploy e APK.** Deploy feito pelo usuário no fim do dia (`6d65cfd` + `a6a1a96` + `bc891a9`, migration 0014 — o beat preenche a transportadora dos documentos antigos sozinho). **APK 0.5.0** (versionCode 10) buildado local com `gradlew.bat assembleRelease` (2m49s): leva o ponto 2 (lista de documentos no relatório), o agrupamento do Pátio e a transportadora na sequência. Lição boba: `Set-Content -Encoding utf8` do PowerShell 5.1 grava BOM e o Gradle recusa o `build.gradle` ("Unexpected character") — editar esses arquivos sem BOM. Instalado e testado pelo usuário no mesmo dia — funcionou.
 
 ---
 
