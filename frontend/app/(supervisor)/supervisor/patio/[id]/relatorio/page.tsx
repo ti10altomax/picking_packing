@@ -89,6 +89,7 @@ export default function RelatorioSequenciaPage() {
               <tr className="border-b border-surface-border bg-surface-elev/50 text-left text-xs text-ink-muted print:text-black">
                 <th className="px-3 py-2 font-semibold">Documento</th>
                 <th className="px-3 py-2 font-semibold">Cliente</th>
+                <th className="px-3 py-2 font-semibold">Transportadora</th>
                 <th className="px-3 py-2 font-semibold">Status</th>
                 <th className="px-3 py-2 font-semibold">Conferente</th>
                 <th className="px-3 py-2 font-semibold">Separado por</th>
@@ -110,6 +111,7 @@ export default function RelatorioSequenciaPage() {
                     )}
                   </td>
                   <td className="px-3 py-2 text-ink max-w-[260px] truncate">{d.cliente || '—'}</td>
+                  <td className="px-3 py-2 text-ink max-w-[200px] truncate">{d.transportadora || '—'}</td>
                   <td className="px-3 py-2">
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium print:p-0 print:bg-transparent print:text-black ${COR_STATUS[d.status] ?? 'bg-surface-elev text-ink-muted'}`}>
                       {d.status_label}

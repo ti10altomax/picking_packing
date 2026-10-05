@@ -4,7 +4,7 @@
 
 ---
 
-## 2026-10-05 — Transportadora no sync e no Pedido (pré-requisito do ponto 3 da diretoria)
+## 2026-10-05 — Transportadora no sync e no Pedido + fila do Pátio ordenada por transportadora (ponto 3 da diretoria)
 
 **Contexto.** Diretoria respondeu o ponto 3: a prioridade vale na tela do **Sup. Pátio** e o critério é a transportadora com **maior número de notas/pedidos** em aberto — **valor não entra**. Decisão tomada em cima de consultas rodadas no DBeaver (`docs_pessoais/consultas-oracle.html`, fora do git). Transportadora não existia no modelo (só `frete` C/F/X); este passo coloca ela no domínio. Os passos 2 (ordenação da lista do Pátio) e 3 (badge web + mobile) ficam para depois.
 
@@ -14,7 +14,13 @@
 
 **API.** `codtra` e `transportadora` nos serializers de lista e detalhe de pedidos; `transportadora` nos payloads à mão do conferente (detalhe, não conformes, cancelados) e das sequências (detalhe e relatório). Django Admin: coluna, busca e campo no fieldset.
 
-**Validação em dev.** `makemigrations --check` limpo; sync de uma passada: 29 documentos com transportadora (pedidos e NF, nomes vindos do cadastro); beat uma passada: 881 verificados, 105 preenchidos. Sem suíte de testes no backend (0 testes) — `manage.py check` ok.
+**Validação em dev.** `makemigrations --check` limpo; sync de uma passada: 29 documentos com transportadora (pedidos e NF, nomes vindos do cadastro); beat uma passada: 881 verificados, 105 preenchidos. Sem suíte de testes no backend (0 testes) — `manage.py check` ok. (commit `a6a1a96`)
+
+**Ordenação da fila do Pátio (segundo commit do dia).** `GET /api/pedidos/?ordem=transportadora` anota `qtd_transportadora` = quantos documentos da **mesma fila** (mesmos filtros de status/sequência/tipo/frete, **sem** a busca — a ordem não muda conforme o que foi digitado e o "carregar mais" continua coerente) têm o mesmo `codtra`; ordena por `-qtd_transportadora, transportadora, -criado_em`. Documentos sem transportadora (retira, sem frete) vão para o fim com 0. O campo só aparece no serializer quando o parâmetro é usado (`required=False`). **Web** (`supervisor/patio/page.tsx`) e **mobile** (`app/supervisor/patio.tsx`) passam `ordem=transportadora` e abrem um **cabeçalho de grupo** quando a transportadora muda de uma linha para a outra ("ALFA TRANSP LTDA · 3 pedidos"; "Sem transportadora" esmaecido) — a lista continua plana, a seleção múltipla e o "carregar mais" não mudaram. Sem valor, sem preço, conforme a resposta da diretoria. Testado no dev com 17 Selecionados: empates por contagem saem por nome, sem transportadora no fim, busca mantém a contagem da fila. `tsc` limpo nos dois fronts.
+
+**Transportadora também na tela da sequência** (web `/supervisor/patio/[id]` e mobile `supervisor/sequencia/[id]`: linha discreta abaixo do cliente) e no **relatório impresso** (coluna "Transportadora" depois de Cliente no web; no modal do mobile vai na linha de detalhes). O payload já trazia desde o primeiro commit do dia.
+
+**O que falta do ponto 3**: deploy (`6d65cfd` + `a6a1a96` + este, migration 0014) e APK novo (ponto 2 + agrupamento + transportadora na sequência).
 
 ---
 

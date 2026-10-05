@@ -248,6 +248,9 @@ export default function SequenciaDetalhePage() {
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cfg.cor}`}>{cfg.label}</span>
                     </div>
                     <p className="text-sm text-ink-muted truncate">{p.cliente || '—'}</p>
+                    {p.transportadora && (
+                      <p className="text-xs text-ink-subtle truncate">{p.transportadora}</p>
+                    )}
                   </div>
                   <div className="text-right shrink-0">
                     {p.conferente_username && (

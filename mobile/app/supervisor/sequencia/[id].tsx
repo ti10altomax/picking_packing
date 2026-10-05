@@ -229,6 +229,9 @@ export default function SequenciaDetalhe() {
                     </View>
                   </View>
                   <Text className="text-sm text-ink-muted" numberOfLines={1}>{p.cliente || '—'}</Text>
+                  {p.transportadora ? (
+                    <Text className="text-xs text-ink-subtle" numberOfLines={1}>{p.transportadora}</Text>
+                  ) : null}
                 </View>
                 <View className="items-end">
                   {p.conferente_username ? (
@@ -316,6 +319,7 @@ export default function SequenciaDetalhe() {
                     </View>
                     <Text className="text-xs text-ink-muted" numberOfLines={1}>{d.cliente || '—'}</Text>
                     <Text className="text-xs text-ink-subtle">
+                      {d.transportadora ? `${d.transportadora} · ` : ''}
                       {vols}
                       {d.conferente ? ` · ${d.conferente}` : ''}
                       {d.separado_por ? ` · sep. ${d.separado_por}` : d.separador_nao_identificado ? ' · sep. não identificado' : ''}

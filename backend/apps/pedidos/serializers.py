@@ -39,6 +39,8 @@ class PedidoListSerializer(serializers.ModelSerializer):
     """Serializer slim para listagens (sem itens). Usa qtd_itens anotado no queryset."""
     qtd_itens = serializers.IntegerField(read_only=True)
     qtd_divergencias = serializers.IntegerField(read_only=True)
+    # Só existe com ?ordem=transportadora (anotação no queryset); fora disso o campo some.
+    qtd_transportadora = serializers.IntegerField(read_only=True, required=False)
     tempo_espera = serializers.SerializerMethodField()
     duracao_conferencia = serializers.SerializerMethodField()
     conferente_username = serializers.CharField(source='conferente.username', read_only=True)
@@ -51,7 +53,7 @@ class PedidoListSerializer(serializers.ModelSerializer):
         model = Pedido
         fields = [
             'id', 'tipo', 'tipo_label', 'numero_externo', 'cliente', 'status', 'criado_em',
-            'frete', 'frete_label', 'codtra', 'transportadora',
+            'frete', 'frete_label', 'codtra', 'transportadora', 'qtd_transportadora',
             'conferencia_iniciada_em', 'conferido_em', 'selecionado_em', 'atribuido_em',
             'conferente', 'conferente_username',
             'sequencia', 'sequencia_numero',

@@ -3,7 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.generics import get_object_or_404
 from django.db import models
-from django.db.models import Count, IntegerField, OuterRef, Q, Subquery
+from django.db.models import Case, Count, IntegerField, OuterRef, Q, Subquery, Value, When
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from .models import DivergenciaBarra, Pedido, PedidoItem, PedidoLog
@@ -59,6 +59,33 @@ class PedidoViewSet(viewsets.ModelViewSet):
             qs = qs.filter(marketplace__slug=marketplace)
         if search:
             qs = qs.filter(Q(numero_externo__icontains=search) | Q(cliente__icontains=search))
+
+        if self.request.query_params.get('ordem') == 'transportadora':
+            # Ponto 3 da diretoria (2026-10-05): a fila do Pátio sai ordenada pela
+            # transportadora com mais documentos nela. A contagem é sobre a fila inteira
+            # (mesmos filtros de status/sequência/tipo/frete, SEM a busca) — a ordem não
+            # muda conforme o que foi digitado, e o "carregar mais" continua coerente.
+            # Documentos sem transportadora (retira, sem frete) vão para o fim.
+            fila = Pedido.objects.filter(codtra=OuterRef('codtra'))
+            if status_filter:
+                fila = fila.filter(status=status_filter)
+            if tipo:
+                fila = fila.filter(tipo=tipo)
+            if frete:
+                fila = fila.filter(frete=frete)
+            if self.request.query_params.get('sem_sequencia') == '1':
+                fila = fila.filter(sequencia__isnull=True)
+            qtd_transportadora = (
+                fila.order_by().values('codtra').annotate(c=Count('id')).values('c')
+            )
+            qs = qs.annotate(
+                qtd_transportadora=Case(
+                    When(codtra='', then=Value(0)),
+                    default=Coalesce(Subquery(qtd_transportadora, output_field=IntegerField()), 0),
+                    output_field=IntegerField(),
+                ),
+            )
+            return qs.order_by('-qtd_transportadora', 'transportadora', '-criado_em')
         return qs.order_by('-criado_em')
 
     @action(detail=True, methods=['post'])

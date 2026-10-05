@@ -9,11 +9,31 @@ type Pedido = {
   numero_externo: string
   tipo?: string
   frete?: string
+  transportadora?: string
+  qtd_transportadora?: number
   cliente: string
   criado_em: string
   selecionado_em: string | null
   qtd_itens: number
   tempo_espera: string
+}
+
+// Ponto 3 da diretoria: a fila vem do servidor ordenada pela transportadora com mais
+// pedidos; aqui só abrimos um cabeçalho quando a transportadora muda de uma linha para a outra.
+type Linha = { kind: 'grupo'; chave: string; nome: string; qtd: number } | { kind: 'pedido'; pedido: Pedido }
+
+function agruparPorTransportadora(pedidos: Pedido[]): Linha[] {
+  const linhas: Linha[] = []
+  let atual: string | null = null
+  for (const p of pedidos) {
+    const chave = p.transportadora || ''
+    if (chave !== atual) {
+      atual = chave
+      linhas.push({ kind: 'grupo', chave, nome: chave || 'Sem transportadora', qtd: p.qtd_transportadora ?? 0 })
+    }
+    linhas.push({ kind: 'pedido', pedido: p })
+  }
+  return linhas
 }
 
 const STATUS_SEQ: Record<string, { label: string; cor: string }> = {
@@ -52,7 +72,7 @@ export default function SupervisorPatioPage() {
     else setCarregandoMais(true)
     try {
       const data: Paginado<Pedido> | Pedido[] = await supervisorApi.listarSelecionados({
-        search, page, sem_sequencia: '1',
+        search, page, sem_sequencia: '1', ordem: 'transportadora',
       })
       if (Array.isArray(data)) {
         setPedidos(data)
@@ -135,6 +155,7 @@ export default function SupervisorPatioPage() {
   }
 
   const todosMarcadosNaPagina = pedidos.length > 0 && selecionados.size >= pedidos.length
+  const linhas = agruparPorTransportadora(pedidos)
   const sequenciasAbertas = sequencias.filter((s) => s.status !== 'concluida')
 
   return (
@@ -225,7 +246,23 @@ export default function SupervisorPatioPage() {
               <span className="ml-auto">{pedidos.length} de {count}</span>
             </div>
             <ul>
-              {pedidos.map((p) => {
+              {linhas.map((l) => {
+                if (l.kind === 'grupo') {
+                  return (
+                    <li
+                      key={`g-${l.chave}`}
+                      className={`flex items-center gap-2 px-4 py-1.5 border-b border-surface-border bg-surface-elev/40 text-xs font-semibold uppercase tracking-wide ${l.chave ? 'text-ink' : 'text-ink-subtle'}`}
+                    >
+                      <span className="truncate">{l.nome}</span>
+                      {l.qtd > 0 && (
+                        <span className="ml-auto font-normal normal-case tracking-normal text-ink-muted whitespace-nowrap">
+                          {l.qtd} {l.qtd === 1 ? 'pedido' : 'pedidos'}
+                        </span>
+                      )}
+                    </li>
+                  )
+                }
+                const p = l.pedido
                 const marcado = selecionados.has(p.id)
                 return (
                   <li

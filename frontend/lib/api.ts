@@ -175,6 +175,7 @@ export type RelatorioDocumento = {
   numero_externo: string
   frete: string
   frete_label: string
+  transportadora?: string
   cliente: string
   status: string
   status_label: string
@@ -212,6 +213,7 @@ export type SequenciaPedido = {
   id: number
   tipo?: string
   frete?: string
+  transportadora?: string
   numero_externo: string
   cliente: string
   status: string
@@ -289,7 +291,7 @@ export const supervisorApi = {
     }).then((r) => r.data),
   selecionar: (pedidoIds: number[]) =>
     api.post('/api/pedidos/selecionar/', { pedido_ids: pedidoIds }).then((r) => r.data),
-  listarSelecionados: (params: { search?: string; page?: number; sem_sequencia?: '1' } = {}) =>
+  listarSelecionados: (params: { search?: string; page?: number; sem_sequencia?: '1'; ordem?: 'transportadora' } = {}) =>
     api.get('/api/pedidos/', {
       params: { status: 'selecionado', ...params },
     }).then((r) => r.data),

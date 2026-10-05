@@ -24,12 +24,32 @@ type Pedido = {
   numero_externo: string
   tipo?: string
   frete?: string
+  transportadora?: string
+  qtd_transportadora?: number
   cliente: string
   qtd_itens: number
   tempo_espera: string
 }
 
 type Paginado = { count: number; next: string | null; results: Pedido[] }
+
+// Ponto 3 da diretoria: a fila vem do servidor ordenada pela transportadora com mais
+// pedidos; aqui só abrimos um cabeçalho quando a transportadora muda de uma linha para a outra.
+type Linha = { kind: 'grupo'; chave: string; nome: string; qtd: number } | { kind: 'pedido'; pedido: Pedido }
+
+function agruparPorTransportadora(pedidos: Pedido[]): Linha[] {
+  const linhas: Linha[] = []
+  let atual: string | null = null
+  for (const p of pedidos) {
+    const chave = p.transportadora || ''
+    if (chave !== atual) {
+      atual = chave
+      linhas.push({ kind: 'grupo', chave, nome: chave || 'Sem transportadora', qtd: p.qtd_transportadora ?? 0 })
+    }
+    linhas.push({ kind: 'pedido', pedido: p })
+  }
+  return linhas
+}
 
 const STATUS_SEQ: Record<string, { label: string; cor: string; texto: string }> = {
   aberta: { label: 'Aberta', cor: 'bg-orange-500/15', texto: 'text-orange-300' },
@@ -70,7 +90,7 @@ export default function SupervisorPatio() {
     buscaAtivaRef.current = search
     try {
       const data: Paginado | Pedido[] = await supervisorApi.listarSelecionados({
-        search, page, sem_sequencia: '1',
+        search, page, sem_sequencia: '1', ordem: 'transportadora',
       })
       if (Array.isArray(data)) {
         setPedidos(data); setCount(data.length); setProximaPagina(null)
@@ -139,6 +159,7 @@ export default function SupervisorPatio() {
   }
 
   const sequenciasAbertas = sequencias.filter((s) => s.status !== 'concluida')
+  const linhas = agruparPorTransportadora(pedidos)
   const labelDestino = destino === 'nova'
     ? 'Nova sequência'
     : `Sequência ${sequenciasAbertas.find((s) => s.id === destino)?.numero ?? destino}`
@@ -203,10 +224,10 @@ export default function SupervisorPatio() {
         </View>
       ) : (
         <FlatList
-          data={pedidos}
+          data={linhas}
           style={{ opacity: carregando ? 0.45 : 1 }}
           pointerEvents={carregando ? 'none' : 'auto'}
-          keyExtractor={(p) => String(p.id)}
+          keyExtractor={(l) => (l.kind === 'grupo' ? `g-${l.chave}` : String(l.pedido.id))}
           contentContainerStyle={{
             paddingHorizontal: 16,
             paddingBottom: selecionados.size > 0 ? insets.bottom + 80 : insets.bottom + 16,
@@ -242,7 +263,23 @@ export default function SupervisorPatio() {
               </Pressable>
             ) : null
           }
-          renderItem={({ item: p }) => {
+          renderItem={({ item: l }) => {
+            if (l.kind === 'grupo') {
+              return (
+                <View className="flex-row items-center gap-2 px-1 pt-2 pb-0.5">
+                  <Text
+                    className={`flex-1 text-xs font-semibold uppercase tracking-wide ${l.chave ? 'text-ink' : 'text-ink-subtle'}`}
+                    numberOfLines={1}
+                  >
+                    {l.nome}
+                  </Text>
+                  {l.qtd > 0 ? (
+                    <Text className="text-xs text-ink-muted">{l.qtd} {l.qtd === 1 ? 'pedido' : 'pedidos'}</Text>
+                  ) : null}
+                </View>
+              )
+            }
+            const p = l.pedido
             const marcado = selecionados.has(p.id)
             return (
               <Pressable
