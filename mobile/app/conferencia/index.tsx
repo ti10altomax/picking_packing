@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { Header } from '@/components/Header'
 import { DocBadges } from '@/components/DocBadges'
+import { CameraScanner } from '@/components/CameraScanner'
 import { conferenciaApi } from '@/lib/api'
 
 type Pedido = {
@@ -76,6 +77,10 @@ export default function ConferenciaLista() {
   const [scanFlash, setScanFlash] = useState<'erro' | null>(null)
   const [pegando, setPegando] = useState(false)
   const [opcoes, setOpcoes] = useState<Opcao[] | null>(null)
+  // Celular sem leitor embutido: câmera lê o código de barras do DANFE, ou o teclado
+  // abre para digitar o número (no TC21 a barra fica sem teclado, como na tela do pedido).
+  const [cameraAberta, setCameraAberta] = useState(false)
+  const [tecladoAberto, setTecladoAberto] = useState(false)
 
   const carregar = useCallback(async (refresh = false) => {
     if (refresh) setRefreshing(true)
@@ -128,8 +133,15 @@ export default function ConferenciaLista() {
 
   function handleScan() {
     const cod = scanValue.trim()
+    setTecladoAberto(false)
     if (!cod) return
     pegar({ codigo: cod })
+  }
+
+  function abrirTeclado() {
+    setTecladoAberto(true)
+    // showSoftInputOnFocus é lido no foco: solta e foca de novo com o teclado liberado
+    setTimeout(() => { scanRef.current?.blur(); setTimeout(() => scanRef.current?.focus(), 50) }, 0)
   }
 
   useEffect(() => {
@@ -193,17 +205,39 @@ export default function ConferenciaLista() {
           onChangeText={setScanValue}
           onSubmitEditing={handleScan}
           submitBehavior="submit"
-          showSoftInputOnFocus={false}
+          showSoftInputOnFocus={tecladoAberto}
+          keyboardType="number-pad"
           autoCapitalize="none"
           autoCorrect={false}
           autoComplete="off"
           importantForAutofill="no"
-          placeholder={scanMsg || 'Bipe a nota para pegar…'}
+          placeholder={scanMsg || (tecladoAberto ? 'Digite o número da nota…' : 'Bipe a nota para pegar…')}
           placeholderTextColor={scanFlash === 'erro' ? '#f87171' : '#71717a'}
-          onBlur={() => { if (!opcoes) setTimeout(() => scanRef.current?.focus(), 80) }}
+          onBlur={() => { if (!opcoes && !cameraAberta && !tecladoAberto) setTimeout(() => scanRef.current?.focus(), 80) }}
           className={`flex-1 h-14 text-base font-mono tracking-wider ${scanFlash === 'erro' ? 'text-red-300' : 'text-white'}`}
         />
+        <Pressable
+          onPress={abrirTeclado}
+          className="w-11 h-12 items-center justify-center rounded-lg active:bg-zinc-800"
+          accessibilityLabel="Digitar o número"
+        >
+          <Text className={`text-xl ${tecladoAberto ? 'text-white' : 'text-zinc-400'}`}>⌨</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => { setTecladoAberto(false); setCameraAberta(true) }}
+          className="w-12 h-12 items-center justify-center rounded-lg active:bg-zinc-800"
+          accessibilityLabel="Bipar com a câmera"
+        >
+          <Text className={`text-xl ${scanFlash === 'erro' ? 'text-red-400' : 'text-emerald-400'}`}>📷</Text>
+        </Pressable>
       </View>
+
+      {cameraAberta ? (
+        <CameraScanner
+          onResultado={(c) => { setCameraAberta(false); pegar({ codigo: c }) }}
+          onFechar={() => { setCameraAberta(false); setTimeout(() => scanRef.current?.focus(), 150) }}
+        />
+      ) : null}
 
       {opcoes ? (
         <View className="mx-4 mb-2 bg-surface-card border border-amber-500/60 rounded-xl p-3">

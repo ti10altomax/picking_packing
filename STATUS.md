@@ -14,7 +14,9 @@
 
 **Teste em dev** (script com rollback, 11 cenários): lista com disponíveis da sequência mais antiga liberada; chave DANFE pega a NF; segundo conferente na mesma nota → 409 já está com joao; bipar de novo → aberto; pedido por número → atribuído; inexistente → 404; Pendente → 409; Selecionado sem sequência → 409; nota de sequência nova com pendência na antiga → 409 trava; número duplicado NF × pedido → 409 ambíguo com 2 opções → `pedido_id` resolve. Bug achado no teste: `select_for_update()` + `select_related('sequencia')` (FK nula) dá `FOR UPDATE cannot be applied to the nullable side of an outer join` — corrigido com `of=('self',)`.
 
-**APK 0.6.0** (versionCode 11) buildado local logo após o commit `eafb117`. **Pendente**: deploy (sem migration) + sideload do 0.6.0 nos TC21.
+**APK 0.6.0** (versionCode 11) buildado local logo após o commit `eafb117`. Deploy do backend e sideload do 0.6.0 feitos pelo usuário em 2026-10-06 — ponto 4 em produção.
+
+**2026-10-06 — celular sem leitor.** Quem confere com celular comum não tinha como bipar a nota: a barra da lista ficava sem teclado (`showSoftInputOnFocus=false`, como no TC21) e sem câmera. A barra ganhou os dois botões da tela do pedido: **📷** abre o `CameraScanner` (lê o código de barras do DANFE e chama `pegar({codigo})`) e **⌨** libera o teclado numérico para digitar o número (solta e refoca o input, porque `showSoftInputOnFocus` é lido no foco; fecha ao enviar). No TC21 nada muda. **APK 0.6.1** (versionCode 12).
 
 ---
 
