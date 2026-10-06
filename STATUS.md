@@ -14,7 +14,7 @@
 
 **Teste em dev** (script com rollback, 11 cenários): lista com disponíveis da sequência mais antiga liberada; chave DANFE pega a NF; segundo conferente na mesma nota → 409 já está com joao; bipar de novo → aberto; pedido por número → atribuído; inexistente → 404; Pendente → 409; Selecionado sem sequência → 409; nota de sequência nova com pendência na antiga → 409 trava; número duplicado NF × pedido → 409 ambíguo com 2 opções → `pedido_id` resolve. Bug achado no teste: `select_for_update()` + `select_related('sequencia')` (FK nula) dá `FOR UPDATE cannot be applied to the nullable side of an outer join` — corrigido com `of=('self',)`.
 
-**Pendente**: deploy + APK 0.6.0 (a barra é mobile). Sem migration.
+**APK 0.6.0** (versionCode 11) buildado local logo após o commit `eafb117`. **Pendente**: deploy (sem migration) + sideload do 0.6.0 nos TC21.
 
 ---
 
