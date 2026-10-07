@@ -2,7 +2,7 @@
 import { DocBadges } from '@/components/ui/DocBadges'
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { conferenciaApi, separadoresApi, SeparadorLiberado } from '@/lib/api'
+import { conferenciaApi, separadoresApi, SeparadorLiberado, type VereditoEtiqueta } from '@/lib/api'
 import { CameraScanner } from '@/components/CameraScanner'
 import { useDialog } from '@/components/Dialog'
 
@@ -255,6 +255,8 @@ export default function ConferenciaPedidoPage() {
           message: 'O pedido ficou aguardando o fechamento do Supervisor de Pátio.',
           variant: 'info',
         })
+      } else if (res.etiqueta) {
+        await avisarEtiqueta(res.etiqueta as VereditoEtiqueta)
       }
       router.replace('/conferencia')
     } catch (err: unknown) {
@@ -263,6 +265,45 @@ export default function ConferenciaPedidoPage() {
       await dialog.alert({
         title: 'Erro ao concluir',
         message: msg ?? 'Não foi possível concluir a conferência.',
+        variant: 'danger',
+      })
+    }
+  }
+
+  // Etiqueta de volume (ponto 7): o que aconteceu com a impressão automática
+  const avisarEtiqueta = async (e: VereditoEtiqueta) => {
+    const vols = `${e.qtd_volumes} volume(s)`
+    if (e.resultado === 'enfileirada') {
+      await dialog.alert({
+        title: 'Etiquetas enviadas',
+        message: `${vols} → impressora ${e.impressora}. Cole uma etiqueta em cada caixa.`,
+        variant: 'success',
+      })
+      return
+    }
+    if (e.resultado === 'sem_transportadora') {
+      await dialog.alert({
+        title: 'Etiqueta pendente',
+        message: 'O documento ainda não tem transportadora no Senior. A etiqueta sai sozinha quando ela chegar (Gestão → Etiquetas).',
+        variant: 'warning',
+      })
+      return
+    }
+    if (e.resultado === 'sem_impressora_padrao' || e.resultado === 'desligada') {
+      const abrir = await dialog.confirm({
+        title: 'Imprimir etiquetas?',
+        message: `${vols} conferido(s). Nenhuma impressora padrão configurada — abrir a etiqueta para imprimir pelo navegador?`,
+        confirmText: 'Abrir etiqueta',
+        cancelText: 'Depois',
+        variant: 'question',
+      })
+      if (abrir) window.open(`/etiquetas/${pedidoId}`, '_blank', 'noopener')
+      return
+    }
+    if (e.resultado === 'erro') {
+      await dialog.alert({
+        title: 'Etiqueta não enviada',
+        message: e.mensagem ?? 'Falha ao enviar para a impressora. O supervisor pode reimprimir em Gestão → Etiquetas.',
         variant: 'danger',
       })
     }

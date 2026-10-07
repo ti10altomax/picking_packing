@@ -41,6 +41,8 @@ class PedidoListSerializer(serializers.ModelSerializer):
     qtd_divergencias = serializers.IntegerField(read_only=True)
     # Só existe com ?ordem=transportadora (anotação no queryset); fora disso o campo some.
     qtd_transportadora = serializers.IntegerField(read_only=True, required=False)
+    # Última impressão `ok` da etiqueta de volume (anotação no queryset da lista)
+    etiqueta_volume_em = serializers.DateTimeField(read_only=True, required=False)
     tempo_espera = serializers.SerializerMethodField()
     duracao_conferencia = serializers.SerializerMethodField()
     conferente_username = serializers.CharField(source='conferente.username', read_only=True)
@@ -59,6 +61,7 @@ class PedidoListSerializer(serializers.ModelSerializer):
             'sequencia', 'sequencia_numero',
             'separado_por', 'separado_por_nome', 'separador_nao_identificado',
             'qtd_itens', 'qtd_divergencias', 'tempo_espera', 'duracao_conferencia',
+            'etiqueta_volume_em',
         ]
 
     def get_separado_por_nome(self, obj):
@@ -87,6 +90,7 @@ class PedidoSerializer(serializers.ModelSerializer):
     duracao_conferencia = serializers.SerializerMethodField()
     tipo_label = serializers.CharField(source='get_tipo_display', read_only=True)
     frete_label = serializers.CharField(read_only=True)
+    etiqueta_volume_em = serializers.SerializerMethodField()
 
     class Meta:
         model = Pedido
@@ -100,12 +104,18 @@ class PedidoSerializer(serializers.ModelSerializer):
             'sequencia', 'sequencia_numero',
             'separado_por', 'separado_por_nome', 'separador_nao_identificado',
             'percent_conferido', 'qtd_itens', 'qtd_divergencias',
-            'tempo_espera', 'duracao_conferencia',
+            'tempo_espera', 'duracao_conferencia', 'etiqueta_volume_em',
             'itens',
         ]
 
     def get_separado_por_nome(self, obj):
         return _nome_separado_por(obj)
+
+    def get_etiqueta_volume_em(self, obj):
+        return (
+            obj.impressoes_etiqueta.filter(status='ok')
+            .order_by('-criado_em').values_list('criado_em', flat=True).first()
+        )
 
     def get_qtd_divergencias(self, obj):
         return DivergenciaBarra.objects.filter(pedido_item__pedido=obj).count()

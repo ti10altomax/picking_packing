@@ -5,7 +5,7 @@ import { Link } from 'expo-router'
 import { Header } from '@/components/Header'
 import { useAuthStore } from '@/stores/authStore'
 import {
-  pedidosApi, supervisorApi, separadoresApi, fechamentosApi,
+  pedidosApi, supervisorApi, separadoresApi, fechamentosApi, impressaoApi,
 } from '@/lib/api'
 
 type Contadores = {
@@ -17,11 +17,13 @@ type Contadores = {
   cancelados: number | null
   fechamentos: number | null
   conferidos: number | null
+  etiquetas: number | null
 }
 
 const VAZIO: Contadores = {
   pendentes: null, aguardandoSequencia: null, liberadosHoje: null,
   emConferencia: null, naoConformes: null, cancelados: null, fechamentos: null, conferidos: null,
+  etiquetas: null,
 }
 
 function contar(data: { count?: number } | unknown[]): number {
@@ -57,6 +59,7 @@ export default function AdminHome() {
         definir('cancelados')(d.filter((x) => !x.transferido_para).length)),
       fechamentosApi.listar().then((d) => definir('fechamentos')(d.length)),
       supervisorApi.listarConferidos().then((d) => definir('conferidos')(contar(d))),
+      impressaoApi.pendentes().then((d) => definir('etiquetas')(d.prontas.length)),
     ]).finally(() => setRefreshing(false))
   }
 
@@ -99,6 +102,10 @@ export default function AdminHome() {
     {
       href: '/supervisor/cancelados', titulo: 'Cancelados',
       valor: c.cancelados, alerta: (c.cancelados ?? 0) > 0, cor: 'text-red-400',
+    },
+    {
+      href: '/supervisor/etiquetas', titulo: 'Etiquetas de volume',
+      valor: c.etiquetas, alerta: (c.etiquetas ?? 0) > 0, cor: 'text-emerald-400',
     },
     {
       href: '/supervisor/conferidos', titulo: 'Conferidos',

@@ -13,8 +13,9 @@ import {
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { conferenciaApi, separadoresApi, SeparadorLiberado } from '@/lib/api'
+import { conferenciaApi, separadoresApi, SeparadorLiberado, type VereditoEtiqueta } from '@/lib/api'
 import { CameraScanner } from '@/components/CameraScanner'
+import { EscolherImpressora } from '@/components/EscolherImpressora'
 import { useDialog } from '@/components/Dialog'
 import { DocBadges } from '@/components/DocBadges'
 
@@ -92,6 +93,8 @@ export default function ConferenciaDetalhe() {
   const [modalNovoVolume, setModalNovoVolume] = useState(false)
   const [modalNaoConforme, setModalNaoConforme] = useState(false)
   const [modalConcluir, setModalConcluir] = useState(false)
+  // Etiqueta de volume: seletor de impressora quando não há padrão configurada
+  const [modalImpressora, setModalImpressora] = useState(false)
   const [itemSelecionado, setItemSelecionado] = useState<ItemPedido | null>(null)
   const [codigoInicial, setCodigoInicial] = useState('')
   const [cameraGlobalAberta, setCameraGlobalAberta] = useState(false)
@@ -230,6 +233,13 @@ export default function ConferenciaDetalhe() {
           title: 'Sobra registrada',
           message: 'O pedido ficou aguardando o fechamento do Supervisor de Pátio.',
         })
+      } else if (res.etiqueta) {
+        const abrirSeletor = await avisarEtiqueta(res.etiqueta as VereditoEtiqueta)
+        if (abrirSeletor) {
+          // fica na tela até o conferente imprimir ou cancelar; o fechamento do modal navega
+          setModalImpressora(true)
+          return
+        }
       }
       router.replace('/conferencia')
     } catch (e: unknown) {
@@ -241,6 +251,45 @@ export default function ConferenciaDetalhe() {
         message: msg ?? 'Não foi possível concluir a conferência.',
       })
     }
+  }
+
+  // Etiqueta de volume (ponto 7): o que aconteceu com a impressão automática.
+  // Devolve true quando o conferente quer escolher a impressora agora.
+  async function avisarEtiqueta(e: VereditoEtiqueta): Promise<boolean> {
+    const vols = `${e.qtd_volumes} volume(s)`
+    if (e.resultado === 'enfileirada') {
+      await dialog.alert({
+        variant: 'success',
+        title: 'Etiquetas enviadas',
+        message: `${vols} → impressora ${e.impressora}. Cole uma etiqueta em cada caixa.`,
+      })
+      return false
+    }
+    if (e.resultado === 'sem_transportadora') {
+      await dialog.alert({
+        variant: 'warning',
+        title: 'Etiqueta pendente',
+        message: 'O documento ainda não tem transportadora no Senior. A etiqueta sai sozinha quando ela chegar.',
+      })
+      return false
+    }
+    if (e.resultado === 'sem_impressora_padrao' || e.resultado === 'desligada') {
+      return dialog.confirm({
+        variant: 'question',
+        title: 'Imprimir etiquetas?',
+        message: `${vols} conferido(s). Nenhuma impressora padrão configurada — escolher uma agora?`,
+        confirmText: 'Escolher impressora',
+        cancelText: 'Depois',
+      })
+    }
+    if (e.resultado === 'erro') {
+      await dialog.alert({
+        variant: 'danger',
+        title: 'Etiqueta não enviada',
+        message: e.mensagem ?? 'Falha ao enviar para a impressora. O supervisor pode reimprimir em Etiquetas.',
+      })
+    }
+    return false
   }
 
   async function aoMarcarNaoConforme(motivo: string, detalhe: string) {
@@ -673,6 +722,12 @@ export default function ConferenciaDetalhe() {
           onConfirmar={aoMarcarNaoConforme}
         />
       ) : null}
+
+      <EscolherImpressora
+        visible={modalImpressora}
+        pedidoId={pedidoId}
+        onClose={() => { setModalImpressora(false); router.replace('/conferencia') }}
+      />
 
       {modalConcluir ? (
         <ModalConcluir

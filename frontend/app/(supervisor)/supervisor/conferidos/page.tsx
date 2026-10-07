@@ -2,6 +2,7 @@
 import { DocBadges } from '@/components/ui/DocBadges'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { supervisorApi, pedidosApi, type Paginado } from '@/lib/api'
+import { ImprimirEtiqueta } from '@/components/etiquetas/ImprimirEtiqueta'
 
 type Pedido = {
   id: number
@@ -16,6 +17,8 @@ type Pedido = {
   separador_nao_identificado: boolean
   qtd_itens: number
   duracao_conferencia: string | null
+  transportadora?: string
+  etiqueta_volume_em?: string | null
 }
 
 type Item = {
@@ -144,9 +147,10 @@ export default function ConferidosPage() {
                 const carregandoEsse = carregandoItens.has(p.id)
                 return (
                   <li key={p.id} className="border-b border-surface-border last:border-b-0">
+                    <div className="flex items-start">
                     <button
                       onClick={() => alternarExpansao(p.id)}
-                      className="w-full px-4 py-3 text-left hover:bg-surface-elev/40 transition-colors"
+                      className="flex-1 min-w-0 px-4 py-3 text-left hover:bg-surface-elev/40 transition-colors"
                     >
                       <div className="flex items-start gap-3">
                         <div className="flex-1 min-w-0">
@@ -157,7 +161,10 @@ export default function ConferidosPage() {
                               Conferido
                             </span>
                           </div>
-                          <p className="text-sm text-ink-muted truncate">{p.cliente || '—'}</p>
+                          <p className="text-sm text-ink-muted truncate">
+                            {p.cliente || '—'}
+                            {p.transportadora && <span className="text-ink-subtle"> · {p.transportadora}</span>}
+                          </p>
                           <p className="text-xs text-ink-subtle mt-1">
                             {p.conferido_em && (
                               <>
@@ -191,6 +198,16 @@ export default function ConferidosPage() {
                         </span>
                       </div>
                     </button>
+                    {/* Etiqueta de volume (ponto 7): imprime/reimprime; só com transportadora */}
+                    <div className="pr-3 pt-3 shrink-0">
+                      <ImprimirEtiqueta
+                        pedidoId={p.id}
+                        impressaEm={p.etiqueta_volume_em}
+                        bloqueio={p.transportadora ? null : 'Sem transportadora no Senior'}
+                        onImpresso={() => carregar(buscaAtiva, 1, false)}
+                      />
+                    </div>
+                    </div>
 
                     {aberto && (
                       <div className="bg-emerald-50 dark:bg-emerald-500/10 border-t border-emerald-200 dark:border-emerald-500/30 border-l-4 border-l-emerald-400 dark:border-l-emerald-500 pl-6 pr-4 py-3">

@@ -15,5 +15,6 @@ urlpatterns = [
     path('api/', include('apps.separadores.urls')),
     path('api/', include('apps.sequencias.urls')),
     path('api/', include('apps.senior.urls')),
+    path('api/', include('apps.impressao.urls')),
     path('api/', include('apps.etiquetas.urls')),
 ]

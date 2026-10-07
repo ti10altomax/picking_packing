@@ -770,7 +770,16 @@ def _finalizar_conferido(pedido: Pedido, user) -> tuple[bool, str]:
     )
     if pedido.sequencia:
         pedido.sequencia.recalcular_status()
-    return sucesso, msg_erro
+
+    # Etiqueta de volume (ponto 7, 2026-10-07): impressão automática na impressora
+    # padrão, só com transportadora. O veredito volta para a tela do conferente.
+    from apps.impressao.services import disparar_automatica
+    try:
+        etiqueta = disparar_automatica(pedido)
+    except Exception:  # nunca derruba o concluir por causa da etiqueta
+        logger.exception(f'etiqueta de volume: falha ao decidir impressão de {pedido}')
+        etiqueta = {'resultado': 'erro', 'impressora': None}
+    return sucesso, msg_erro, etiqueta
 
 
 def _validar_sobras(pedido: Pedido, dados):
@@ -867,12 +876,13 @@ def concluir(request, pk):
                 'aguardando_fechamento': True,
             })
 
-    sucesso, msg_erro = _finalizar_conferido(pedido, request.user)
+    sucesso, msg_erro, etiqueta = _finalizar_conferido(pedido, request.user)
     return Response({
         'ok': True,
         'status': pedido.status,
         'senior_ok': sucesso,
         'senior_erro': msg_erro,
+        'etiqueta': etiqueta,
     })
 
 
@@ -1222,12 +1232,13 @@ def fechar_sobra(request, pk):
         pedido=pedido, usuario=request.user,
         acao='sobra_fechada', payload={},
     )
-    sucesso, msg_erro = _finalizar_conferido(pedido, request.user)
+    sucesso, msg_erro, etiqueta = _finalizar_conferido(pedido, request.user)
     return Response({
         'ok': True,
         'status': pedido.status,
         'senior_ok': sucesso,
         'senior_erro': msg_erro,
+        'etiqueta': etiqueta,
     })
 
 

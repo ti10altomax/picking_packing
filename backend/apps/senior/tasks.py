@@ -297,6 +297,7 @@ def monitorar_cancelamentos(passada_completa: bool = False):
     )
     from apps.pedidos.models import Pedido
     from apps.pedidos.cancelamento import STATUS_MONITORADOS, cancelar
+    from apps.impressao.services import disparar_automatica
 
     limite = timezone.now() - dt.timedelta(days=max(_janela_dias(), 1))
     qs = Pedido.objects.filter(status__in=STATUS_MONITORADOS).select_related('sequencia')
@@ -349,6 +350,13 @@ def monitorar_cancelamentos(passada_completa: bool = False):
                     pedido.codtra, pedido.transportadora = codtra, transportadora
                     pedido.save(update_fields=['codtra', 'transportadora'])
                     transportadoras += 1
+                    if pedido.status == Pedido.Status.CONFERIDO:
+                        # Etiqueta de volume (2026-10-07): estava em "aguardando
+                        # transportadora" — agora pode sair na impressora padrão
+                        try:
+                            disparar_automatica(pedido)
+                        except Exception:
+                            logger.exception(f'etiqueta de volume: falha ao disparar para {pedido}')
             if not cancelado_fn(row):
                 continue
             situacao = _s(row.get('sitped') or row.get('sitnfv'))

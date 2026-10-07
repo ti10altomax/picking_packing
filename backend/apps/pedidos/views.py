@@ -34,9 +34,15 @@ class PedidoViewSet(viewsets.ModelViewSet):
                 DivergenciaBarra.objects.filter(pedido_item__pedido=OuterRef('pk'))
                 .order_by().values('pedido_item__pedido').annotate(c=Count('id')).values('c')
             )
+            from apps.impressao.models import ImpressaoEtiqueta
+            etiqueta_volume_em = (
+                ImpressaoEtiqueta.objects.filter(pedido=OuterRef('pk'), status='ok')
+                .order_by('-criado_em').values('criado_em')[:1]
+            )
             qs = Pedido.objects.select_related('conferente', 'separado_por', 'sequencia').annotate(
                 qtd_itens=Coalesce(Subquery(qtd_itens, output_field=IntegerField()), 0),
                 qtd_divergencias=Coalesce(Subquery(qtd_divergencias, output_field=IntegerField()), 0),
+                etiqueta_volume_em=Subquery(etiqueta_volume_em),
             )
         else:
             qs = Pedido.objects.select_related('marketplace', 'conferente', 'separado_por', 'sequencia').prefetch_related('itens')

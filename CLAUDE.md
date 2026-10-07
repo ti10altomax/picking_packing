@@ -16,6 +16,8 @@ Sistema interno para **separação de pedidos no galpão da Altomax**. Não é m
 
 > **Conferente pega a nota bipando (2026-10-05, ponto 4 da diretoria, leitura B)** — o Pátio continua montando sequências, mas atribuir conferente virou **opcional**: a lista "Atribuídos a mim" tem uma barra de bipagem (chave do DANFE ou número da NF/pedido) e uma seção "Disponíveis na sequência N". `POST /api/conferencia/pegar/` abre o que já é dele ou pega um pedido sequenciado sem conferente (Selecionado → Atribuído, log `pedido_atribuido` com `via: bipagem`), respeitando a trava de sequência; dois coletores na mesma nota → o primeiro leva. Pendente, sem sequência, de outro conferente ou cancelado → 409 com motivo.
 
+> **Etiqueta de volume 10x15 (2026-10-07, ponto 7 da diretoria)** — não existia etiqueta (escreviam a pincel na caixa + folha A4 "carta de transporte"). Agora, ao virar **Conferido** e **só com transportadora**, sai uma etiqueta por volume com itens (marca, VOLUME N/M, documento + Code 128, cliente, transportadora grande, itens × qtd, carta de transporte como rodapé). App `apps/impressao`: dados neutros (`etiqueta.py`), ZPL para Zebra (`zpl.py`, ASCII + truncamento em Python), página HTML `/etiquetas/[id]` para qualquer impressora via navegador, agente USB (`PrintJob`, módulo congelado reaproveitado). Impressora padrão + liga/desliga em `Configuracao` (`impressora_padrao`, `etiqueta_automatica`); impressão automática via Celery; sem padrão ou sem transportadora o pedido fica em **Gestão → Etiquetas** (`/api/impressao/pendentes/`) e o beat dispara quando a transportadora chega. Reimpressão em Conferidos (web e mobile). `Impressora`/`PrintAgent`/`PrintJob` e `/admin/impressoras` voltaram ao uso. Quantidade/modelo de impressoras ainda indefinidos — por isso todos os caminhos estão prontos.
+
 Atores principais: **Supervisor de Vendas**, **Supervisor de Pátio**, **Conferente** e **Admin**.
 
 ### Fluxo geral
@@ -152,6 +154,7 @@ Toda transição grava em `PedidoLog` (quem, quando, ação, payload).
    - Chama WS Senior (a definir) com a lista de volumes.
    - Sucesso → `Conferido`.
    - Falha no WS → registra erro, mantém `Em conferência`, alerta admin.
+   - **Etiqueta de volume**: ao virar Conferido, imprime 1 etiqueta 10x15 por volume na impressora padrão (só com transportadora); a resposta traz `etiqueta` com o veredito e a tela avisa o conferente.
 8. **Marcar como Não conforme**
    - Botão alternativo a "Concluir".
    - Conferente escolhe motivo: divergência de quantidade, produto errado, item ausente.
@@ -205,6 +208,9 @@ Volume(id, pedido_id, tipo, identificador,
 VolumeItem(id, volume_id, pedido_item_id, qtd, criado_em)
 
 PedidoLog(id, pedido_id, user_id, acao, payload, criado_em)
+
+ImpressaoEtiqueta(id, pedido_id, impressora_id, canal, status, qtd_etiquetas,
+                  automatica, usuario_id, print_job_id, erro, criado_em)   # apps/impressao
 ```
 
 > O `Pedido` ganha campos novos (`selecionado_em`, `atribuido_para_id`, etc.) e perde a relevância dos campos de etiquetagem (`embalagem_*`, `etiqueta_vtex_*`, `etiqueta_impressa_em`) para o fluxo principal — esses ficam no schema (módulos congelados) mas não são tocados.
@@ -249,16 +255,18 @@ separa/
 │   │   ├── separadores/    # cadastro de separadores físicos + liberação diária
 │   │   ├── sequencias/     # sequências de separação (fluxo do Sup. Pátio)
 │   │   ├── senior/         # leitura Oracle + saída SOAP (operação a definir)
-│   │   ├── etiquetas/      # CONGELADO — Impressora, PrintAgent, PrintJob (não tocar)
+│   │   ├── impressao/      # etiqueta de volume 10x15: dados, ZPL, impressão automática, pendentes
+│   │   ├── etiquetas/      # CONGELADO — mas Impressora/PrintAgent/PrintJob e printer.py são reaproveitados pela impressao
 │   │   └── vtex/           # CONGELADO — VTEX API
 ├── frontend/
 │   ├── app/
 │   │   ├── (conferente)/   # conferencia/ (atual) + pedidos/ (LEGADO congelado)
-│   │   ├── (supervisor)/   # telas de Sup. Vendas, Sup. Pátio, conferidos, não conformes
+│   │   ├── (impressao)/    # etiquetas/[id] — etiqueta 10x15 pelo navegador (sem header)
+│   │   ├── (supervisor)/   # telas de Sup. Vendas, Sup. Pátio, conferidos, não conformes, etiquetas
 │   │   ├── (admin)/
 │   │   │   └── admin/
-│   │   │       ├── impressoras/   # CONGELADO — fora do menu
-│   │   │       └── agents/        # CONGELADO — fora do menu
+│   │   │       ├── impressoras/   # cadastro das impressoras + impressora padrão da etiqueta (voltou ao menu em 2026-10-07)
+│   │   │       └── agents/        # agentes USB (voltou ao menu em 2026-10-07)
 │   │   └── (etiquetador)/  # CONGELADO — fora do menu
 ├── mobile/                 # app React Native (Expo) — paridade de telas com o web
 └── docker-compose.yml
@@ -289,10 +297,10 @@ separa/
 
 Estes módulos foram desenvolvidos para o escopo anterior (expedição multi-marketplace com etiquetagem VTEX) e permanecem no código **preservados, fora do menu/navegação atual**:
 
-- `apps/etiquetas/` — Lote, LotePedido, EtiquetaVtex, Impressora, PrintAgent, PrintJob (CRUD, agent USB, fila de jobs).
+- `apps/etiquetas/` — Lote, LotePedido, EtiquetaVtex (congelados). **Exceção desde 2026-10-07**: `Impressora`, `PrintAgent`, `PrintJob`, `printer.py` e as rotas do agente/CRUD de impressoras voltaram ao uso pela etiqueta de volume (`apps/impressao`) — continuam sem alteração, só são importados.
 - `apps/vtex/` — integração com VTEX API (resgate de etiquetas).
 - `apps/senior/soap.py` — operação `Gerar` do `embalagempfa` (cliente SOAP base pode ser reaproveitado, a operação específica não).
-- Frontend: `app/(etiquetador)/`, `app/(admin)/admin/impressoras/`, `app/(admin)/admin/agents/`.
+- Frontend: `app/(etiquetador)/` (congelado). `app/(admin)/admin/impressoras/` e `app/(admin)/admin/agents/` voltaram ao menu do admin em 2026-10-07 (cadastro das impressoras da etiqueta de volume).
 
 Não tocar nesses arquivos durante o trabalho do escopo atual. Podem voltar ao fluxo principal mais tarde.
 
@@ -308,7 +316,11 @@ Não tocar nesses arquivos durante o trabalho do escopo atual. Podem voltar ao f
 - [x] ~~Comportamento quando a separação termina parcial~~ — resolvido no redesenho (`DESIGN.md` §4.2): falta → Não conforme + erro registrado; sobra → conclui com erro registrado e fechamento pelo Sup. Pátio
 - [ ] Lista completa de ações disponíveis na lista de Não Conformes
 - [x] ~~Nota cancelada no Senior durante a conferência~~ — detectada pelo beat, bloqueio no conferente e transferência de conferência pelo Sup. Pátio (2026-09-30)
-- [ ] Demais pontos da diretoria de 2026-09-30 (parar nota com notificação, aviso de qtd, transportadora + CC-e, reimpressão de etiqueta de caixa, liberação com mensageria) — sem prioridade definida
+- [ ] Demais pontos da diretoria de 2026-09-30 (transportadora + CC-e, liberação com mensageria) — esperam resposta da diretoria
+- [x] ~~Ponto 7 — etiqueta de caixa~~ — implementado em 2026-10-07 como **etiqueta de volume 10x15** (não existia etiqueta; era pincel + carta de transporte). Ficam abertos: modelo/quantidade/local das impressoras (todos os caminhos prontos: Zebra rede, agente USB, navegador); dados do cliente além do nome (sync não traz endereço/CNPJ)
+- [ ] Ponto 8 — leitura do supervisor em 2026-10-07: o conferente faz a operação "não permitida" no coletor, o sistema **só persiste se o supervisor liberar**, em lote (fila de aprovação assíncrona; a mensageria é o aviso). Falta definir quais operações entram (barra divergente, excesso/item completo, concluir com falta), se o conferente fica travado, e o canal
+- [x] ~~Ponto 5 — avisar quantidade incorreta~~ — fechado em 2026-10-06 sem implementar: bloqueio de excesso na bipagem + sobra/falta no concluir já atendem
+- [x] ~~Ponto 1 — notificação para parar separação de nota~~ — fechado em 2026-10-06 sem implementar: o cancelamento no Senior (ponto 9) já bloqueia o conferente automaticamente; um "parar" manual só repetiria isso
 - [x] ~~Ponto 4 — campo para o conferente selecionar a nota~~ — diretoria escolheu a leitura B em 2026-10-05; implementado como pull dentro da sequência (bipar a nota pega o pedido sem conferente; atribuição do Pátio continua existindo, opcional)
 - [x] ~~Ponto 3 — prioridade por transportadora~~ — respondido e implementado em 2026-10-05: fila do Sup. Pátio (`?ordem=transportadora`) ordenada pela transportadora com mais notas/pedidos, com cabeçalho de grupo no web e no mobile; valor não conta. Falta só deploy + APK
 - [ ] Múltiplos volumes podem ficar abertos simultaneamente, ou só um por vez?

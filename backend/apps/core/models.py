@@ -13,6 +13,8 @@ class Configuracao(models.Model):
         LIBERACAO_PROXIMA_SEQUENCIA = 'liberacao_proxima_sequencia', 'Liberação da próxima sequência'
         FECHAMENTO_SOBRA = 'fechamento_sobra', 'Fechamento de pedido com sobra'
         JANELA_SYNC_DIAS = 'janela_sync_dias', 'Janela do sync Senior (dias)'
+        IMPRESSORA_PADRAO = 'impressora_padrao', 'Impressora padrão das etiquetas de volume'
+        ETIQUETA_AUTOMATICA = 'etiqueta_automatica', 'Imprimir etiqueta de volume ao concluir'
 
     # valores válidos por chave (documentação viva; o admin não valida à força)
     DEFAULTS = {
@@ -21,6 +23,10 @@ class Configuracao(models.Model):
         # Só importa pedidos/NFs com datemi dentro dos últimos N dias.
         # 5 = valor definido para produção (2026-09-09); ajustável no admin sem redeploy.
         'janela_sync_dias': '5',
+        # Etiqueta de volume (2026-10-07): id da Impressora que recebe a impressão
+        # automática ao virar Conferido ('' = ninguém; fica em "Etiquetas pendentes").
+        'impressora_padrao': '',
+        'etiqueta_automatica': 'sim',                              # | nao
     }
 
     chave = models.CharField(max_length=50, choices=Chave.choices, unique=True)

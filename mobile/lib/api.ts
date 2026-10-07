@@ -252,3 +252,70 @@ export const supervisorApi = {
   transferirConferencia: (id: number, destinoId: number) =>
     api.post(`/api/cancelados/${id}/transferir/`, { destino_id: destinoId }).then((r) => r.data),
 }
+
+// ---------------------------------------------------------------------------
+// Etiquetas de volume (ponto 7 da diretoria, 2026-10-07)
+// ---------------------------------------------------------------------------
+
+export type ImpressaoEtiqueta = {
+  id: number
+  criado_em: string
+  canal: 'rede' | 'agente' | 'navegador'
+  canal_label: string
+  status: 'ok' | 'erro'
+  impressora: string | null
+  impressora_id: number | null
+  qtd_etiquetas: number
+  automatica: boolean
+  usuario: string | null
+  erro: string
+}
+
+export type ImpressoraEtiqueta = {
+  id: number
+  nome: string
+  modelo: string
+  tipo_conexao: 'rede' | 'usb'
+  mesa: string
+  ip: string | null
+  porta: number
+  ultimo_heartbeat: string | null
+  padrao: boolean
+}
+
+export type EtiquetaPendente = {
+  id: number
+  tipo: string
+  numero_externo: string
+  frete: string
+  cliente: string
+  transportadora: string
+  conferido_em: string | null
+  conferente: string | null
+  sequencia_numero: number | null
+  qtd_volumes: number
+  pronta: boolean
+  ultimo_erro: string | null
+}
+
+/** Veredito da impressão automática devolvido pelo concluir */
+export type VereditoEtiqueta = {
+  resultado: 'enfileirada' | 'sem_transportadora' | 'sem_impressora_padrao' | 'desligada' | 'erro'
+    | 'nao_conferido' | 'pedido_cancelado' | 'sem_volumes'
+  impressora: string | null
+  impressora_id?: number
+  mensagem?: string
+  qtd_volumes: number
+}
+
+export const impressaoApi = {
+  imprimir: (pedidoId: number, body: { impressora_id?: number }) =>
+    api.post(`/api/impressao/pedidos/${pedidoId}/imprimir/`, body)
+      .then((r) => r.data as { resultado: string; erro: string | null; impressao: ImpressaoEtiqueta }),
+  pendentes: () =>
+    api.get('/api/impressao/pendentes/')
+      .then((r) => r.data as { prontas: EtiquetaPendente[]; aguardando_transportadora: EtiquetaPendente[] }),
+  impressoras: () =>
+    api.get('/api/impressao/impressoras/')
+      .then((r) => r.data as { impressoras: ImpressoraEtiqueta[]; impressora_padrao: number | null; automatica: boolean }),
+}

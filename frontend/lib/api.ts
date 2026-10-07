@@ -340,3 +340,105 @@ export const authApi = {
   login: (username: string, password: string) =>
     axios.post('/api/auth/token/', { username, password }).then((r) => r.data),
 }
+
+// ---------------------------------------------------------------------------
+// Etiquetas de volume (ponto 7 da diretoria, 2026-10-07)
+// ---------------------------------------------------------------------------
+
+export type EtiquetaItem = { sku: string; descricao: string; ean: string; qtd: number }
+
+export type EtiquetaVolume = {
+  volume: { id: number; numero: number; tipo: string; tipo_label: string; identificador: string }
+  pagina: number
+  total_paginas: number
+  itens: EtiquetaItem[]
+  qtd_unidades: number
+  qtd_itens: number
+}
+
+export type ImpressaoEtiqueta = {
+  id: number
+  criado_em: string
+  canal: 'rede' | 'agente' | 'navegador'
+  canal_label: string
+  status: 'ok' | 'erro'
+  impressora: string | null
+  impressora_id: number | null
+  qtd_etiquetas: number
+  automatica: boolean
+  usuario: string | null
+  erro: string
+}
+
+export type EtiquetasPedido = {
+  pedido: {
+    id: number; tipo: string; tipo_label: string; numero_externo: string; codfil: string; codsnf: string
+    cliente: string; transportadora: string; codtra: string; frete: string; frete_label: string
+    conferido_em: string | null; conferente: string | null; sequencia_numero: number | null
+  }
+  total_volumes: number
+  etiquetas: EtiquetaVolume[]
+  rodape: { titulo: string; responsabilidades: string[]; empresa: string[] }
+  gerado_em: string
+  bloqueio: { codigo: string; mensagem: string } | null
+  impressoes: ImpressaoEtiqueta[]
+}
+
+export type ImpressoraEtiqueta = {
+  id: number
+  nome: string
+  modelo: string
+  tipo_conexao: 'rede' | 'usb'
+  mesa: string
+  ip: string | null
+  porta: number
+  ultimo_heartbeat: string | null
+  padrao: boolean
+}
+
+export type EtiquetaPendente = {
+  id: number
+  tipo: string
+  numero_externo: string
+  frete: string
+  cliente: string
+  transportadora: string
+  conferido_em: string | null
+  conferente: string | null
+  sequencia_numero: number | null
+  qtd_volumes: number
+  pronta: boolean
+  ultimo_erro: string | null
+}
+
+/** Veredito da impressão automática devolvido pelo concluir / fechar sobra */
+export type VereditoEtiqueta = {
+  resultado: 'enfileirada' | 'sem_transportadora' | 'sem_impressora_padrao' | 'desligada' | 'erro'
+    | 'nao_conferido' | 'pedido_cancelado' | 'sem_volumes'
+  impressora: string | null
+  impressora_id?: number
+  mensagem?: string
+  qtd_volumes: number
+}
+
+export const impressaoApi = {
+  etiquetas: (pedidoId: number) =>
+    api.get(`/api/impressao/pedidos/${pedidoId}/etiquetas/`).then((r) => r.data as EtiquetasPedido),
+  zplUrl: (pedidoId: number) => `/api/impressao/pedidos/${pedidoId}/etiquetas/zpl/`,
+  imprimir: (pedidoId: number, body: { impressora_id?: number; canal?: 'navegador' }) =>
+    api.post(`/api/impressao/pedidos/${pedidoId}/imprimir/`, body)
+      .then((r) => r.data as { resultado: string; erro: string | null; impressao: ImpressaoEtiqueta }),
+  pendentes: () =>
+    api.get('/api/impressao/pendentes/')
+      .then((r) => r.data as { prontas: EtiquetaPendente[]; aguardando_transportadora: EtiquetaPendente[] }),
+  impressoras: () =>
+    api.get('/api/impressao/impressoras/')
+      .then((r) => r.data as { impressoras: ImpressoraEtiqueta[]; impressora_padrao: number | null; automatica: boolean }),
+  config: () =>
+    api.get('/api/impressao/config/')
+      .then((r) => r.data as { impressora_padrao: number | null; impressora_padrao_nome: string | null; automatica: boolean }),
+  salvarConfig: (dados: { impressora_padrao?: number | null; automatica?: boolean }) =>
+    api.put('/api/impressao/config/', dados)
+      .then((r) => r.data as { impressora_padrao: number | null; impressora_padrao_nome: string | null; automatica: boolean }),
+}
+

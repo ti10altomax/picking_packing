@@ -13,6 +13,7 @@ import { Header } from '@/components/Header'
 import { SupervisorNav } from '@/components/SupervisorNav'
 import { DocBadges } from '@/components/DocBadges'
 import { CabecalhoLista } from '@/components/CabecalhoLista'
+import { EscolherImpressora } from '@/components/EscolherImpressora'
 import { supervisorApi, pedidosApi } from '@/lib/api'
 
 type Pedido = {
@@ -27,6 +28,8 @@ type Pedido = {
   separador_nao_identificado: boolean
   qtd_itens: number
   duracao_conferencia: string | null
+  transportadora?: string
+  etiqueta_volume_em?: string | null
 }
 
 type Item = {
@@ -64,6 +67,8 @@ export default function Conferidos() {
   const [expandidos, setExpandidos] = useState<Set<number>>(new Set())
   const [itensCache, setItensCache] = useState<Record<number, Item[]>>({})
   const [carregandoItens, setCarregandoItens] = useState<Set<number>>(new Set())
+  // Etiqueta de volume: pedido cujo seletor de impressora está aberto
+  const [pedidoImprimir, setPedidoImprimir] = useState<number | null>(null)
 
   const carregar = useCallback(async (search: string, page = 1, append = false) => {
     if (page === 1 && !append) setCarregando(true)
@@ -195,7 +200,7 @@ export default function Conferidos() {
                         </View>
                       </View>
                       <Text className="text-sm text-ink-muted" numberOfLines={1}>
-                        {p.cliente || '—'}
+                        {p.cliente || '—'}{p.transportadora ? ` · ${p.transportadora}` : ''}
                       </Text>
                       <Text className="text-xs text-ink-subtle mt-1">
                         {p.conferido_em ? `${formatarData(p.conferido_em)} · ` : ''}
@@ -220,6 +225,28 @@ export default function Conferidos() {
                     <Text className="text-ink-subtle text-base">{aberto ? '▾' : '▸'}</Text>
                   </View>
                 </Pressable>
+
+                {/* Etiqueta de volume (ponto 7): imprime/reimprime; só com transportadora */}
+                <View className="flex-row items-center justify-between px-4 pb-3 -mt-1">
+                  <Text className="text-xs text-ink-subtle">
+                    {p.etiqueta_volume_em
+                      ? `etiqueta impressa ${formatarData(p.etiqueta_volume_em)}`
+                      : p.transportadora ? 'etiqueta não impressa' : 'sem transportadora — etiqueta aguardando'}
+                  </Text>
+                  <Pressable
+                    onPress={() => setPedidoImprimir(p.id)}
+                    disabled={!p.transportadora}
+                    className={`h-10 px-3 rounded-lg border items-center justify-center ${
+                      !p.transportadora ? 'border-surface-border opacity-40'
+                        : p.etiqueta_volume_em ? 'border-surface-border bg-surface-card'
+                        : 'border-emerald-500/40 bg-emerald-500/15'
+                    }`}
+                  >
+                    <Text className={`text-sm font-semibold ${p.etiqueta_volume_em || !p.transportadora ? 'text-ink-muted' : 'text-emerald-300'}`}>
+                      {p.etiqueta_volume_em ? 'Reimprimir' : 'Etiqueta'}
+                    </Text>
+                  </Pressable>
+                </View>
 
                 {aberto ? (
                   <View className="bg-emerald-500/10 border-t border-emerald-500/30 border-l-4 border-l-emerald-500 pl-6 pr-4 py-3 gap-1.5">
@@ -269,6 +296,13 @@ export default function Conferidos() {
           }}
         />
       )}
+
+      <EscolherImpressora
+        visible={pedidoImprimir !== null}
+        pedidoId={pedidoImprimir}
+        onClose={() => setPedidoImprimir(null)}
+        onImpresso={() => carregar(buscaAtivaRef.current, 1, false)}
+      />
     </SafeAreaView>
   )
 }

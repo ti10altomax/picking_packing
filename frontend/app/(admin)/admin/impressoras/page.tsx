@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
-import { adminApi } from '@/lib/api'
+import { adminApi, impressaoApi } from '@/lib/api'
 
 type Impressora = {
   id: number
@@ -129,7 +129,7 @@ export default function ImpressorasPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-bold">Impressoras</h1>
         <button
@@ -139,6 +139,8 @@ export default function ImpressorasPage() {
           + Nova impressora
         </button>
       </div>
+
+      <ConfigEtiquetas impressoras={lista.filter((i) => i.ativa)} />
 
       {carregando ? (
         <p className="text-gray-500">Carregando…</p>
@@ -299,6 +301,80 @@ function Campo({ label, children }: { label: string; children: React.ReactNode }
     <div>
       <label className="block text-xs text-gray-500 mb-1">{label}</label>
       {children}
+    </div>
+  )
+}
+
+// -----------------------------------------------------------------------------
+// Etiqueta de volume (ponto 7, 2026-10-07): impressora padrão + impressão automática.
+// Vale para todo o sistema (Configuracao); o seletor por pedido continua existindo.
+// -----------------------------------------------------------------------------
+function ConfigEtiquetas({ impressoras }: { impressoras: Impressora[] }) {
+  const [padrao, setPadrao] = useState<number | null>(null)
+  const [automatica, setAutomatica] = useState(true)
+  const [carregado, setCarregado] = useState(false)
+  const [salvando, setSalvando] = useState(false)
+  const [msg, setMsg] = useState('')
+
+  useEffect(() => {
+    impressaoApi.config().then((c) => {
+      setPadrao(c.impressora_padrao)
+      setAutomatica(c.automatica)
+      setCarregado(true)
+    }).catch(() => setCarregado(true))
+  }, [])
+
+  async function salvar(dados: { impressora_padrao?: number | null; automatica?: boolean }) {
+    setSalvando(true)
+    setMsg('')
+    try {
+      const c = await impressaoApi.salvarConfig(dados)
+      setPadrao(c.impressora_padrao)
+      setAutomatica(c.automatica)
+      setMsg('Salvo.')
+    } catch (e: unknown) {
+      const m = (e as { response?: { data?: { erro?: string } } })?.response?.data?.erro
+      setMsg(m ?? 'Erro ao salvar')
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  if (!carregado) return null
+
+  return (
+    <div className="bg-surface-card border border-surface-border rounded-xl p-4 mb-6">
+      <h2 className="text-sm font-semibold text-ink mb-1">Etiqueta de volume</h2>
+      <p className="text-xs text-ink-muted mb-3">
+        Ao concluir a conferência (ou fechar a sobra), a etiqueta 10x15 de cada volume sai na impressora padrão —
+        só quando o documento já tem transportadora. Sem padrão, fica em Gestão → Etiquetas para imprimir pelo botão.
+      </p>
+      <div className="flex flex-wrap items-center gap-4">
+        <label className="flex items-center gap-2 text-sm text-ink">
+          <span className="text-ink-muted">Impressora padrão</span>
+          <select
+            value={padrao ?? ''}
+            disabled={salvando}
+            onChange={(e) => salvar({ impressora_padrao: e.target.value ? Number(e.target.value) : null })}
+            className="bg-surface-card border border-surface-border text-ink rounded-lg px-2 min-h-[40px] text-sm"
+          >
+            <option value="">nenhuma (só pelo botão)</option>
+            {impressoras.map((i) => (
+              <option key={i.id} value={i.id}>{i.nome}{i.mesa ? ` · ${i.mesa}` : ''}</option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-2 text-sm text-ink min-h-[40px] cursor-pointer">
+          <input
+            type="checkbox"
+            checked={automatica}
+            disabled={salvando}
+            onChange={(e) => salvar({ automatica: e.target.checked })}
+          />
+          Imprimir automaticamente ao concluir
+        </label>
+        {msg && <span className="text-xs text-ink-muted">{msg}</span>}
+      </div>
     </div>
   )
 }

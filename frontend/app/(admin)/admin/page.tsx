@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
-  pedidosApi, supervisorApi, separadoresApi, fechamentosApi,
+  pedidosApi, supervisorApi, separadoresApi, fechamentosApi, impressaoApi,
   type Paginado,
 } from '@/lib/api'
 import { useAuthStore } from '@/stores/authStore'
@@ -16,6 +16,7 @@ type Contadores = {
   cancelados: number | null
   fechamentos: number | null
   conferidos: number | null
+  etiquetas: number | null
 }
 
 function contar(data: Paginado<unknown> | unknown[]): number {
@@ -34,6 +35,7 @@ const ICONES: Record<string, React.ReactNode> = {
   conferidos: <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14M22 4 12 14.01l-3-3" />,
   erros: <path d="M3 3v18h18M18.7 8l-5.1 5.2-2.8-2.7L7 14.3" />,
   divergencias: <path d="M3 5v14M8 5v14M12 5v14M17 5v14M21 5v14" />,
+  etiquetas: <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82zM7 7h.01" />,
 }
 
 function Icone({ nome, className }: { nome: string; className?: string }) {
@@ -59,6 +61,7 @@ export default function AdminPage() {
   const [c, setC] = useState<Contadores>({
     pendentes: null, aguardandoSequencia: null, liberadosHoje: null,
     emConferencia: null, naoConformes: null, cancelados: null, fechamentos: null, conferidos: null,
+    etiquetas: null,
   })
 
   useEffect(() => { hydrate() }, [hydrate])
@@ -78,6 +81,7 @@ export default function AdminPage() {
       .catch(() => {})
     fechamentosApi.listar().then((d) => definir('fechamentos')(d.length)).catch(() => {})
     supervisorApi.listarConferidos().then((d) => definir('conferidos')(contar(d))).catch(() => {})
+    impressaoApi.pendentes().then((d) => definir('etiquetas')(d.prontas.length)).catch(() => {})
   }, [])
 
   const hora = new Date().getHours()
@@ -146,6 +150,13 @@ export default function AdminPage() {
       valor: c.fechamentos,
       alerta: (c.fechamentos ?? 0) > 0,
       corAlerta: 'text-violet-600 dark:text-violet-400',
+    },
+    {
+      href: '/supervisor/etiquetas',
+      titulo: 'Etiquetas de volume', icone: 'etiquetas',
+      valor: c.etiquetas,
+      alerta: (c.etiquetas ?? 0) > 0,
+      corAlerta: 'text-emerald-600 dark:text-emerald-400',
     },
     {
       href: '/supervisor/conferidos',
@@ -218,6 +229,18 @@ export default function AdminPage() {
           </Link>
         ))}
       </div>
+
+      {/* Cadastros */}
+      <p className="text-xs text-ink-subtle mb-2">
+        Cadastros:{' '}
+        <Link href="/admin/impressoras" className="underline underline-offset-2 hover:text-ink transition-colors">
+          impressoras de etiqueta
+        </Link>
+        {' · '}
+        <Link href="/admin/agents" className="underline underline-offset-2 hover:text-ink transition-colors">
+          agentes USB
+        </Link>
+      </p>
 
       {/* Módulos congelados — rebaixados a links discretos */}
       <p className="text-xs text-ink-subtle">

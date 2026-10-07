@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     'apps.separadores',
     'apps.sequencias',
     'apps.senior',
+    'apps.impressao',
     'apps.vtex',
     'apps.etiquetas',
 ]
