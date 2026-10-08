@@ -1,6 +1,6 @@
 # Status de implementação — Sistema de separação interna
 
-> Snapshot em **2026-10-07**. Objetivo: amanhã (e nas próximas semanas) você consegue retomar o trabalho sem precisar reler tudo.
+> Snapshot em **2026-10-08**. Objetivo: amanhã (e nas próximas semanas) você consegue retomar o trabalho sem precisar reler tudo.
 
 ---
 
@@ -15,6 +15,8 @@
 **Mobile.** `impressaoApi`, `components/EscolherImpressora.tsx` (bottom-sheet de impressoras, última lembrada no SecureStore; sem caminho "navegador"), aba **Etiquetas** no `SupervisorNav` + `app/supervisor/etiquetas.tsx`, botão Etiqueta/Reimprimir nos Conferidos, veredito ao concluir (sem padrão → abre o seletor antes de voltar à lista), card no admin. `tsc` limpo nos dois. **APK 0.7.0** (versionCode 13).
 
 **Teste em dev** (shell com rollback, 1 pedido conferido real): ZPL renderizado no Labelary (2 iterações: sobreposição do `^FB` e `·`/`–` virando lixo → truncamento em Python + tradução para ASCII); bloqueios (cancelado, não conferido, sem transportadora); automática sem padrão / desligada / com padrão (enfileira); rede em IP sem ninguém → registro `erro` + log; USB → `PrintJob` com o ZPL; pendentes antes/depois; API completa (403 do conferente em pendentes, 400 sem impressora, 502 rede fora, 409 pedido em conferência). Visual no navegador: `/admin`, `/supervisor/etiquetas`, popover, `/etiquetas/22395`, Conferidos, `/admin/impressoras`. Nenhuma impressora cadastrada em dev nem em produção ainda — só o caminho navegador funciona de ponta a ponta até cadastrarem.
+
+**2026-10-08 — documentação e tema escuro.** Página nova `docs_pessoais/impressao.html` (fora do git): a etiqueta de volume de ponta a ponta — regras, os três caminhos, cadastro e teste das impressoras, impressora padrão e automática, ciclo do agente USB (a API existe, o programa do PC não está no repositório), operação por perfil, layout com mock, diagnóstico, API/tabelas e pendências. Link na nav de todas as páginas e no índice. A tela `/admin/impressoras` (e `/admin/agents`), que voltou ao menu, ainda tinha cores fixas do escopo antigo e ficava ilegível no tema escuro — trocadas pelos tokens do tema (`bg-surface-card`, `text-ink`, `border-surface-border`, variantes `dark:` nos chips).
 
 **Fica para depois:** dados do cliente na etiqueta são só o nome (sync não traz endereço/CNPJ); modelo e quantidade de impressoras; o `ack_job` do agente USB continua congelado (a impressão por agente registra `ok` ao enfileirar, não ao imprimir); ponto 6 (CC-e) e ponto 8 (fila de aprovação assíncrona — leitura do supervisor em 07/10: o conferente faz a operação não permitida, o sistema só persiste se o supervisor liberar, em lote).
 

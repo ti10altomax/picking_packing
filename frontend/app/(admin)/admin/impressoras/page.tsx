@@ -118,11 +118,11 @@ export default function ImpressorasPage() {
 
   function statusHeartbeat(imp: Impressora) {
     if (imp.tipo_conexao === 'rede') return null
-    if (!imp.ultimo_heartbeat) return <span className="text-xs text-gray-400">sem heartbeat</span>
+    if (!imp.ultimo_heartbeat) return <span className="text-xs text-ink-subtle">sem heartbeat</span>
     const diff = Math.floor((Date.now() - new Date(imp.ultimo_heartbeat).getTime()) / 1000)
     const online = diff < 120
     return (
-      <span className={`text-xs ${online ? 'text-green-600' : 'text-red-500'}`}>
+      <span className={`text-xs ${online ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
         {online ? `online (${diff}s)` : `offline (${diff}s)`}
       </span>
     )
@@ -134,7 +134,7 @@ export default function ImpressorasPage() {
         <h1 className="text-xl font-bold">Impressoras</h1>
         <button
           onClick={abrirCriar}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium min-h-[44px]"
+          className="bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 px-4 py-2 rounded-lg text-sm font-medium min-h-[44px]"
         >
           + Nova impressora
         </button>
@@ -143,9 +143,9 @@ export default function ImpressorasPage() {
       <ConfigEtiquetas impressoras={lista.filter((i) => i.ativa)} />
 
       {carregando ? (
-        <p className="text-gray-500">Carregando…</p>
+        <p className="text-ink-muted">Carregando…</p>
       ) : lista.length === 0 ? (
-        <p className="text-gray-400">Nenhuma impressora cadastrada.</p>
+        <p className="text-ink-subtle">Nenhuma impressora cadastrada.</p>
       ) : (
         <div className="space-y-3">
           {lista.map((imp) => {
@@ -153,20 +153,20 @@ export default function ImpressorasPage() {
             return (
               <div
                 key={imp.id}
-                className={`bg-white rounded-xl border p-4 ${!imp.ativa ? 'opacity-50' : ''}`}
+                className={`bg-surface-card rounded-xl border border-surface-border p-4 ${!imp.ativa ? 'opacity-50' : ''}`}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold">{imp.nome}</span>
-                      <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded">{imp.modelo}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded ${imp.tipo_conexao === 'rede' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
+                      <span className="text-xs bg-surface-elev text-ink-muted px-2 py-0.5 rounded">{imp.modelo}</span>
+                      <span className={`text-xs px-2 py-0.5 rounded ${imp.tipo_conexao === 'rede' ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300' : 'bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-300'}`}>
                         {imp.tipo_conexao === 'rede' ? 'Rede' : 'USB'}
                       </span>
-                      <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded uppercase">{imp.formato_preferido}</span>
-                      {!imp.ativa && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded">Inativa</span>}
+                      <span className="text-xs bg-surface-elev text-ink-muted px-2 py-0.5 rounded uppercase">{imp.formato_preferido}</span>
+                      {!imp.ativa && <span className="text-xs bg-red-100 text-red-600 dark:bg-red-500/15 dark:text-red-300 px-2 py-0.5 rounded">Inativa</span>}
                     </div>
-                    <div className="mt-1 text-sm text-gray-500 space-y-0.5">
+                    <div className="mt-1 text-sm text-ink-muted space-y-0.5">
                       {imp.tipo_conexao === 'rede' ? (
                         <p>{imp.ip}:{imp.porta}</p>
                       ) : (
@@ -177,7 +177,7 @@ export default function ImpressorasPage() {
                       {statusHeartbeat(imp)}
                     </div>
                     {teste && (
-                      <p className={`mt-1 text-xs font-medium ${teste.online ? 'text-green-600' : 'text-red-500'}`}>
+                      <p className={`mt-1 text-xs font-medium ${teste.online ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
                         Teste: {teste.online ? 'online ✓' : `offline — ${teste.motivo}`}
                       </p>
                     )}
@@ -186,20 +186,20 @@ export default function ImpressorasPage() {
                     <button
                       onClick={() => testar(imp)}
                       disabled={testando === imp.id}
-                      className="text-xs border border-gray-300 rounded-lg px-3 py-2 min-h-[44px] hover:bg-gray-50 disabled:opacity-50"
+                      className="text-xs border border-surface-border text-ink rounded-lg px-3 py-2 min-h-[44px] hover:bg-surface-elev disabled:opacity-50"
                     >
                       {testando === imp.id ? '…' : 'Testar'}
                     </button>
                     <button
                       onClick={() => abrirEditar(imp)}
-                      className="text-xs border border-gray-300 rounded-lg px-3 py-2 min-h-[44px] hover:bg-gray-50"
+                      className="text-xs border border-surface-border text-ink rounded-lg px-3 py-2 min-h-[44px] hover:bg-surface-elev"
                     >
                       Editar
                     </button>
                     {imp.ativa && (
                       <button
                         onClick={() => desativar(imp)}
-                        className="text-xs border border-red-200 text-red-500 rounded-lg px-3 py-2 min-h-[44px] hover:bg-red-50"
+                        className="text-xs border border-red-200 text-red-500 dark:border-red-500/30 dark:text-red-400 rounded-lg px-3 py-2 min-h-[44px] hover:bg-red-50 dark:hover:bg-red-500/10"
                       >
                         Desativar
                       </button>
@@ -214,8 +214,8 @@ export default function ImpressorasPage() {
 
       {/* Modal criar/editar */}
       {modalAberto && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-surface-card border border-surface-border rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
             <h2 className="text-lg font-bold mb-4">{editando ? 'Editar impressora' : 'Nova impressora'}</h2>
 
             <div className="space-y-3">
@@ -270,19 +270,19 @@ export default function ImpressorasPage() {
               </Campo>
             </div>
 
-            {erro && <p className="mt-3 text-sm text-red-500">{erro}</p>}
+            {erro && <p className="mt-3 text-sm text-red-500 dark:text-red-400">{erro}</p>}
 
             <div className="flex gap-3 mt-6">
               <button
                 onClick={() => setModalAberto(false)}
-                className="flex-1 border border-gray-300 rounded-xl py-3 text-sm"
+                className="flex-1 border border-surface-border text-ink rounded-xl py-3 text-sm hover:bg-surface-elev"
               >
                 Cancelar
               </button>
               <button
                 onClick={salvar}
                 disabled={salvando}
-                className="flex-1 bg-blue-600 text-white rounded-xl py-3 text-sm font-semibold disabled:opacity-50"
+                className="flex-1 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 rounded-xl py-3 text-sm font-semibold disabled:opacity-50"
               >
                 {salvando ? 'Salvando…' : 'Salvar'}
               </button>
@@ -294,12 +294,12 @@ export default function ImpressorasPage() {
   )
 }
 
-const INPUT = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm min-h-[44px]'
+const INPUT = 'w-full bg-surface-card border border-surface-border text-ink rounded-lg px-3 py-2 text-sm min-h-[44px] focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-300'
 
 function Campo({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-xs text-gray-500 mb-1">{label}</label>
+      <label className="block text-xs text-ink-muted mb-1">{label}</label>
       {children}
     </div>
   )

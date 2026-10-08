@@ -37,53 +37,53 @@ export default function AgentsPage() {
     <div className="max-w-3xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-bold">Print Agents</h1>
-        <button onClick={carregar} className="text-sm text-blue-600 min-h-[44px] px-2">
+        <button onClick={carregar} className="text-sm text-blue-600 dark:text-blue-400 min-h-[44px] px-2">
           Atualizar
         </button>
       </div>
 
-      <div className="mb-4 p-4 bg-blue-50 rounded-xl text-sm text-blue-800">
+      <div className="mb-4 p-4 bg-blue-50 text-blue-800 dark:bg-blue-500/10 dark:text-blue-300 rounded-xl text-sm">
         Para registrar um novo agent, execute o binário na estação com Zebra USB.
         O token gerado aparecerá aqui — copie e cole no campo <strong>Agent ID</strong> da impressora correspondente.
       </div>
 
       {carregando ? (
-        <p className="text-gray-500">Carregando…</p>
+        <p className="text-ink-muted">Carregando…</p>
       ) : lista.length === 0 ? (
-        <p className="text-gray-400">Nenhum agent registrado.</p>
+        <p className="text-ink-subtle">Nenhum agent registrado.</p>
       ) : (
         <div className="space-y-3">
           {lista.map((agent) => {
             const { online, label } = statusAgent(agent)
             return (
-              <div key={agent.id} className="bg-white rounded-xl border p-4">
+              <div key={agent.id} className="bg-surface-card rounded-xl border border-surface-border p-4">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold">{agent.hostname}</span>
                       {agent.versao && (
-                        <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded">v{agent.versao}</span>
+                        <span className="text-xs bg-surface-elev text-ink-muted px-2 py-0.5 rounded">v{agent.versao}</span>
                       )}
-                      <span className={`text-xs px-2 py-0.5 rounded ${online ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                      <span className={`text-xs px-2 py-0.5 rounded ${online ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' : 'bg-red-100 text-red-600'}`}>
                         {label}
                       </span>
                     </div>
-                    <p className="mt-1 text-xs text-gray-400">
+                    <p className="mt-1 text-xs text-ink-subtle">
                       Registrado em {new Date(agent.criado_em).toLocaleString('pt-BR')}
                     </p>
                     <div className="mt-2 flex items-center gap-2">
-                      <code className="text-xs bg-gray-100 px-2 py-1 rounded font-mono">
+                      <code className="text-xs bg-surface-elev text-ink px-2 py-1 rounded font-mono">
                         {tokenVisivel === agent.id ? agent.token : `${agent.token.slice(0, 8)}…`}
                       </code>
                       <button
                         onClick={() => setTokenVisivel(tokenVisivel === agent.id ? null : agent.id)}
-                        className="text-xs text-blue-600 min-h-[44px] px-1"
+                        className="text-xs text-blue-600 dark:text-blue-400 min-h-[44px] px-1"
                       >
                         {tokenVisivel === agent.id ? 'ocultar' : 'ver token'}
                       </button>
                       <button
                         onClick={() => navigator.clipboard.writeText(agent.token)}
-                        className="text-xs text-gray-500 min-h-[44px] px-1"
+                        className="text-xs text-ink-muted min-h-[44px] px-1"
                       >
                         copiar
                       </button>
