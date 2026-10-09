@@ -43,6 +43,11 @@ services:
       - "no"
     mem_limit: 320m
     # Sem `ports:` — fica interno à rede Docker do projeto
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   backend:
     build:
@@ -57,10 +62,25 @@ services:
       - "host.docker.internal:host-gateway"
     depends_on:
       - redis
+    # Sem --access-logfile: a linha de acesso sai pelo LogRequisicaoMiddleware
+    # (JSON, com usuário e duração) — o do gunicorn seria duplicado.
+    # PROMETHEUS_MULTIPROC_DIR: os 3 workers do gunicorn escrevem contadores em
+    # arquivos e o /metrics/ soma — sem isso cada scrape veria só um worker.
+    # A pasta é zerada a cada subida (contadores de processo morto sumiriam errado).
+    environment:
+      - PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus
     command:
       - sh
       - -c
-      - "python manage.py migrate --noinput && python manage.py collectstatic --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 60 --access-logfile - --error-logfile -"
+      - "mkdir -p /tmp/prometheus && rm -f /tmp/prometheus/* && python manage.py migrate --noinput && python manage.py collectstatic --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 60 --error-logfile -"
+    # /api/health/ testa Postgres + Redis (apps/core/saude.py). `docker ps` mostra
+    # (healthy)/(unhealthy); o Caddy e o frontend só dependem depois de saudável.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health/', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
 
   celery:
     image: separa-backend:prod
@@ -73,6 +93,12 @@ services:
       - redis
     # -E: emite task events (necessário pro celery-exporter enxergar as tarefas)
     command: celery -A config worker -l info -E
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A config inspect ping -d celery@$$HOSTNAME -t 10 | grep -q pong"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 60s
 
   celery-beat:
     image: separa-backend:prod
@@ -125,6 +151,12 @@ services:
       - "3003:3000"
     depends_on:
       - backend
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/login').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
 volumes:
   caddy_data:

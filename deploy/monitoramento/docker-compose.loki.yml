@@ -1,0 +1,56 @@
+# Loki + Promtail para a stack de monitoramento da VM 192.168.1.199 (mp-*).
+# Observabilidade do Separa, 2026-10-08. Ver README.md desta pasta.
+#
+# Esta stack NÃO é a do Separa — é a que já tem mp-prometheus e mp-grafana
+# (projeto `menor_preco_v2`, gerido no Portainer). Em 2026-10-09 os dois
+# serviços foram COLADOS nessa stack, com as mesmas redes dos outros serviços
+# dela: `default` (onde está o Grafana), `detran-monitor-net` e `separa_default`.
+# Este arquivo fica como referência do que está lá; os volumes de config
+# (loki-config.yml, promtail-config.yml) vivem na pasta da stack na VM.
+#
+# Subir à mão, fora da stack (as redes abaixo precisam existir):
+#   docker compose -f docker-compose.loki.yml up -d
+services:
+  loki:
+    image: grafana/loki:3.2.1
+    container_name: mp-loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/config.yml
+    volumes:
+      - ./loki-config.yml:/etc/loki/config.yml:ro
+      - loki_data:/loki
+    # Sem `ports:` de propósito — só o Grafana (mesma rede) lê; para abrir ao host
+    # usar "3100:3100" e lembrar que não há autenticação.
+    networks:
+      - default
+      - detran-monitor-net
+      - separa_default
+
+  promtail:
+    image: grafana/promtail:3.2.1
+    container_name: mp-promtail
+    restart: unless-stopped
+    command: -config.file=/etc/promtail/config.yml
+    volumes:
+      - ./promtail-config.yml:/etc/promtail/config.yml:ro
+      - promtail_data:/promtail
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    depends_on:
+      - loki
+    networks:
+      - default
+      - detran-monitor-net
+      - separa_default
+
+volumes:
+  loki_data:
+  promtail_data:
+
+networks:
+  # Dentro da stack menor_preco_v2 estas duas já estão declaradas; fora dela
+  # são externas (docker network ls na VM).
+  detran-monitor-net:
+    external: true
+  separa_default:
+    external: true

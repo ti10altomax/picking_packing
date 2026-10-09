@@ -3,7 +3,14 @@ from celery import shared_task
 from django.utils import timezone
 import logging
 
+from apps.core.tarefas import registrar_execucao
+
 logger = logging.getLogger(__name__)
+
+
+def _teve_falha_oracle(resultado) -> bool:
+    """O sync/monitor não levantam quando o Oracle cai — devolvem 'falha_oracle'."""
+    return 'falha_oracle' in str(resultado)
 
 
 @shared_task(bind=True, max_retries=5, default_retry_delay=60)
@@ -207,6 +214,7 @@ def _sincronizar_fonte(tipo, rows, col_numero, col_qtd, query_itens, params_iten
 
 
 @shared_task
+@registrar_execucao(erro_se=_teve_falha_oracle)
 def sincronizar_pedidos_oracle():
     """
     Importa do Senior como Pendente no Postgres, dentro da janela configurada:
@@ -273,6 +281,7 @@ def _situacoes_no_senior(query, numeros, chave_fn):
 
 
 @shared_task
+@registrar_execucao(erro_se=_teve_falha_oracle)
 def monitorar_cancelamentos(passada_completa: bool = False):
     """
     Detecta documentos cancelados no Senior depois de importados (2026-09-30).

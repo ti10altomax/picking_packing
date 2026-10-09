@@ -1,4 +1,5 @@
 'use client'
+import { HistoricoBotao } from '@/components/pedidos/HistoricoPedido'
 import { DocBadges } from '@/components/ui/DocBadges'
 import { useEffect, useState, useCallback } from 'react'
 import { supervisorApi, pedidosApi } from '@/lib/api'
@@ -176,6 +177,7 @@ export default function NaoConformesPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-ink">{p.numero_externo}</span>
+                        <HistoricoBotao pedidoId={p.id} />
                         <DocBadges tipo={p.tipo} frete={p.frete} />
                         <span
                           className={`text-xs px-2 py-0.5 rounded-full font-medium ${

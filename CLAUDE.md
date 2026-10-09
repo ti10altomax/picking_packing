@@ -18,6 +18,8 @@ Sistema interno para **separação de pedidos no galpão da Altomax**. Não é m
 
 > **Etiqueta de volume 10x15 (2026-10-07, ponto 7 da diretoria)** — não existia etiqueta (escreviam a pincel na caixa + folha A4 "carta de transporte"). Agora, ao virar **Conferido** e **só com transportadora**, sai uma etiqueta por volume com itens (marca, VOLUME N/M, documento + Code 128, cliente, transportadora grande, itens × qtd, carta de transporte como rodapé). App `apps/impressao`: dados neutros (`etiqueta.py`), ZPL para Zebra (`zpl.py`, ASCII + truncamento em Python), página HTML `/etiquetas/[id]` para qualquer impressora via navegador, agente USB (`PrintJob`, módulo congelado reaproveitado). Impressora padrão + liga/desliga em `Configuracao` (`impressora_padrao`, `etiqueta_automatica`); impressão automática via Celery; sem padrão ou sem transportadora o pedido fica em **Gestão → Etiquetas** (`/api/impressao/pendentes/`) e o beat dispara quando a transportadora chega. Reimpressão em Conferidos (web e mobile). `Impressora`/`PrintAgent`/`PrintJob` e `/admin/impressoras` voltaram ao uso. Quantidade/modelo de impressoras ainda indefinidos — por isso todos os caminhos estão prontos.
 
+> **Observabilidade (2026-10-08)** — logs em **JSON** em produção (`config/logging.py`, `LOG_NIVEL`/`LOG_FORMATO`; `logger.info('…', extra={'pedido': id})` vira campo), uma linha por requisição `/api/` (`apps/core/middleware.py`). `GET /api/health/` (sem auth, Postgres+Redis) alimenta o `healthcheck` do compose. Toda task Celery leva `@registrar_execucao()` (`apps/core/tarefas.py`) → `ExecucaoTarefa` (heartbeat; "atrasada" = 3× o intervalo do beat). `GET /api/saude/` + tela **Admin → Saúde** (`/admin/saude`): componentes, tarefas e erros do web/coletor (`ErroCliente`, `POST /api/erros-cliente/` sem auth obrigatória; web `app/error.tsx` + `components/ErroReporter.tsx`; mobile `ErrorBoundary` + `ErrorUtils`). `GET /api/pedidos/<id>/historico/` traduz o `PedidoLog` (`apps/pedidos/historico.py`) → botão **Histórico** nas listas do supervisor. `GET /api/agora/` (`apps/pedidos/agora.py`) → **Gestão → Agora** (web e app): quem confere o quê, parados (20 min sem bip), filas, sequências, ritmo. `django-prometheus` em `/metrics/` (só rede Docker; `PROMETHEUS_MULTIPROC_DIR` no compose prod). Loki/Promtail + scrape job + alertas sugeridos em `deploy/monitoramento/` — aplicação manual na stack `mp-*` da VM.
+
 Atores principais: **Supervisor de Vendas**, **Supervisor de Pátio**, **Conferente** e **Admin**.
 
 ### Fluxo geral
@@ -240,6 +242,7 @@ VTEX, CLICK, marketplaces e o `embalagempfa` **saíram do escopo** — ver "Mód
 | Banco local | **PostgreSQL** |
 | Banco origem (read-only) | **Oracle** (Senior) |
 | Tempo real | WebSocket via Django Channels (ou polling curto) |
+| Observabilidade | logs JSON (stdout) · `/api/health/` + healthchecks · `ExecucaoTarefa`/`ErroCliente` · django-prometheus `/metrics/` · Prometheus/Grafana/Loki na stack `mp-*` da VM |
 | Containers | Docker + docker-compose |
 | Hospedagem | VM Linux em Proxmox |
 
@@ -249,8 +252,8 @@ VTEX, CLICK, marketplaces e o `embalagempfa` **saíram do escopo** — ver "Mód
 separa/
 ├── backend/
 │   ├── apps/
-│   │   ├── core/           # User, perfis, auth
-│   │   ├── pedidos/        # Pedido, PedidoItem, Volume, VolumeItem, PedidoLog + ações dos supervisores
+│   │   ├── core/           # User, perfis, auth, Configuracao; observabilidade: logging, health/saúde, ExecucaoTarefa, ErroCliente
+│   │   ├── pedidos/        # Pedido, PedidoItem, Volume, VolumeItem, PedidoLog + ações dos supervisores; historico.py e agora.py (observabilidade)
 │   │   ├── conferencia/    # fluxo do conferente (bipagem em volumes + não conformes)
 │   │   ├── separadores/    # cadastro de separadores físicos + liberação diária
 │   │   ├── sequencias/     # sequências de separação (fluxo do Sup. Pátio)
@@ -262,13 +265,15 @@ separa/
 │   ├── app/
 │   │   ├── (conferente)/   # conferencia/ (atual) + pedidos/ (LEGADO congelado)
 │   │   ├── (impressao)/    # etiquetas/[id] — etiqueta 10x15 pelo navegador (sem header)
-│   │   ├── (supervisor)/   # telas de Sup. Vendas, Sup. Pátio, conferidos, não conformes, etiquetas
+│   │   ├── (supervisor)/   # telas de Sup. Vendas, Sup. Pátio, conferidos, não conformes, etiquetas, agora
 │   │   ├── (admin)/
 │   │   │   └── admin/
+│   │   │       ├── saude/         # Admin → Saúde: componentes, heartbeat das tarefas, erros do web/coletor (2026-10-08)
 │   │   │       ├── impressoras/   # cadastro das impressoras + impressora padrão da etiqueta (voltou ao menu em 2026-10-07)
 │   │   │       └── agents/        # agentes USB (voltou ao menu em 2026-10-07)
 │   │   └── (etiquetador)/  # CONGELADO — fora do menu
 ├── mobile/                 # app React Native (Expo) — paridade de telas com o web
+├── deploy/monitoramento/   # Loki/Promtail, scrape job do backend, alertas sugeridos — para a stack mp-* da VM (fora do compose do Separa)
 └── docker-compose.yml
 ```
 
@@ -388,6 +393,7 @@ Variáveis em `.env`:
 - Manter UI em **pt-BR**.
 - Cores de status seguem a paleta acima.
 - Toda transição grava em `PedidoLog`.
+- **Observabilidade (2026-10-08)**: task Celery nova leva `@shared_task` + `@registrar_execucao()`; logs com `logger.info(msg, extra={...})` (vira JSON em prod); não precisa de try/catch só para relatar erro no web/mobile — `error.tsx`/`ErroReporter`/`ErrorBoundary` já mandam para `/api/erros-cliente/`.
 - **Zustand só para sessão e tema** (`authStore`, `themeStore`). Dado de tela é `useState` local + re-fetch (`carregar()`) após cada mutação — sem store de dados, sem cache. O `pedidosStore` é exclusivo do fluxo legado congelado `/pedidos`; não imitar. (Decisão registrada em 2026-08-31; o padrão existe desde o primeiro commit do fluxo novo.)
 - **Mobile-first sempre**: validar a 360px antes de pensar em desktop.
 - **Tudo em Docker**: novas dependências entram via `docker-compose.yml`.

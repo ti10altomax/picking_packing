@@ -3,7 +3,7 @@ import * as SecureStore from 'expo-secure-store'
 import Constants from 'expo-constants'
 
 // URL do backend — vem do .env via EXPO_PUBLIC_API_URL
-const API_URL =
+export const API_URL =
   process.env.EXPO_PUBLIC_API_URL ||
   (Constants.expoConfig?.extra?.apiUrl as string) ||
   'http://localhost:8000'
@@ -318,4 +318,62 @@ export const impressaoApi = {
   impressoras: () =>
     api.get('/api/impressao/impressoras/')
       .then((r) => r.data as { impressoras: ImpressoraEtiqueta[]; impressora_padrao: number | null; automatica: boolean }),
+}
+
+// Painel "agora no galpão" (observabilidade, 2026-10-08)
+export type AgoraConferente = {
+  conferente: string
+  em_conferencia: {
+    id: number
+    tipo: string
+    numero_externo: string
+    cliente: string
+    sequencia: number | null
+    separado_por: string | null
+    iniciada_em: string | null
+    ha_min: number | null
+    ultimo_bip_em: string | null
+    sem_bip_min: number | null
+    qtd_pedida: number
+    qtd_separada: number
+  } | null
+  atribuidos: number
+  bips_1h: number
+  conferidos_hoje: number
+  parado: boolean
+}
+
+export type AgoraPainel = {
+  gerado_em: string
+  conferentes: AgoraConferente[]
+  sem_iniciar: { id: number; tipo: string; numero_externo: string; conferente: string | null; sequencia: number | null; ha_min: number | null }[]
+  filas: {
+    selecionados_sem_sequencia: number
+    selecionados_em_sequencia: number
+    atribuidos: number
+    atribuido_mais_antigo_min: number | null
+    em_conferencia: number
+    aguardando_fechamento: number
+    nao_conformes: number
+    cancelados_a_transferir: number
+    etiquetas_prontas: number
+    etiquetas_aguardando_transportadora: number
+    conferidos_hoje: number
+    conferidos_1h: number
+    bips_1h: number
+    bips_hoje: number
+    divergencias_hoje: number
+    cancelados_hoje: number
+  }
+  sequencias: {
+    id: number; numero: number; status: string; total: number; selecionados: number; atribuidos: number
+    em_conferencia: number; finalizados: number; outros: number; conferentes: string[]; criado_em: string
+  }[]
+  por_hora: { hora: string; bips: number; conferidos: number }[]
+  parado_apos_min: number
+  sem_iniciar_apos_min: number
+}
+
+export const agoraApi = {
+  painel: () => api.get('/api/agora/').then((r) => r.data as AgoraPainel),
 }

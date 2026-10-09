@@ -1,12 +1,14 @@
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework_simplejwt.views import TokenRefreshView
-from apps.core.views import SeparaTokenView
+from apps.core.views import SeparaTokenView, metrics_protegido
 
 urlpatterns = [
     # /admin é do frontend (tela admin do Separa).
     # O admin do Django mora em /django-admin/ pra não colidir.
     path('django-admin/', admin.site.urls),
+    # Prometheus (2026-10-08): só de dentro da rede Docker (mp-prometheus); LAN direto em :8003 recebe 403
+    path('metrics/', metrics_protegido, name='metrics'),
     path('api/auth/token/', SeparaTokenView.as_view(), name='token_obtain'),
     path('api/auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('api/', include('apps.core.urls')),

@@ -3,6 +3,7 @@ import { Fraunces, Manrope, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 import { ThemeProvider } from '@/components/ThemeToggle'
 import { DialogProvider } from '@/components/Dialog'
+import { ErroReporter } from '@/components/ErroReporter'
 
 // Tipografia do sistema (self-hosted pelo next/font — zero CDN em runtime):
 // Fraunces = serifa de display (títulos, marca); Manrope = UI; JetBrains Mono = códigos/EAN
@@ -64,6 +65,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="bg-surface-bg text-ink antialiased" suppressHydrationWarning>
         <ThemeProvider />
+        <ErroReporter />
         <DialogProvider>
           {children}
         </DialogProvider>

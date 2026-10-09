@@ -442,3 +442,155 @@ export const impressaoApi = {
       .then((r) => r.data as { impressora_padrao: number | null; impressora_padrao_nome: string | null; automatica: boolean }),
 }
 
+// ---------------------------------------------------------------------------
+// Saúde do sistema (observabilidade, 2026-10-08) — Admin → Saúde
+// ---------------------------------------------------------------------------
+export type StatusSaude = 'ok' | 'atencao' | 'erro'
+
+export type ComponenteSaude = {
+  chave: string
+  nome: string
+  status: StatusSaude
+  detalhe: string
+  latencia_ms: number
+  essencial: boolean
+}
+
+export type TarefaSaude = {
+  tarefa: string
+  nome: string
+  periodica: boolean
+  intervalo_s: number | null
+  atrasada: boolean
+  ultima_em: string | null
+  ultimo_status: 'rodando' | 'ok' | 'erro' | null
+  duracao_ms: number | null
+  erro: string
+  resultado: unknown
+  ultima_ok_em: string | null
+  idade_ok_s: number | null
+  execucoes_24h: number
+  erros_24h: number
+}
+
+export type SaudeSistema = {
+  status: StatusSaude
+  gerado_em: string
+  problemas: string[]
+  componentes: ComponenteSaude[]
+  tarefas: TarefaSaude[]
+  retencao_dias: number
+}
+
+export const saudeApi = {
+  completa: () => api.get('/api/saude/').then((r) => r.data as SaudeSistema),
+}
+
+export type ErroClienteItem = {
+  id: number
+  origem: 'web' | 'mobile'
+  tela: string
+  mensagem: string
+  stack: string
+  versao: string
+  dispositivo: string
+  usuario: string | null
+  extra: Record<string, unknown> | null
+  criado_em: string
+}
+
+export const errosClienteApi = {
+  listar: (horas = 24, origem?: 'web' | 'mobile') =>
+    api.get('/api/erros-cliente/lista/', { params: { horas, ...(origem ? { origem } : {}) } })
+      .then((r) => r.data as { horas: number; total: number; erros: ErroClienteItem[] }),
+}
+
+// ---------------------------------------------------------------------------
+// Histórico do pedido + painel "agora" (observabilidade, 2026-10-08)
+// ---------------------------------------------------------------------------
+export type EventoHistorico = {
+  id: number
+  criado_em: string
+  usuario: string | null
+  acao: string
+  titulo: string
+  descricao: string
+  tipo: 'fluxo' | 'bip' | 'alerta' | 'etiqueta' | 'legado'
+  payload: Record<string, unknown>
+}
+
+export type HistoricoPedido = {
+  pedido: {
+    id: number
+    tipo: string
+    numero_externo: string
+    cliente: string
+    status: string
+    status_label: string
+    conferente: string | null
+    sequencia: number | null
+    transportadora: string
+  }
+  eventos: EventoHistorico[]
+}
+
+export const historicoApi = {
+  pedido: (id: number) => api.get(`/api/pedidos/${id}/historico/`).then((r) => r.data as HistoricoPedido),
+}
+
+export type AgoraConferente = {
+  conferente: string
+  em_conferencia: {
+    id: number
+    tipo: string
+    numero_externo: string
+    cliente: string
+    sequencia: number | null
+    separado_por: string | null
+    iniciada_em: string | null
+    ha_min: number | null
+    ultimo_bip_em: string | null
+    sem_bip_min: number | null
+    qtd_pedida: number
+    qtd_separada: number
+  } | null
+  atribuidos: number
+  bips_1h: number
+  conferidos_hoje: number
+  parado: boolean
+}
+
+export type AgoraPainel = {
+  gerado_em: string
+  conferentes: AgoraConferente[]
+  sem_iniciar: { id: number; tipo: string; numero_externo: string; conferente: string | null; sequencia: number | null; ha_min: number | null }[]
+  filas: {
+    selecionados_sem_sequencia: number
+    selecionados_em_sequencia: number
+    atribuidos: number
+    atribuido_mais_antigo_min: number | null
+    em_conferencia: number
+    aguardando_fechamento: number
+    nao_conformes: number
+    cancelados_a_transferir: number
+    etiquetas_prontas: number
+    etiquetas_aguardando_transportadora: number
+    conferidos_hoje: number
+    conferidos_1h: number
+    bips_1h: number
+    bips_hoje: number
+    divergencias_hoje: number
+    cancelados_hoje: number
+  }
+  sequencias: {
+    id: number; numero: number; status: string; total: number; selecionados: number; atribuidos: number
+    em_conferencia: number; finalizados: number; outros: number; conferentes: string[]; criado_em: string
+  }[]
+  por_hora: { hora: string; bips: number; conferidos: number }[]
+  parado_apos_min: number
+  sem_iniciar_apos_min: number
+}
+
+export const agoraApi = {
+  painel: () => api.get('/api/agora/').then((r) => r.data as AgoraPainel),
+}

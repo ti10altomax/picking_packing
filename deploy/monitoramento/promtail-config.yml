@@ -1,0 +1,57 @@
+# Promtail — coleta os logs de TODOS os containers da VM pelo socket do Docker
+# e manda para o Loki. Observabilidade do Separa, 2026-10-08.
+#
+# Labels que chegam no Grafana: container, compose_project, compose_service,
+# stream (stdout/stderr). Para o backend do Separa (JSON, ver backend/config/logging.py)
+# o pipeline ainda promove `nivel` e `logger` a labels, então dá para filtrar
+# {compose_service="backend", nivel="ERROR"} sem regex.
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+  log_level: warn
+
+positions:
+  # Em volume (ver docker-compose.loki.yml): sem isso, cada recreate do container
+  # relê todos os logs da VM desde o início e o Loki rejeita o que tem mais de 7 dias.
+  filename: /promtail/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 15s
+    relabel_configs:
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(.*)'
+        target_label: container
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_project']
+        target_label: compose_project
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_service']
+        target_label: compose_service
+      - source_labels: ['__meta_docker_container_label_com_docker_swarm_service_name']
+        target_label: swarm_service
+    pipeline_stages:
+      # Mais velho que o reject_old_samples_max_age do Loki (168h) nem sai daqui —
+      # na primeira leitura dos logs antigos o Loki devolveria 400 para cada lote
+      - drop:
+          older_than: 168h
+          drop_counter_reason: antigo
+      # Só as linhas que são JSON do Separa viram labels extras; o resto passa como texto
+      - match:
+          selector: '{compose_project="separa"}'
+          stages:
+            - json:
+                expressions:
+                  nivel: nivel
+                  logger: logger
+                  tarefa: tarefa
+                  status_http: status_http
+            - labels:
+                nivel:
+                logger:
+            - drop:
+                # Health do Docker e scrape do Prometheus não entram no Loki
+                expression: '.*(/api/health/|/metrics/).*'

@@ -2,8 +2,8 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
-  pedidosApi, supervisorApi, separadoresApi, fechamentosApi, impressaoApi,
-  type Paginado,
+  pedidosApi, supervisorApi, separadoresApi, fechamentosApi, impressaoApi, saudeApi,
+  type Paginado, type SaudeSistema,
 } from '@/lib/api'
 import { useAuthStore } from '@/stores/authStore'
 
@@ -36,6 +36,8 @@ const ICONES: Record<string, React.ReactNode> = {
   erros: <path d="M3 3v18h18M18.7 8l-5.1 5.2-2.8-2.7L7 14.3" />,
   divergencias: <path d="M3 5v14M8 5v14M12 5v14M17 5v14M21 5v14" />,
   etiquetas: <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82zM7 7h.01" />,
+  saude: <path d="M22 12h-4l-3 9L9 3l-3 9H2" />,
+  agora: <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 5v5l3 2" />,
 }
 
 function Icone({ nome, className }: { nome: string; className?: string }) {
@@ -63,8 +65,16 @@ export default function AdminPage() {
     emConferencia: null, naoConformes: null, cancelados: null, fechamentos: null, conferidos: null,
     etiquetas: null,
   })
+  const [saude, setSaude] = useState<SaudeSistema | null | 'fora'>(null)
 
   useEffect(() => { hydrate() }, [hydrate])
+
+  useEffect(() => {
+    const ler = () => saudeApi.completa().then(setSaude).catch(() => setSaude('fora'))
+    ler()
+    const timer = setInterval(ler, 60_000)
+    return () => clearInterval(timer)
+  }, [])
 
   useEffect(() => {
     const definir = (chave: keyof Contadores) => (v: number) =>
@@ -130,6 +140,7 @@ export default function AdminPage() {
   ]
 
   const GESTAO = [
+    { href: '/supervisor/agora', titulo: 'Agora no galpão', icone: 'agora', valor: c.emConferencia, alerta: false, corAlerta: '' },
     {
       href: '/supervisor/nao-conformes',
       titulo: 'Não conformes', icone: 'naoconformes',
@@ -229,6 +240,30 @@ export default function AdminPage() {
           </Link>
         ))}
       </div>
+
+      {/* Sistema — saúde (observabilidade, 2026-10-08) */}
+      <h2 className="text-xs font-semibold text-ink-subtle uppercase tracking-[0.16em] mb-3">Sistema</h2>
+      {(() => {
+        const status = saude === null ? null : saude === 'fora' ? 'erro' : saude.status
+        const ponto = status === null ? 'bg-ink-subtle animate-pulse' : status === 'ok' ? 'bg-emerald-500' : status === 'atencao' ? 'bg-amber-500 animate-pulse' : 'bg-red-500 animate-pulse'
+        const texto = status === null ? 'Lendo…'
+          : saude === 'fora' ? 'Backend sem resposta'
+          : status === 'ok' ? 'Tudo certo'
+          : (saude as SaudeSistema).problemas.join(' · ')
+        const borda = status === 'erro' ? 'border-red-200 dark:border-red-500/30' : status === 'atencao' ? 'border-amber-200 dark:border-amber-500/30' : 'border-surface-border'
+        return (
+          <Link
+            href="/admin/saude"
+            className={`group flex items-center gap-3 bg-surface-card border rounded-xl px-4 py-3.5 mb-10 transition-all hover:-translate-y-0.5 hover:shadow-lg dark:hover:shadow-black/30 ${borda}`}
+          >
+            <span className="text-ink-subtle group-hover:text-ink transition-colors"><Icone nome="saude" /></span>
+            <span className="text-sm font-medium text-ink leading-snug">Saúde do sistema</span>
+            <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${ponto}`} />
+            <span className="text-sm text-ink-muted flex-1 truncate">{texto}</span>
+            <span className="text-ink-subtle opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all">→</span>
+          </Link>
+        )
+      })()}
 
       {/* Cadastros */}
       <p className="text-xs text-ink-subtle mb-2">

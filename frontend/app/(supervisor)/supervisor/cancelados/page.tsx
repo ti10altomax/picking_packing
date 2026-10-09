@@ -1,4 +1,5 @@
 'use client'
+import { HistoricoBotao } from '@/components/pedidos/HistoricoPedido'
 import { DocBadges } from '@/components/ui/DocBadges'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { supervisorApi } from '@/lib/api'
@@ -195,6 +196,7 @@ function CardCancelado({
       <div className="p-4">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-bold text-ink">{c.numero_externo}</span>
+              <HistoricoBotao pedidoId={c.id} />
           <DocBadges tipo={c.tipo} frete={c.frete} />
           <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${COR_STATUS[c.status_anterior] ?? 'bg-surface-elev text-ink-muted'}`}>
             era: {c.status_anterior_label}

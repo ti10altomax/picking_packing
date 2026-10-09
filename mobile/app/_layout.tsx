@@ -8,6 +8,10 @@ import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { DialogProvider } from '@/components/Dialog'
 import { useThemeStore } from '@/stores/themeStore'
 import { temaLight, temaDark } from '@/lib/temas'
+import { instalarRelatorGlobal } from '@/lib/erros'
+
+// Tela de erro de qualquer rota (observabilidade, 2026-10-08) — relata ao backend
+export { ErroBoundary as ErrorBoundary } from '@/components/ErroBoundary'
 
 export default function RootLayout() {
   const { resolved, hydrated, hydrate } = useThemeStore()
@@ -19,6 +23,9 @@ export default function RootLayout() {
   useEffect(() => {
     if (!hydrated) hydrate()
   }, [hydrated, hydrate])
+
+  // Exceções fora do React (handlers, promessas) → POST /api/erros-cliente/
+  useEffect(() => { instalarRelatorGlobal() }, [])
 
   const tema = resolved === 'dark' ? temaDark : temaLight
   // Cor de fundo nativa do Stack — precisa casar com surface-bg

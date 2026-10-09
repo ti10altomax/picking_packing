@@ -11,6 +11,11 @@ if DEBUG:
     ALLOWED_HOSTS = ['*']
 else:
     ALLOWED_HOSTS = config('DJANGO_ALLOWED_HOSTS', default='localhost').split(',')
+    # O healthcheck do Docker bate em http://localhost:8000/api/health/ de dentro
+    # do container — precisa passar pelo ALLOWED_HOSTS mesmo em produção.
+    for _h in ('localhost', '127.0.0.1'):
+        if _h not in ALLOWED_HOSTS:
+            ALLOWED_HOSTS.append(_h)
 
 INSTALLED_APPS = [
     # Unfold tem que vir ANTES de django.contrib.admin pra sobrescrever templates
@@ -27,6 +32,7 @@ INSTALLED_APPS = [
     # Third-party
     'rest_framework',
     'rest_framework_simplejwt',
+    'django_prometheus',  # /metrics/ — latência e status por view, queries no Postgres (2026-10-08)
     'corsheaders',
     'channels',
     'django_celery_beat',
@@ -43,6 +49,8 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    # django-prometheus mede do primeiro ao último middleware — Before fica no topo, After no fim
+    'django_prometheus.middleware.PrometheusBeforeMiddleware',
     'django.middleware.security.SecurityMiddleware',
     # WhiteNoise serve os arquivos de STATIC_ROOT em produção sem precisar
     # de nginx; em dev (DEBUG=True) o Django serve sozinho como sempre.
@@ -54,6 +62,9 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    # Uma linha de log por requisição /api/ (método, caminho, status, duração, usuário)
+    'apps.core.middleware.LogRequisicaoMiddleware',
+    'django_prometheus.middleware.PrometheusAfterMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -78,7 +89,8 @@ TEMPLATES = [
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
+        # Engine do django-prometheus: mesmo Postgres, mais contadores de query/erro por conexão
+        'ENGINE': 'django_prometheus.db.backends.postgresql',
         'NAME': config('POSTGRES_DB', default='separa'),
         'USER': config('POSTGRES_USER', default='separa'),
         'PASSWORD': config('POSTGRES_PASSWORD'),
@@ -139,6 +151,9 @@ CHANNEL_LAYERS = {
 
 CELERY_BROKER_URL = config('REDIS_URL', default='redis://redis:6379/0')
 CELERY_RESULT_BACKEND = config('REDIS_URL', default='redis://redis:6379/0')
+# O worker não substitui o logger root — assim os logs do Celery saem no mesmo
+# formato (JSON em produção) que os do Django. Ver LOGGING abaixo.
+CELERY_WORKER_HIJACK_ROOT_LOGGER = False
 
 CELERY_BEAT_SCHEDULE = {
     'sincronizar-pedidos-oracle': {
@@ -160,6 +175,16 @@ CELERY_BEAT_SCHEDULE = {
     #     'schedule': 60.0,
     # },
 }
+
+# ---------------------------------------------------------------------------
+# Logs (observabilidade, 2026-10-08) — ver config/logging.py.
+# LOG_NIVEL: DEBUG | INFO | WARNING. LOG_FORMATO: json (prod) | texto (dev).
+# ---------------------------------------------------------------------------
+from config.logging import montar_logging  # noqa: E402
+
+LOG_NIVEL = config('LOG_NIVEL', default='INFO').upper()
+LOG_FORMATO = config('LOG_FORMATO', default='texto' if DEBUG else 'json')
+LOGGING = montar_logging(LOG_NIVEL, LOG_FORMATO)
 
 LANGUAGE_CODE = 'pt-br'
 TIME_ZONE = 'America/Sao_Paulo'
@@ -309,6 +334,16 @@ UNFOLD = {
                         "title": "Logs de pedidos",
                         "icon": "history",
                         "link": "/django-admin/pedidos/pedidolog/",
+                    },
+                    {
+                        "title": "Execuções de tarefas",
+                        "icon": "monitor_heart",
+                        "link": "/django-admin/core/execucaotarefa/",
+                    },
+                    {
+                        "title": "Erros de cliente",
+                        "icon": "bug_report",
+                        "link": "/django-admin/core/errocliente/",
                     },
                 ],
             },

@@ -3,6 +3,7 @@ import { DocBadges } from '@/components/ui/DocBadges'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { supervisorApi, pedidosApi, type Paginado } from '@/lib/api'
 import { ImprimirEtiqueta } from '@/components/etiquetas/ImprimirEtiqueta'
+import { HistoricoBotao } from '@/components/pedidos/HistoricoPedido'
 
 type Pedido = {
   id: number
@@ -199,13 +200,14 @@ export default function ConferidosPage() {
                       </div>
                     </button>
                     {/* Etiqueta de volume (ponto 7): imprime/reimprime; só com transportadora */}
-                    <div className="pr-3 pt-3 shrink-0">
+                    <div className="pr-3 pt-3 shrink-0 flex flex-col items-end gap-1.5">
                       <ImprimirEtiqueta
                         pedidoId={p.id}
                         impressaEm={p.etiqueta_volume_em}
                         bloqueio={p.transportadora ? null : 'Sem transportadora no Senior'}
                         onImpresso={() => carregar(buscaAtiva, 1, false)}
                       />
+                      <HistoricoBotao pedidoId={p.id} />
                     </div>
                     </div>
 

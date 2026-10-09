@@ -10,12 +10,22 @@ services:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "9432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-separa} -d ${POSTGRES_DB:-separa}"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   redis:
     image: redis:7-alpine
     restart: unless-stopped
     ports:
       - "9379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   backend:
     build:
@@ -34,6 +44,12 @@ services:
       sh -c "python manage.py makemigrations core pedidos &&
              python manage.py migrate &&
              python manage.py runserver 0.0.0.0:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health/', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   celery:
     build:

@@ -2,10 +2,13 @@ import logging
 
 from celery import shared_task
 
+from apps.core.tarefas import registrar_execucao
+
 logger = logging.getLogger(__name__)
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=30)
+@registrar_execucao(erro_se=lambda r: isinstance(r, dict) and r.get('erro'))
 def imprimir_etiquetas(self, pedido_id: int, impressora_id: int):
     """Impressão automática das etiquetas de volume (fila Celery, fora do request)."""
     from apps.pedidos.models import Impressora, Pedido
