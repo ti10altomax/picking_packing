@@ -159,6 +159,42 @@ QUERY_SITUACAO_NFS = f"""
       AND nfv.numnfv IN ({{placeholders}})
 """
 
+# Vínculo pedido → NF emitida (2026-10-22). A NF que nasce de um pedido não entra como
+# documento próprio no Separa (é a mesma venda, conferida como pedido), mas a carta de
+# correção precisa dela: só NF autorizada aceita CC-e. O elo está nos itens da nota
+# (E140IPV.filped/numped). Só NF fechada; traz transportadora/frete/volumes porque a
+# nota é a palavra final sobre eles. {placeholders} = números de pedido (blocos ≤ 500).
+QUERY_NFS_DOS_PEDIDOS = f"""
+    SELECT DISTINCT ipv.filped, ipv.numped, nfv.codfil, nfv.codsnf, nfv.numnfv,
+           nfv.sitnfv, nfv.datemi, nfv.codtra, tra.nomtra, nfv.ciffob, nfv.qtdemb
+    FROM E140IPV ipv
+    JOIN E140NFV nfv
+        ON nfv.codemp = ipv.codemp
+       AND nfv.codfil = ipv.codfil
+       AND nfv.codsnf = ipv.codsnf
+       AND nfv.numnfv = ipv.numnfv
+    LEFT JOIN E073TRA tra
+        ON tra.codtra = nfv.codtra
+    WHERE ipv.codemp = {SENIOR_CODEMP}
+      AND ipv.numped IN ({{placeholders}})
+      AND nfv.sitnfv = '2'
+"""
+
+# Caminho inverso: de qual pedido saiu um número de NF (busca por número da nota na tela
+# da carta de correção). :1 = numnfv
+QUERY_PEDIDOS_DA_NF = f"""
+    SELECT DISTINCT ipv.filped, ipv.numped, nfv.codfil, nfv.codsnf, nfv.numnfv, nfv.sitnfv
+    FROM E140IPV ipv
+    JOIN E140NFV nfv
+        ON nfv.codemp = ipv.codemp
+       AND nfv.codfil = ipv.codfil
+       AND nfv.codsnf = ipv.codsnf
+       AND nfv.numnfv = ipv.numnfv
+    WHERE ipv.codemp = {SENIOR_CODEMP}
+      AND ipv.numnfv = :1
+      AND NVL(ipv.numped, 0) > 0
+"""
+
 # Notas fiscais de venda fechadas (sitNfv=2) SEM pedido de origem — as que vieram
 # de pedido já passaram (ou vão passar) pela conferência como pedido. A origem é
 # detectada pelos itens (E140IPV.numped). Numeração é por filial + série → ambos

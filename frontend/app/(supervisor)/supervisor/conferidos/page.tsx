@@ -20,6 +20,7 @@ type Pedido = {
   qtd_itens: number
   duracao_conferencia: string | null
   transportadora?: string
+  nf_numero?: string
   etiqueta_volume_em?: string | null
 }
 
@@ -159,6 +160,9 @@ export default function ConferidosPage() {
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-semibold text-ink">{p.numero_externo}</span>
                             <DocBadges tipo={p.tipo} frete={p.frete} />
+                            {p.tipo === 'pedido' && p.nf_numero && (
+                              <span className="text-xs text-ink-subtle" title="Nota fiscal emitida a partir deste pedido">NF {p.nf_numero}</span>
+                            )}
                             <span className="text-xs bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300 px-2 py-0.5 rounded-full font-medium">
                               Conferido
                             </span>
@@ -209,10 +213,9 @@ export default function ConferidosPage() {
                         onImpresso={() => carregar(buscaAtiva, 1, false)}
                       />
                       <HistoricoBotao pedidoId={p.id} />
-                      {/* Carta de correção (ponto 6): troca de transportadora, só NF */}
+                      {/* Carta de correção (ponto 6): transportadora/frete/volumes da NF — NF própria ou a do pedido faturado */}
                       <TrocarTransportadora
                         pedidoId={p.id}
-                        tipo={p.tipo}
                         onAlterado={() => carregar(buscaAtiva, 1, false)}
                       />
                     </div>

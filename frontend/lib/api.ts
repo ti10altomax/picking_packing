@@ -596,7 +596,7 @@ export const agoraApi = {
 }
 
 // ---------------------------------------------------------------------------
-// Carta de correção — troca de transportadora (ponto 6 da diretoria, 2026-10-22)
+// Carta de correção — transportadora, frete e volumes da NF (ponto 6 da diretoria, 2026-10-22)
 // ---------------------------------------------------------------------------
 
 export type CceModo = 'desligado' | 'gravar' | 'gravar_e_transmitir'
@@ -621,6 +621,8 @@ export type CceCarta = {
   usuario: string | null
   pedido_id: number
   numero_externo: string
+  tipo: string
+  nf_numero: string; nf_codsnf: string
   cliente: string
   modo: 'dry_run' | 'gravar' | 'gravar_e_transmitir'; modo_label: string
   status: 'simulada' | 'gravada' | 'transmitida' | 'erro_gravar' | 'erro_transmitir'; status_label: string
@@ -628,6 +630,7 @@ export type CceCarta = {
   codtra_anterior: string; transportadora_anterior: string
   codtra_novo: string; transportadora_nova: string
   frete_anterior: string; frete_novo: string
+  volumes_anterior: number | null; volumes_novo: number | null
   texto: string; complemento: string
   cartas_anteriores: CceCartaAnterior[]
   payload_gravar: Record<string, unknown>; retorno_gravar: Record<string, unknown>
@@ -641,10 +644,15 @@ export type CcePreparar = {
     id: number; numero_externo: string; codfil: string; codsnf: string; tipo: string; status: string; cliente: string
     codtra: string; transportadora: string; frete: string; frete_label: string
   }
+  // NF alvo: a própria (documento NF) ou a emitida a partir do pedido (Pedido.nf_*); null = pedido sem nota
+  nf: { codfil: string; codsnf: string; numero: string } | null
+  // quantidade de volumes: na nota (E140NFV.qtdemb) e montados no Separa
+  volumes: { nf: number | null; separa: number }
   bloqueio: { codigo: string; mensagem: string } | null
   situacao: {
     disponivel: boolean; encontrada?: boolean; sitnfv?: number | null; sitdoe?: number | null
-    sitdoe_label?: string; autorizada: boolean | null; codtra?: string; nomtra?: string; ciffob?: string; erro: string
+    sitdoe_label?: string; autorizada: boolean | null; codtra?: string; nomtra?: string; ciffob?: string
+    qtdemb?: number | null; erro: string
   }
   cartas_anteriores: { disponivel: boolean; cartas: CceCartaAnterior[]; erro: string }
   cartas_separa: CceCarta[]
@@ -654,18 +662,35 @@ export type CcePreparar = {
 
 export type CceTransportadora = { codtra: string; nome: string }
 
+export type CceCorpo = { codtra?: string; frete?: string; volumes?: string; complemento?: string }
+
+export type CceDocumento = {
+  id: number; numero_externo: string; tipo: string; status: string; frete: string; cliente: string
+  codtra: string; transportadora: string; codfil: string; codsnf: string; nf_codsnf: string; nf_numero: string
+}
+
 export const cartaCorrecaoApi = {
   preparar: (pedidoId: number) =>
     api.get(`/api/carta-correcao/pedidos/${pedidoId}/preparar/`).then((r) => r.data as CcePreparar),
-  previa: (pedidoId: number, body: { codtra: string; frete?: string; complemento?: string }) =>
+  previa: (pedidoId: number, body: CceCorpo) =>
     api.post(`/api/carta-correcao/pedidos/${pedidoId}/previa/`, body)
-      .then((r) => r.data as { texto: string; tamanho: number; limite: number; transportadora_nova: CceTransportadora | null }),
-  executar: (pedidoId: number, body: { codtra: string; frete?: string; complemento?: string }) =>
+      .then((r) => r.data as {
+        texto: string; tamanho: number; limite: number; transportadora_nova: CceTransportadora | null
+        volumes_anterior: number | null; volumes_novo: number | null
+      }),
+  executar: (pedidoId: number, body: CceCorpo) =>
     api.post(`/api/carta-correcao/pedidos/${pedidoId}/`, body)
-      .then((r) => r.data as { carta: CceCarta; pedido: { id: number; codtra: string; transportadora: string; frete: string } }),
+      .then((r) => r.data as {
+        carta: CceCarta
+        pedido: { id: number; codtra: string; transportadora: string; frete: string; nf_numero: string }
+      }),
   transportadoras: (q: string) =>
     api.get('/api/carta-correcao/transportadoras/', { params: { q } })
       .then((r) => r.data as { transportadoras: CceTransportadora[] }),
+  // busca do documento: nº do pedido, nº da NF (própria ou vinculada) ou cliente; nº desconhecido → pergunta ao Senior
+  documentos: (q: string) =>
+    api.get('/api/carta-correcao/documentos/', { params: { q } })
+      .then((r) => r.data as { documentos: CceDocumento[]; origem_senior: boolean; aviso: string }),
   listar: (params: { status?: string; search?: string; pedido?: number } = {}) =>
     api.get('/api/carta-correcao/', { params }).then((r) => r.data as { cartas: CceCarta[]; config: CceConfig }),
   config: () => api.get('/api/carta-correcao/config/').then((r) => r.data as CceConfig),

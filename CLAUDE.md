@@ -20,7 +20,7 @@ Sistema interno para **separação de pedidos no galpão da Altomax**. Não é m
 
 > **Observabilidade (2026-10-08)** — logs em **JSON** em produção (`config/logging.py`, `LOG_NIVEL`/`LOG_FORMATO`; `logger.info('…', extra={'pedido': id})` vira campo), uma linha por requisição `/api/` (`apps/core/middleware.py`). `GET /api/health/` (sem auth, Postgres+Redis) alimenta o `healthcheck` do compose. Toda task Celery leva `@registrar_execucao()` (`apps/core/tarefas.py`) → `ExecucaoTarefa` (heartbeat; "atrasada" = 3× o intervalo do beat). `GET /api/saude/` + tela **Admin → Saúde** (`/admin/saude`): componentes, tarefas e erros do web/coletor (`ErroCliente`, `POST /api/erros-cliente/` sem auth obrigatória; web `app/error.tsx` + `components/ErroReporter.tsx`; mobile `ErrorBoundary` + `ErrorUtils`). `GET /api/pedidos/<id>/historico/` traduz o `PedidoLog` (`apps/pedidos/historico.py`) → botão **Histórico** nas listas do supervisor. `GET /api/agora/` (`apps/pedidos/agora.py`) → **Gestão → Agora** (web e app): quem confere o quê, parados (20 min sem bip), filas, sequências, ritmo. `django-prometheus` em `/metrics/` (só rede Docker; `PROMETHEUS_MULTIPROC_DIR` no compose prod). Loki/Promtail + scrape job + alertas sugeridos em `deploy/monitoramento/` — aplicação manual na stack `mp-*` da VM.
 
-> **Carta de correção — troca de transportadora (2026-10-22, ponto 6 da diretoria)** — app `apps/carta_correcao`. Sup. Vendas, Sup. Pátio e admin trocam a transportadora (e o frete C/F) de uma **NF autorizada** pelo web (botão em Conferidos e página **Gestão → Cartas de correção**); o sistema monta o texto da carta (repetindo as cartas anteriores lidas de `E140CCE`, porque a última substitui as outras) e chama o WS Senior `cartadecorrecao.Gravar`, que grava a carta "Não enviada" e atualiza `codTra`/`cifFob` da própria NF. Modo em `Configuracao.cce_modo`: `desligado` (default) | `gravar` (faturamento transmite no Senior) | `gravar_e_transmitir` (`documentofiscal.EmitirCartaCorrecao`, `cce_tipger`). **`SENIOR_WS_DRY_RUN`** (default True) monta tudo e não chama o Senior — produção precisa desligar no `.env`. Situação eletrônica vem de `E140IDE.sitdoe` (3 = Autorizada). Pedido sem NF não tem CC-e. Rastro em `CartaCorrecao` + `PedidoLog`. Ver `STATUS.md` 2026-10-22 e `docs_pessoais/carta-correcao.html`.
+> **Carta de correção — transportadora, frete e volumes (2026-10-22, ponto 6 da diretoria)** — app `apps/carta_correcao`. Sup. Vendas, Sup. Pátio e admin corrigem a transportadora, o frete C/F e/ou a **quantidade de volumes** (`qtdEmb`, pré-sugerida pelos volumes do Separa) de uma **NF autorizada** pelo web (botão **Corrigir NF** em Conferidos e página **Gestão → Cartas de correção**, com busca por nº da NF, do pedido ou cliente). Vale para NF importada como documento **e para pedido já faturado**: a NF que nasce de um pedido não entra como documento (é a mesma venda), então `apps/pedidos/nf_vinculo.py` descobre a nota pela `E140IPV.filped/numped` e guarda em `Pedido.nf_codfil/nf_codsnf/nf_numero` (beat `vincular_nfs_pedidos` a cada 5 min + sob demanda; de carona preenche transportadora/frete vazios). O sistema monta o texto da carta (repetindo as cartas anteriores lidas de `E140CCE`, porque a última substitui as outras) e chama o WS Senior `cartadecorrecao.Gravar`, que grava a carta "Não enviada" e atualiza `codTra`/`cifFob` da própria NF. Modo em `Configuracao.cce_modo`: `desligado` (default) | `gravar` (faturamento transmite no Senior) | `gravar_e_transmitir` (`documentofiscal.EmitirCartaCorrecao`, `cce_tipger`). **`SENIOR_WS_DRY_RUN`** (default True) monta tudo e não chama o Senior — produção precisa desligar no `.env`. Situação eletrônica vem de `E140IDE.sitdoe` (3 = Autorizada); volumes atuais de `E140NFV.qtdemb`. Pedido ainda sem NF fechada não tem CC-e (bloqueio `sem_nf`). Rastro em `CartaCorrecao` + `PedidoLog`. Ver `STATUS.md` 2026-10-22 e `docs_pessoais/carta-correcao.html`.
 
 Atores principais: **Supervisor de Vendas**, **Supervisor de Pátio**, **Conferente** e **Admin**.
 
@@ -195,6 +195,7 @@ User(id, username, perfil, ...)
           (+ etiquetador, congelado)
 
 Pedido(id, tipo, numero_externo, codfil, codsnf, frete, codtra, transportadora,
+       nf_codfil, nf_codsnf, nf_numero, nf_vinculada_em,      # NF emitida a partir do pedido (E140IPV)
        status, criado_em, cliente,
        selecionado_em, selecionado_por_id,
        atribuido_em, atribuido_por_id, conferente_id,
@@ -216,7 +217,8 @@ PedidoLog(id, pedido_id, user_id, acao, payload, criado_em)
 ImpressaoEtiqueta(id, pedido_id, impressora_id, canal, status, qtd_etiquetas,
                   automatica, usuario_id, print_job_id, erro, criado_em)   # apps/impressao
 
-CartaCorrecao(id, pedido_id, usuario_id, modo, status, codtra/transportadora/frete antes e depois,
+CartaCorrecao(id, pedido_id, usuario_id, modo, status, nf_codfil/nf_codsnf/nf_numero,
+              codtra/transportadora/frete antes e depois, volumes antes e depois,
               texto, complemento, cartas_anteriores, payload/retorno de Gravar e Transmitir,
               erro, sitdoe, protocolo, autorizada_em, criado_em)              # apps/carta_correcao
 ```
@@ -227,7 +229,7 @@ CartaCorrecao(id, pedido_id, usuario_id, modo, status, codtra/transportadora/fre
 
 ## Integrações
 
-- **Senior (Oracle, leitura)** — origem dos pedidos e das NFs sem pedido de origem. Read-only. Celery Beat a cada 2 min (`sincronizar_pedidos_oracle`), janela configurável; a cada 60 s `monitorar_cancelamentos` reconsulta `sitped`/`sitnfv` dos documentos em andamento (Pendentes só dentro da janela; `manage.py monitorar_cancelamentos --completa` para a passada total).
+- **Senior (Oracle, leitura)** — origem dos pedidos e das NFs sem pedido de origem. Read-only. Celery Beat a cada 2 min (`sincronizar_pedidos_oracle`), janela configurável; a cada 60 s `monitorar_cancelamentos` reconsulta `sitped`/`sitnfv` dos documentos em andamento (Pendentes só dentro da janela; `manage.py monitorar_cancelamentos --completa` para a passada total); a cada 5 min `vincular_nfs_pedidos` descobre pela E140IPV a NF emitida de cada pedido em andamento (`Pedido.nf_*`).
   - Critério de "pedido pendente" no Oracle: a definir (filtros, status, empresa).
 - **Senior (SOAP, escrita)** — atualizar volumes após separação.
   - **WS exato a definir.** Tipicamente espera identificador do pedido + lista de volumes (tipo + qtd_itens? a confirmar).
@@ -328,7 +330,7 @@ Não tocar nesses arquivos durante o trabalho do escopo atual. Podem voltar ao f
 - [x] ~~Comportamento quando a separação termina parcial~~ — resolvido no redesenho (`DESIGN.md` §4.2): falta → Não conforme + erro registrado; sobra → conclui com erro registrado e fechamento pelo Sup. Pátio
 - [ ] Lista completa de ações disponíveis na lista de Não Conformes
 - [x] ~~Nota cancelada no Senior durante a conferência~~ — detectada pelo beat, bloqueio no conferente e transferência de conferência pelo Sup. Pátio (2026-09-30)
-- [x] ~~Ponto 6 — troca de transportadora com carta de correção~~ — implementado em 2026-10-22 em `apps/carta_correcao` (dry-run ligado). Ficam abertos: teste real com NF combinada com o fiscal; transmissão pelo Separa (`gravar_e_transmitir`) depende da parametrização da F070FVE (`tipGer`); mandar `qtdEmb` (volumes) na mesma carta
+- [x] ~~Ponto 6 — troca de transportadora com carta de correção~~ — implementado em 2026-10-22 em `apps/carta_correcao` (dry-run ligado). Na tarde de 22/10 passou a valer também para pedido já faturado (vínculo pedido → NF pela E140IPV) e a corrigir a quantidade de volumes (`qtdEmb`). Ficam abertos: teste real com NF combinada com o fiscal; transmissão pelo Separa (`gravar_e_transmitir`) depende da parametrização da F070FVE (`tipGer`)
 - [ ] Ponto 8 — liberação de exceção com mensageria — espera as respostas do supervisor (ver abaixo)
 - [x] ~~Ponto 7 — etiqueta de caixa~~ — implementado em 2026-10-07 como **etiqueta de volume 10x15** (não existia etiqueta; era pincel + carta de transporte). Ficam abertos: modelo/quantidade/local das impressoras (todos os caminhos prontos: Zebra rede, agente USB, navegador); dados do cliente além do nome (sync não traz endereço/CNPJ)
 - [ ] Ponto 8 — leitura do supervisor em 2026-10-07: o conferente faz a operação "não permitida" no coletor, o sistema **só persiste se o supervisor liberar**, em lote (fila de aprovação assíncrona; a mensageria é o aviso). Falta definir quais operações entram (barra divergente, excesso/item completo, concluir com falta), se o conferente fica travado, e o canal

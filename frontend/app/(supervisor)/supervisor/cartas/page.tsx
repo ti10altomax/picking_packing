@@ -1,21 +1,18 @@
 'use client'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { DocBadges } from '@/components/ui/DocBadges'
-import { ChipStatusCarta, ModalCarta, IconeCaminhao } from '@/components/cce/TrocarTransportadora'
-import { cartaCorrecaoApi, pedidosApi, type CceCarta, type CceConfig, type CceModo } from '@/lib/api'
+import { ChipStatusCarta, ModalCarta, IconeCaminhao, resumoMudancas, rotuloDocumento } from '@/components/cce/TrocarTransportadora'
+import { cartaCorrecaoApi, type CceCarta, type CceConfig, type CceDocumento, type CceModo } from '@/lib/api'
 import { useAuthStore } from '@/stores/authStore'
 
 /**
  * Gestão → Cartas de correção (ponto 6 da diretoria, 2026-10-22).
- * 1) buscar uma NF do Separa e trocar a transportadora (qualquer status, menos cancelada);
+ * 1) buscar um documento (nº da NF, nº do pedido ou cliente) e corrigir transportadora, frete
+ *    e/ou volumes da nota (qualquer status, menos cancelado). Número de NF que o Separa não
+ *    conhece → o servidor pergunta ao Senior de qual pedido ela saiu e vincula;
  * 2) histórico das cartas feitas pelo Separa, com o rastro dos WS;
  * 3) configuração do modo (admin): desligado | gravar | gravar e transmitir.
  */
-
-type Doc = {
-  id: number; numero_externo: string; tipo?: string; frete?: string; cliente: string; status: string
-  transportadora?: string; codtra?: string; codfil?: string; codsnf?: string
-}
 
 const STATUS_LABEL: Record<string, string> = {
   pendente: 'Pendente', selecionado: 'Selecionado', atribuido: 'Atribuído', conferindo: 'Em conferência',
@@ -37,7 +34,8 @@ export default function CartasCorrecaoPage() {
   const admin = user?.perfil === 'admin'
 
   const [busca, setBusca] = useState('')
-  const [docs, setDocs] = useState<Doc[]>([])
+  const [docs, setDocs] = useState<CceDocumento[]>([])
+  const [avisoBusca, setAvisoBusca] = useState('')
   const [buscando, setBuscando] = useState(false)
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [modalPedido, setModalPedido] = useState<number | null>(null)
@@ -63,23 +61,24 @@ export default function CartasCorrecaoPage() {
 
   useEffect(() => { carregar() }, [carregar])
 
-  // busca de NFs do Separa
+  // busca do documento (Separa; número desconhecido → servidor consulta o Senior)
   useEffect(() => {
     if (debounce.current) clearTimeout(debounce.current)
     const termo = busca.trim()
-    if (!termo) { setDocs([]); return }
+    if (!termo) { setDocs([]); setAvisoBusca(''); return }
     debounce.current = setTimeout(async () => {
       setBuscando(true)
       try {
-        const r = await pedidosApi.listar({ tipo: 'nota_fiscal', search: termo })
-        const lista: Doc[] = Array.isArray(r) ? r : r.results
-        setDocs(lista.slice(0, 15))
+        const r = await cartaCorrecaoApi.documentos(termo)
+        setDocs(r.documentos)
+        setAvisoBusca(r.aviso)
       } catch {
         setDocs([])
+        setAvisoBusca('')
       } finally {
         setBuscando(false)
       }
-    }, 300)
+    }, 350)
     return () => { if (debounce.current) clearTimeout(debounce.current) }
   }, [busca])
 
@@ -114,7 +113,7 @@ export default function CartasCorrecaoPage() {
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-2xl font-semibold text-ink flex items-center gap-2"><IconeCaminhao /> Cartas de correção</h1>
-          <p className="text-sm text-ink-muted">Troca de transportadora da NF com CC-e gravada no Senior</p>
+          <p className="text-sm text-ink-muted">Transportadora, frete e volumes da NF corrigidos com CC-e gravada no Senior</p>
         </div>
         <button onClick={carregar} className="text-sm text-blue-600 dark:text-blue-400 min-h-[44px] px-2">Atualizar</button>
       </div>
@@ -179,24 +178,28 @@ export default function CartasCorrecaoPage() {
 
       {/* Buscar NF */}
       <div className="bg-surface-card rounded-xl border border-surface-border p-4 mb-4">
-        <label className="block text-xs font-semibold text-ink-muted uppercase tracking-wide mb-1">Trocar transportadora de uma NF</label>
+        <label className="block text-xs font-semibold text-ink-muted uppercase tracking-wide mb-1">Corrigir uma nota</label>
         <input
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
-          placeholder="Número da NF ou cliente"
+          placeholder="Número da NF, número do pedido ou cliente"
           className="w-full bg-surface-card border border-surface-border text-ink placeholder:text-ink-subtle rounded-lg px-3 py-2 text-sm min-h-[44px] focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-300"
         />
         {busca.trim() && (
           <ul className="mt-2 divide-y divide-surface-border rounded-lg border border-surface-border overflow-hidden">
-            {buscando && docs.length === 0 && <li className="p-3 text-xs text-ink-subtle">Buscando…</li>}
-            {!buscando && docs.length === 0 && <li className="p-3 text-xs text-ink-subtle">Nenhuma NF encontrada no Separa (só notas da janela do sync).</li>}
+            {buscando && docs.length === 0 && <li className="p-3 text-xs text-ink-subtle">Buscando no Separa e no Senior…</li>}
+            {!buscando && docs.length === 0 && (
+              <li className="p-3 text-xs text-ink-subtle">{avisoBusca || 'Nenhum documento encontrado no Separa nem no Senior.'}</li>
+            )}
+            {!buscando && docs.length > 0 && avisoBusca && <li className="p-3 text-xs text-amber-700 dark:text-amber-400">{avisoBusca}</li>}
             {docs.map((d) => (
               <li key={d.id} className="flex items-center gap-3 px-3 py-2">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-ink">{d.numero_externo}</span>
+                    <span className="font-semibold text-ink">{rotuloDocumento(d)}</span>
                     <DocBadges tipo={d.tipo} frete={d.frete} />
                     <span className="text-xs text-ink-subtle">{STATUS_LABEL[d.status] ?? d.status}</span>
+                    {d.tipo === 'pedido' && !d.nf_numero && <span className="text-xs text-amber-700 dark:text-amber-400">sem NF ainda</span>}
                   </div>
                   <p className="text-sm text-ink-muted truncate">
                     {d.cliente || '—'}
@@ -208,7 +211,7 @@ export default function CartasCorrecaoPage() {
                   disabled={d.status === 'cancelado'}
                   className="inline-flex items-center gap-1.5 rounded-lg border border-surface-border bg-surface-card text-ink text-xs font-medium hover:bg-surface-elev px-3 min-h-[40px] disabled:opacity-40"
                 >
-                  <IconeCaminhao /> Transportadora
+                  <IconeCaminhao /> Corrigir NF
                 </button>
               </li>
             ))}
@@ -245,14 +248,13 @@ export default function CartasCorrecaoPage() {
                 <li key={c.id} className="border-b border-surface-border last:border-b-0">
                   <button onClick={() => setAberta(expandida ? null : c.id)} className="w-full text-left px-4 py-3 hover:bg-surface-elev/40">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-ink">{c.numero_externo}</span>
+                      <span className="font-semibold text-ink">{rotuloDocumento(c)}</span>
                       <ChipStatusCarta carta={c} />
                       <span className="text-xs text-ink-subtle">{fmt(c.criado_em)} · {c.usuario ?? '—'}</span>
                       <span className={`ml-auto text-ink-subtle text-sm transition-transform ${expandida ? 'rotate-90' : ''}`}>▸</span>
                     </div>
                     <p className="text-sm text-ink-muted truncate">
-                      {c.cliente || '—'} · {c.transportadora_anterior || 'sem transportadora'} → <strong className="text-ink">{c.transportadora_nova}</strong>
-                      {c.frete_novo !== c.frete_anterior && <span> · frete {c.frete_anterior || '?'} → {c.frete_novo}</span>}
+                      {c.cliente || '—'} · <strong className="text-ink">{resumoMudancas(c) || 'texto complementar'}</strong>
                     </p>
                     {c.erro && <p className="text-xs text-red-600 dark:text-red-400 truncate">{c.erro}</p>}
                   </button>
@@ -282,7 +284,12 @@ export default function CartasCorrecaoPage() {
         <ModalCarta
           pedidoId={modalPedido}
           onFechar={() => { setModalPedido(null); carregar() }}
-          onAlterado={() => { setBusca((b) => b) }}
+          onAlterado={(p) => {
+            // reflete transportadora/frete novos na lista da busca sem refazer a consulta
+            setDocs((lista) => lista.map((d) => d.id === p.id
+              ? { ...d, codtra: p.codtra, transportadora: p.transportadora, frete: p.frete, nf_numero: p.nf_numero }
+              : d))
+          }}
         />
       )}
     </div>

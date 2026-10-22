@@ -7,9 +7,10 @@ from .models import CartaCorrecao
 @admin.register(CartaCorrecao)
 class CartaCorrecaoAdmin(ModelAdmin):
     """Só leitura: quem grava é o serviço (rastro dos dois WS do Senior)."""
-    list_display = ('criado_em', 'pedido', 'status', 'modo', 'transportadora_anterior', 'transportadora_nova', 'usuario')
+    list_display = ('criado_em', 'pedido', 'nf_numero', 'status', 'modo', 'transportadora_anterior', 'transportadora_nova',
+                    'volumes_anterior', 'volumes_novo', 'usuario')
     list_filter = ('status', 'modo')
-    search_fields = ('pedido__numero_externo', 'pedido__cliente', 'transportadora_nova', 'texto')
+    search_fields = ('pedido__numero_externo', 'nf_numero', 'pedido__cliente', 'transportadora_nova', 'texto')
     readonly_fields = [f.name for f in CartaCorrecao._meta.fields]
 
     def has_add_permission(self, request):

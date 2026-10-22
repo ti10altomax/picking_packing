@@ -4,12 +4,15 @@ import { cartaCorrecaoApi, type CceCarta, type CcePreparar, type CceTransportado
 import { useDialog } from '@/components/Dialog'
 
 /**
- * Botão "Transportadora" + modal da carta de correção (ponto 6 da diretoria, 2026-10-22).
+ * Botão "Corrigir NF" + modal da carta de correção (ponto 6 da diretoria, 2026-10-22).
  *
- * Fluxo: abre → GET preparar (elegibilidade, situação no Senior, cartas anteriores)
- * → escolhe transportadora (combo com busca em E073TRA) e/ou frete, complemento livre
- * → prévia do texto (servidor monta, sempre repetindo as cartas anteriores)
- * → confirmar → POST executar (grava no Senior; transmite se o modo mandar).
+ * Corrige transportadora, frete (C/F) e quantidade de volumes da NF — qualquer combinação,
+ * mais um complemento livre. Vale para NF importada como documento e para pedido já
+ * faturado (o servidor descobre a NF do pedido na E140IPV; pedido sem nota é bloqueado).
+ *
+ * Fluxo: abre → GET preparar (NF alvo, elegibilidade, situação no Senior, volumes, cartas
+ * anteriores) → escolhe o que corrigir → prévia do texto (servidor monta, sempre repetindo
+ * as cartas anteriores) → confirmar → POST executar (grava no Senior; transmite se o modo mandar).
  * Só web: operação de escritório (Sup. Vendas, Sup. Pátio, admin).
  */
 
@@ -43,29 +46,48 @@ export function IconeCaminhao({ className }: { className?: string }) {
   )
 }
 
+/** "A → B · frete C → F · volumes 1 → 5" — só o que de fato mudou na carta. */
+export function resumoMudancas(c: Pick<CceCarta,
+  'codtra_anterior' | 'codtra_novo' | 'transportadora_anterior' | 'transportadora_nova'
+  | 'frete_anterior' | 'frete_novo' | 'volumes_anterior' | 'volumes_novo' | 'complemento'>): string {
+  const partes: string[] = []
+  if (c.codtra_novo && c.codtra_novo !== c.codtra_anterior) {
+    partes.push(`${c.transportadora_anterior || 'sem transportadora'} → ${c.transportadora_nova}`)
+  }
+  if (c.frete_novo && c.frete_novo !== c.frete_anterior) partes.push(`frete ${c.frete_anterior || '?'} → ${c.frete_novo}`)
+  if (c.volumes_novo != null) partes.push(`volumes ${c.volumes_anterior ?? '?'} → ${c.volumes_novo}`)
+  if (partes.length === 0 && c.complemento) partes.push('só complemento')
+  return partes.join(' · ')
+}
+
+/** "NF 147911 · pedido 184186" ou "NF 148502" ou "Pedido 184190 (sem NF)". */
+export function rotuloDocumento(d: { tipo?: string; numero_externo: string; nf_numero?: string | null }): string {
+  if (d.tipo === 'nota_fiscal') return `NF ${d.numero_externo}`
+  if (d.nf_numero) return `NF ${d.nf_numero} · pedido ${d.numero_externo}`
+  return `Pedido ${d.numero_externo}`
+}
+
 function fmt(iso: string) {
   return new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
 export function TrocarTransportadora({
-  pedidoId, tipo, compacto = false, onAlterado,
+  pedidoId, compacto = false, onAlterado,
 }: {
   pedidoId: number
-  tipo?: string
   compacto?: boolean
-  onAlterado?: (pedido: { codtra: string; transportadora: string; frete: string }) => void
+  onAlterado?: (pedido: { id: number; codtra: string; transportadora: string; frete: string; nf_numero: string }) => void
 }) {
   const [aberto, setAberto] = useState(false)
-  if (tipo && tipo !== 'nota_fiscal') return null
   return (
     <>
       <button
         onClick={() => setAberto(true)}
-        title="Trocar transportadora (carta de correção)"
+        title="Carta de correção: transportadora, frete e volumes da NF"
         className={`inline-flex items-center gap-1.5 rounded-lg border border-surface-border bg-surface-card text-ink text-xs font-medium hover:bg-surface-elev transition-colors ${compacto ? 'px-2 min-h-[36px]' : 'px-3 min-h-[40px]'}`}
       >
         <IconeCaminhao />
-        {!compacto && <span>Transportadora</span>}
+        {!compacto && <span>Corrigir NF</span>}
       </button>
       {aberto && (
         <ModalCarta
@@ -83,7 +105,7 @@ export function ModalCarta({
 }: {
   pedidoId: number
   onFechar: () => void
-  onAlterado?: (pedido: { codtra: string; transportadora: string; frete: string }) => void
+  onAlterado?: (pedido: { id: number; codtra: string; transportadora: string; frete: string; nf_numero: string }) => void
 }) {
   const dialog = useDialog()
   const [dados, setDados] = useState<CcePreparar | null>(null)
@@ -92,8 +114,10 @@ export function ModalCarta({
   const [busca, setBusca] = useState('')
   const [opcoes, setOpcoes] = useState<CceTransportadora[]>([])
   const [buscando, setBuscando] = useState(false)
+  const [buscarTransp, setBuscarTransp] = useState(false)
   const [escolhida, setEscolhida] = useState<CceTransportadora | null>(null)
   const [frete, setFrete] = useState<'' | 'C' | 'F'>('')
+  const [volumes, setVolumes] = useState('')
   const [complemento, setComplemento] = useState('')
 
   const [previa, setPrevia] = useState<{ texto: string; tamanho: number; limite: number } | null>(null)
@@ -110,9 +134,9 @@ export function ModalCarta({
       .catch((e) => setErroCarga(e?.response?.data?.erro ?? 'Não consegui carregar os dados da nota.'))
   }, [pedidoId])
 
-  // busca de transportadoras (debounce)
+  // busca de transportadoras (debounce) — só quando o usuário abre a troca
   useEffect(() => {
-    if (!dados || dados.bloqueio) return
+    if (!dados || dados.bloqueio || !buscarTransp) return
     if (debounce.current) clearTimeout(debounce.current)
     debounce.current = setTimeout(async () => {
       setBuscando(true)
@@ -126,15 +150,22 @@ export function ModalCarta({
       }
     }, 250)
     return () => { if (debounce.current) clearTimeout(debounce.current) }
-  }, [busca, dados])
+  }, [busca, dados, buscarTransp])
+
+  const mudaTransportadora = !!escolhida && !!dados && escolhida.codtra !== dados.pedido.codtra
+  const mudaFrete = !!frete && !!dados && frete !== dados.pedido.frete
+  const volumesNum = volumes.trim() === '' ? null : Number(volumes)
+  const volumesValido = volumesNum == null || (Number.isInteger(volumesNum) && volumesNum >= 1 && volumesNum <= 999)
+  const mudaVolumes = volumesNum != null && volumesValido && !!dados && volumesNum !== (dados.volumes.nf ?? -1)
+  const haMudanca = mudaTransportadora || mudaFrete || mudaVolumes || complemento.trim().length > 0
 
   // prévia do texto
   useEffect(() => {
-    if (!dados || dados.bloqueio || !escolhida) { setPrevia(null); return }
+    if (!dados || dados.bloqueio || !haMudanca || !volumesValido) { setPrevia(null); return }
     const t = setTimeout(async () => {
       setErroPrevia(null)
       try {
-        const p = await cartaCorrecaoApi.previa(pedidoId, { codtra: escolhida.codtra, frete, complemento })
+        const p = await cartaCorrecaoApi.previa(pedidoId, { codtra: escolhida?.codtra ?? '', frete, volumes, complemento })
         setPrevia({ texto: p.texto, tamanho: p.tamanho, limite: p.limite })
       } catch (e: unknown) {
         const err = e as { response?: { data?: { erro?: string } } }
@@ -142,22 +173,24 @@ export function ModalCarta({
       }
     }, 300)
     return () => clearTimeout(t)
-  }, [dados, escolhida, frete, complemento, pedidoId])
+  }, [dados, escolhida, frete, volumes, complemento, pedidoId, haMudanca, volumesValido])
 
-  const mudaTransportadora = !!escolhida && !!dados && escolhida.codtra !== dados.pedido.codtra
-  const mudaFrete = !!frete && !!dados && frete !== dados.pedido.frete
-  const haMudanca = mudaTransportadora || mudaFrete || complemento.trim().length > 0
   const textoLongo = !!previa && previa.tamanho > previa.limite
-  const podeConfirmar = !!dados && !dados.bloqueio && !!escolhida && haMudanca && !textoLongo && !enviando
+  const podeConfirmar = !!dados && !dados.bloqueio && haMudanca && volumesValido && !textoLongo && !enviando
     && dados.config.modo !== 'desligado'
 
   async function confirmar() {
-    if (!escolhida) return
-    const vaiTransmitir = dados?.config.modo === 'gravar_e_transmitir' && !dados.config.dry_run
+    if (!dados) return
+    const vaiTransmitir = dados.config.modo === 'gravar_e_transmitir' && !dados.config.dry_run
+    const oQue = [
+      mudaTransportadora ? 'a transportadora' : '',
+      mudaFrete ? 'o frete' : '',
+      mudaVolumes ? 'a quantidade de volumes' : '',
+    ].filter(Boolean).join(', ') || 'o texto da carta'
     const aviso = vaiTransmitir
-      ? 'A carta vai ser GRAVADA e TRANSMITIDA à SEFAZ agora. Isso não tem volta. Continuar?'
-      : 'A carta vai ser gravada no Senior como "Não enviada" e a transportadora da nota vai ser trocada. Continuar?'
-    if (!dados?.config.dry_run) {
+      ? `A carta vai ser GRAVADA e TRANSMITIDA à SEFAZ agora, alterando ${oQue} da nota. Isso não tem volta. Continuar?`
+      : `A carta vai ser gravada no Senior como "Não enviada" e ${oQue} da nota vai ser alterado. Continuar?`
+    if (!dados.config.dry_run) {
       const ok = await dialog.confirm({
         title: vaiTransmitir ? 'Gravar e transmitir à SEFAZ' : 'Gravar carta no Senior',
         message: aviso, variant: vaiTransmitir ? 'danger' : 'warning',
@@ -168,7 +201,7 @@ export function ModalCarta({
     setEnviando(true)
     setErroEnvio(null)
     try {
-      const r = await cartaCorrecaoApi.executar(pedidoId, { codtra: escolhida.codtra, frete, complemento })
+      const r = await cartaCorrecaoApi.executar(pedidoId, { codtra: escolhida?.codtra ?? '', frete, volumes, complemento })
       setResultado(r.carta)
       if (r.carta.efetiva) onAlterado?.(r.pedido)
     } catch (e: unknown) {
@@ -187,8 +220,8 @@ export function ModalCarta({
       >
         <div className="flex items-start justify-between gap-3 mb-3">
           <div>
-            <h2 className="text-lg font-bold text-ink flex items-center gap-2"><IconeCaminhao /> Trocar transportadora</h2>
-            <p className="text-xs text-ink-muted">Carta de correção eletrônica (CC-e) gravada no Senior</p>
+            <h2 className="text-lg font-bold text-ink flex items-center gap-2"><IconeCaminhao /> Corrigir nota fiscal</h2>
+            <p className="text-xs text-ink-muted">Carta de correção eletrônica (CC-e) gravada no Senior: transportadora, frete e volumes</p>
           </div>
           <button onClick={onFechar} className="text-ink-muted hover:text-ink min-h-[44px] min-w-[44px] text-xl" aria-label="Fechar">×</button>
         </div>
@@ -201,8 +234,15 @@ export function ModalCarta({
             {/* Cabeçalho do documento */}
             <div className="rounded-xl border border-surface-border bg-surface-elev/40 p-3 text-sm mb-4">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-semibold text-ink">NF {dados.pedido.numero_externo}</span>
-                <span className="text-xs text-ink-subtle">filial {dados.pedido.codfil} · série {dados.pedido.codsnf}</span>
+                <span className="font-semibold text-ink">
+                  {dados.nf ? `NF ${dados.nf.numero}` : `Pedido ${dados.pedido.numero_externo}`}
+                </span>
+                {dados.nf && (
+                  <span className="text-xs text-ink-subtle">filial {dados.nf.codfil} · série {dados.nf.codsnf}</span>
+                )}
+                {dados.nf && dados.pedido.tipo === 'pedido' && (
+                  <span className="text-xs text-ink-subtle">· pedido {dados.pedido.numero_externo}</span>
+                )}
                 {dados.situacao.disponivel && dados.situacao.encontrada && (
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${dados.situacao.autorizada
                     ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
@@ -216,8 +256,11 @@ export function ModalCarta({
                 Hoje: <strong>{dados.pedido.transportadora || 'sem transportadora'}</strong>
                 {dados.pedido.codtra && <span className="text-ink-subtle"> ({dados.pedido.codtra})</span>}
                 {dados.pedido.frete_label && <span className="text-ink-subtle"> · {dados.pedido.frete_label}</span>}
+                {dados.nf && (
+                  <span className="text-ink-subtle"> · {dados.volumes.nf ?? '?'} volume(s) na nota</span>
+                )}
               </p>
-              {!dados.situacao.disponivel && (
+              {!dados.situacao.disponivel && !dados.bloqueio && (
                 <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
                   Não consegui ler a situação eletrônica no Senior ({dados.situacao.erro}). O ERP valida ao gravar.
                 </p>
@@ -269,8 +312,8 @@ export function ModalCarta({
                   </p>
                 )}
 
-                {/* Transportadora nova */}
-                <label className="block text-xs font-semibold text-ink-muted uppercase tracking-wide mb-1">Transportadora nova</label>
+                {/* Transportadora nova (opcional) */}
+                <label className="block text-xs font-semibold text-ink-muted uppercase tracking-wide mb-1">Transportadora</label>
                 {escolhida ? (
                   <div className="flex items-center gap-2 mb-3">
                     <div className={`${INPUT} flex items-center justify-between`}>
@@ -278,15 +321,25 @@ export function ModalCarta({
                       <button onClick={() => { setEscolhida(null); setBusca('') }} className="text-xs text-blue-600 dark:text-blue-400 ml-2">trocar</button>
                     </div>
                   </div>
+                ) : !buscarTransp ? (
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className={`${INPUT} flex items-center justify-between text-ink-muted`}>
+                      <span>Manter {dados.pedido.transportadora || 'sem transportadora'}</span>
+                      <button onClick={() => setBuscarTransp(true)} className="text-xs text-blue-600 dark:text-blue-400 ml-2 min-h-[32px]">trocar</button>
+                    </div>
+                  </div>
                 ) : (
                   <div className="mb-3">
-                    <input
-                      autoFocus
-                      value={busca}
-                      onChange={(e) => setBusca(e.target.value)}
-                      placeholder="Buscar por nome ou código no Senior"
-                      className={INPUT}
-                    />
+                    <div className="flex items-center gap-2">
+                      <input
+                        autoFocus
+                        value={busca}
+                        onChange={(e) => setBusca(e.target.value)}
+                        placeholder="Buscar por nome ou código no Senior"
+                        className={INPUT}
+                      />
+                      <button onClick={() => { setBuscarTransp(false); setBusca('') }} className="text-xs text-ink-muted hover:text-ink min-h-[44px] px-2">manter</button>
+                    </div>
                     <div className="mt-1 max-h-48 overflow-y-auto rounded-lg border border-surface-border divide-y divide-surface-border">
                       {buscando && opcoes.length === 0 && <p className="p-2 text-xs text-ink-subtle">Buscando…</p>}
                       {!buscando && opcoes.length === 0 && <p className="p-2 text-xs text-ink-subtle">Nenhuma transportadora encontrada.</p>}
@@ -303,13 +356,39 @@ export function ModalCarta({
                   </div>
                 )}
 
-                {/* Frete */}
-                <label className="block text-xs font-semibold text-ink-muted uppercase tracking-wide mb-1">Frete</label>
-                <select value={frete} onChange={(e) => setFrete(e.target.value as '' | 'C' | 'F')} className={`${INPUT} mb-3`}>
-                  <option value="">Manter como está{dados.pedido.frete_label ? ` (${dados.pedido.frete_label})` : ''}</option>
-                  <option value="C">Entrega — por conta do emitente (CIF)</option>
-                  <option value="F">Retira — por conta do destinatário (FOB)</option>
-                </select>
+                {/* Frete + Volumes lado a lado */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-ink-muted uppercase tracking-wide mb-1">Frete</label>
+                    <select value={frete} onChange={(e) => setFrete(e.target.value as '' | 'C' | 'F')} className={INPUT}>
+                      <option value="">Manter como está{dados.pedido.frete_label ? ` (${dados.pedido.frete_label})` : ''}</option>
+                      <option value="C">Entrega — por conta do emitente (CIF)</option>
+                      <option value="F">Retira — por conta do destinatário (FOB)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-ink-muted uppercase tracking-wide mb-1">Quantidade de volumes</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number" min={1} max={999} inputMode="numeric"
+                        value={volumes}
+                        onChange={(e) => setVolumes(e.target.value)}
+                        placeholder={`Manter (${dados.volumes.nf ?? '?'} na nota)`}
+                        className={`${INPUT} ${!volumesValido ? 'border-red-400' : ''}`}
+                      />
+                      {dados.volumes.separa > 0 && dados.volumes.separa !== dados.volumes.nf && volumesNum !== dados.volumes.separa && (
+                        <button
+                          onClick={() => setVolumes(String(dados.volumes.separa))}
+                          title="Usar a quantidade de volumes montada na conferência"
+                          className="shrink-0 text-xs text-blue-600 dark:text-blue-400 min-h-[44px] px-1 whitespace-nowrap"
+                        >
+                          usar {dados.volumes.separa} do Separa
+                        </button>
+                      )}
+                    </div>
+                    {!volumesValido && <p className="text-xs text-red-600 dark:text-red-400 mt-1">Inteiro de 1 a 999.</p>}
+                  </div>
+                </div>
 
                 {/* Complemento */}
                 <label className="block text-xs font-semibold text-ink-muted uppercase tracking-wide mb-1">Complemento (opcional)</label>
@@ -317,12 +396,12 @@ export function ModalCarta({
                   value={complemento}
                   onChange={(e) => setComplemento(e.target.value)}
                   rows={2}
-                  placeholder="Texto livre que entra na carta junto com a troca"
+                  placeholder="Texto livre que entra na carta junto com as correções"
                   className={`${INPUT} mb-3`}
                 />
 
                 {/* Prévia */}
-                {escolhida && (
+                {haMudanca && volumesValido && (
                   <div className="rounded-xl border border-surface-border bg-surface-elev/40 p-3 mb-3">
                     <div className="flex items-center justify-between text-xs text-ink-muted mb-1">
                       <span className="font-semibold uppercase tracking-wide">Texto da carta</span>
@@ -333,11 +412,14 @@ export function ModalCarta({
                     ) : previa ? (
                       previa.texto
                         ? <p className="text-sm text-ink whitespace-pre-wrap font-mono">{previa.texto}</p>
-                        : <p className="text-sm text-ink-subtle italic">Nada a corrigir: escolha outra transportadora, mude o frete ou escreva um complemento.</p>
+                        : <p className="text-sm text-ink-subtle italic">Nada a corrigir: troque a transportadora, o frete, os volumes ou escreva um complemento.</p>
                     ) : (
                       <p className="text-sm text-ink-subtle">Montando…</p>
                     )}
                   </div>
+                )}
+                {!haMudanca && (
+                  <p className="text-xs text-ink-subtle mb-3">Escolha o que corrigir: transportadora, frete, quantidade de volumes ou um complemento.</p>
                 )}
 
                 {erroEnvio && <p className="text-sm text-red-600 dark:text-red-400 mb-3">{erroEnvio}</p>}
@@ -367,7 +449,7 @@ export function ModalCarta({
                     <li key={c.id} className="flex items-start gap-2 text-xs">
                       <ChipStatusCarta carta={c} />
                       <span className="text-ink">
-                        {fmt(c.criado_em)} · {c.usuario ?? '—'} · {c.transportadora_anterior || 'sem transportadora'} → {c.transportadora_nova}
+                        {fmt(c.criado_em)} · {c.usuario ?? '—'} · {resumoMudancas(c) || '—'}
                         {c.erro && <span className="text-red-600 dark:text-red-400"> — {c.erro}</span>}
                       </span>
                     </li>
@@ -398,14 +480,11 @@ function Resultado({ carta, onFechar }: { carta: CceCarta; onFechar: () => void 
           {carta.status === 'erro_gravar' && 'O Senior não aceitou a carta.'}
         </span>
       </div>
-      <p className="text-ink">
-        {carta.transportadora_anterior || 'sem transportadora'} → <strong>{carta.transportadora_nova}</strong>
-        {carta.frete_novo !== carta.frete_anterior && <> · frete {carta.frete_anterior || '?'} → {carta.frete_novo}</>}
-      </p>
+      <p className="text-ink">{carta.nf_numero && <span className="text-ink-subtle">NF {carta.nf_numero} · </span>}{resumoMudancas(carta) || 'texto complementar'}</p>
       {carta.protocolo && <p className="text-xs text-ink-muted mt-1">Protocolo {carta.protocolo}{carta.autorizada_em ? ` · ${carta.autorizada_em}` : ''}</p>}
       {carta.erro && <p className="text-xs text-red-700 dark:text-red-300 mt-1">{carta.erro}</p>}
       <p className="text-xs text-ink-subtle mt-2 font-mono whitespace-pre-wrap">{carta.texto}</p>
-      {carta.efetiva && (
+      {carta.efetiva && carta.codtra_novo !== carta.codtra_anterior && (
         <p className="text-xs text-ink-muted mt-2">A etiqueta de volume pode ser reimpressa com a transportadora nova.</p>
       )}
       <div className="flex justify-end mt-3">

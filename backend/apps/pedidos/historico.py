@@ -56,10 +56,14 @@ def _carta(p):
     st = {'simulada': 'simulada (dry-run)', 'gravada': 'gravada no Senior, não enviada', 'transmitida': 'transmitida à SEFAZ',
           'erro_gravar': 'recusada/falhou ao gravar', 'erro_transmitir': 'gravada, falhou ao transmitir'}.get(p.get('status'), p.get('status') or '')
     txt = st
+    if p.get('nf'):
+        txt += f" · NF {p.get('nf')}"
     if p.get('para') and p.get('para') != p.get('de'):
         txt += f" · {p.get('de') or 'sem transportadora'} → {p.get('para')}"
     if p.get('frete_para') and p.get('frete_para') != p.get('frete_de'):
         txt += f" · frete {p.get('frete_de') or '?'} → {p.get('frete_para')}"
+    if p.get('volumes_para') is not None:
+        txt += f" · volumes {p.get('volumes_de') if p.get('volumes_de') is not None else '?'} → {p.get('volumes_para')}"
     if p.get('protocolo'):
         txt += f" · protocolo {p.get('protocolo')}"
     if p.get('erro'):
@@ -120,7 +124,7 @@ ROTULOS = {
                              lambda p: f"de {p.get('origem_numero') or p.get('origem') or 'documento cancelado'}"),
     'etiqueta_impressa': ('Etiqueta de volume impressa', 'etiqueta', _etiqueta),
     'etiqueta_erro': ('Falha ao imprimir etiqueta', 'alerta', lambda p: p.get('erro') or ''),
-    'carta_correcao': ('Carta de correção (transportadora)', 'fluxo', _carta),
+    'carta_correcao': ('Carta de correção', 'fluxo', _carta),
     'carta_correcao_transmissao': ('Carta de correção transmitida', 'fluxo', _carta),
     # escopo congelado
     'separacao_finalizada': ('Separação finalizada (legado)', 'legado', lambda p: ''),

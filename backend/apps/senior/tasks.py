@@ -380,6 +380,41 @@ def monitorar_cancelamentos(passada_completa: bool = False):
 
 
 @shared_task
+@registrar_execucao(erro_se=_teve_falha_oracle)
+def vincular_nfs_pedidos():
+    """
+    Vínculo pedido → NF emitida (2026-10-22). Para cada pedido em andamento (ou Pendente /
+    Conferido dentro da janela do sync) ainda sem `nf_numero`, pergunta à E140IPV se já
+    saiu nota fechada e guarda filial/série/número no Pedido. É o que permite a carta de
+    correção em nota que nasceu de pedido — a maioria. De carona, pedido sem transportadora
+    ou frete ganha o da nota (Conferido que ganhou transportadora dispara a etiqueta).
+    A cada 5 min via Celery Beat; uma consulta IN por bloco de 500 (E140IPV tem índice em numped).
+    """
+    from apps.pedidos.models import Pedido
+    from apps.pedidos.cancelamento import STATUS_MONITORADOS
+    from apps.pedidos.nf_vinculo import vincular_em_lote
+    from apps.impressao.services import disparar_automatica
+
+    limite = timezone.now() - dt.timedelta(days=max(_janela_dias(), 1))
+    qs = Pedido.objects.filter(tipo=Pedido.Tipo.PEDIDO, nf_numero='', status__in=STATUS_MONITORADOS)
+    qs = qs.exclude(status=Pedido.Status.CONFERIDO, conferido_em__lt=limite)
+    qs = qs.exclude(status=Pedido.Status.PENDENTE, criado_em__lt=limite)
+    vinc = vincular_em_lote(list(qs))
+    for pedido, mudou in vinc['alterados']:
+        if mudou['transportadora'] and pedido.status == Pedido.Status.CONFERIDO:
+            try:
+                disparar_automatica(pedido)
+            except Exception:
+                logger.exception(f'etiqueta de volume: falha ao disparar para {pedido}')
+    # `_teve_falha_oracle` procura a string 'falha_oracle' no resultado — só pode aparecer quando falhou
+    resultado = {k: v for k, v in vinc.items() if k not in ('alterados', 'falha_oracle')}
+    if vinc['falha_oracle']:
+        resultado['oracle'] = 'falha_oracle'
+    logger.info(f"vincular_nfs_pedidos: {vinc['consultados']} consultados, {vinc['vinculados']} vinculados")
+    return resultado
+
+
+@shared_task
 def monitorar_faturamento():
     """
     Detecta pedidos que o Senior faturou (sitPed=4 Liquidado).

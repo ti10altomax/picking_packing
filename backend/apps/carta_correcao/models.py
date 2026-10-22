@@ -7,8 +7,9 @@ from apps.pedidos.models import Pedido
 class CartaCorrecao(models.Model):
     """Carta de correção eletrônica (CC-e) feita pelo Separa — ponto 6 da diretoria (2026-10-22).
 
-    Uma linha por tentativa de trocar a transportadora (e/ou o frete) de uma NF
-    autorizada. Guarda o payload enviado e a resposta de cada WS do Senior, para
+    Uma linha por tentativa de corrigir a transportadora, o frete e/ou a quantidade de
+    volumes de uma NF autorizada (a própria, ou a NF emitida a partir do pedido — ver
+    `Pedido.nf_*`). Guarda o payload enviado e a resposta de cada WS do Senior, para
     auditoria e para explicar ao fiscal o que foi gravado. O ciclo é:
 
       simulada          dry-run (SENIOR_WS_DRY_RUN): montou tudo, não chamou o Senior
@@ -40,6 +41,12 @@ class CartaCorrecao(models.Model):
     modo = models.CharField(max_length=30, choices=Modo.choices)
     status = models.CharField(max_length=20, choices=Status.choices)
 
+    # NF alvo: a própria, se o documento é NF; a vinculada (Pedido.nf_*), se é pedido faturado.
+    # Fica na carta porque é o que foi mandado ao Senior (2026-10-22).
+    nf_codfil = models.CharField(max_length=10, blank=True)
+    nf_codsnf = models.CharField(max_length=10, blank=True)
+    nf_numero = models.CharField(max_length=20, blank=True)
+
     # o que mudou
     codtra_anterior = models.CharField(max_length=20, blank=True)
     transportadora_anterior = models.CharField(max_length=255, blank=True)
@@ -47,6 +54,10 @@ class CartaCorrecao(models.Model):
     transportadora_nova = models.CharField(max_length=255, blank=True)
     frete_anterior = models.CharField(max_length=1, blank=True)
     frete_novo = models.CharField(max_length=1, blank=True)
+    # quantidade de volumes da NF (`qtdEmb` do Gravar → E140NFV.qtdemb): antes, lido do Senior;
+    # depois, informado na tela (padrão = volumes montados no Separa). None = não corrigiu.
+    volumes_anterior = models.IntegerField(null=True, blank=True)
+    volumes_novo = models.IntegerField(null=True, blank=True)
 
     # texto da carta: o que foi enviado em desCor (com as cartas anteriores) e o complemento livre
     texto = models.TextField()

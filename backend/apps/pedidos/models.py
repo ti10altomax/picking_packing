@@ -64,6 +64,14 @@ class Pedido(models.Model):
     # Vazia em retira/sem frete. Pré-requisito dos pontos 3, 6 e 7 da diretoria (2026-10-05).
     codtra = models.CharField(max_length=20, blank=True)
     transportadora = models.CharField(max_length=255, blank=True)
+    # NF emitida a partir do pedido (E140IPV.filped/numped → E140NFV), descoberta pelo beat
+    # `vincular_nfs_pedidos` ou na hora de abrir a carta de correção (2026-10-22). Vazios
+    # enquanto o pedido não foi faturado. É o que permite CC-e em nota que nasceu de pedido —
+    # a maioria das notas da Altomax. Ver apps/pedidos/nf_vinculo.py.
+    nf_codfil = models.CharField(max_length=10, blank=True)
+    nf_codsnf = models.CharField(max_length=10, blank=True)
+    nf_numero = models.CharField(max_length=20, blank=True)
+    nf_vinculada_em = models.DateTimeField(null=True, blank=True)
     marketplace = models.ForeignKey(Marketplace, on_delete=models.PROTECT, null=True, blank=True)
     cliente = models.CharField(max_length=255, blank=True)
     status = models.CharField(max_length=30, choices=Status.choices, default=Status.PENDENTE)
@@ -166,6 +174,18 @@ class Pedido(models.Model):
         if not self.frete:
             return ''
         return dict(self.Frete.choices).get(self.frete, f'Frete {self.frete}')
+
+    @property
+    def identificacao_nf(self) -> tuple[str, str, str] | None:
+        """(codfil, codsnf, numnfv) da nota no Senior: a própria, se o documento é NF; a NF
+        vinculada, se é pedido já faturado. None enquanto não há nota (carta de correção)."""
+        if self.tipo == self.Tipo.NOTA_FISCAL:
+            if self.codfil and self.codsnf and self.numero_externo:
+                return (self.codfil, self.codsnf, self.numero_externo)
+            return None
+        if self.nf_codfil and self.nf_codsnf and self.nf_numero:
+            return (self.nf_codfil, self.nf_codsnf, self.nf_numero)
+        return None
 
 
 class PedidoItem(models.Model):

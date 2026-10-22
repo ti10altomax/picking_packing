@@ -49,7 +49,7 @@ SITDOE_LABELS = {
 SITCCE_LABELS = {1: 'Não enviada', 2: 'Enviada', 3: 'Autorizada', 4: 'Rejeitada', 5: 'Denegada'}
 
 QUERY_SITUACAO_NF = f"""
-    SELECT nfv.sitnfv, nfv.codtra, tra.nomtra, nfv.ciffob,
+    SELECT nfv.sitnfv, nfv.codtra, tra.nomtra, nfv.ciffob, nfv.qtdemb,
            ide.sitdoe, ide.chvdoe, ide.numprt, ide.dataut, ide.horaut
     FROM E140NFV nfv
     LEFT JOIN E073TRA tra ON tra.codtra = nfv.codtra
@@ -117,7 +117,7 @@ def _data(v) -> str:
 
 
 def situacao_nf(codfil, codsnf, numnfv) -> dict:
-    """{'disponivel', 'sitnfv', 'sitdoe', 'sitdoe_label', 'autorizada', 'codtra', 'nomtra', 'ciffob', 'erro'}"""
+    """{'disponivel', 'sitnfv', 'sitdoe', 'sitdoe_label', 'autorizada', 'codtra', 'nomtra', 'ciffob', 'qtdemb', 'erro'}"""
     try:
         rows = fetch(QUERY_SITUACAO_NF, [codfil, codsnf, int(numnfv)])
     except Exception as e:  # ORA-00904 (coluna), ORA-00942 (tabela), rede...
@@ -142,6 +142,7 @@ def situacao_nf(codfil, codsnf, numnfv) -> dict:
         'codtra': str(r.get('codtra') or '').strip(),
         'nomtra': (r.get('nomtra') or '').strip(),
         'ciffob': (r.get('ciffob') or '').strip(),
+        'qtdemb': _int(r.get('qtdemb')),     # quantidade de volumes da NF (o `qtdEmb` do Gravar)
         'erro': '',
     }
 
