@@ -37,6 +37,10 @@ oracle_schema: ERP_PROD
 
 # --- Senior SOAP ---
 senior_wsdl_embalagem: "http://192.168.1.210:8080/g5-senior-services/sapiens_Synccom_senior_g5_co_mcm_ven_embalagempfa?wsdl"
+# Carta de correção (2026-10-22). dry_run "True" = monta tudo e NÃO chama o Senior; "False" só depois do teste com o fiscal.
+senior_wsdl_carta_correcao: "http://192.168.1.210:8080/g5-senior-services/sapiens_Synccom_senior_g5_co_int_venda_cartadecorrecao?wsdl"
+senior_wsdl_documento_fiscal: "http://192.168.1.210:8080/g5-senior-services/sapiens_Synccom_senior_g5_co_int_venda_documentofiscal?wsdl"
+senior_ws_dry_run: "True"
 senior_ws_user: ""
 senior_ws_password: ""
 
