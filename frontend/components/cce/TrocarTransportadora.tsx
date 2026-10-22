@@ -130,7 +130,20 @@ export function ModalCarta({
 
   useEffect(() => {
     cartaCorrecaoApi.preparar(pedidoId)
-      .then((d) => { setDados(d); if (d.pedido.frete === 'C' || d.pedido.frete === 'F') setFrete(d.pedido.frete) })
+      .then((d) => {
+        setDados(d)
+        const r = d.refazer
+        if (r) {
+          // carta do Separa apagada no Senior: pré-preenche para refazer com um clique
+          if (r.codtra_novo && r.codtra_novo !== d.baseline.codtra) setEscolhida({ codtra: r.codtra_novo, nome: r.transportadora_nova })
+          if ((r.frete_novo === 'C' || r.frete_novo === 'F') && r.frete_novo !== d.baseline.frete) setFrete(r.frete_novo)
+          else if (d.pedido.frete === 'C' || d.pedido.frete === 'F') setFrete(d.pedido.frete)
+          if (r.volumes_novo != null) setVolumes(String(r.volumes_novo))
+          if (r.complemento) setComplemento(r.complemento)
+        } else if (d.pedido.frete === 'C' || d.pedido.frete === 'F') {
+          setFrete(d.pedido.frete)
+        }
+      })
       .catch((e) => setErroCarga(e?.response?.data?.erro ?? 'Não consegui carregar os dados da nota.'))
   }, [pedidoId])
 
@@ -152,11 +165,13 @@ export function ModalCarta({
     return () => { if (debounce.current) clearTimeout(debounce.current) }
   }, [busca, dados, buscarTransp])
 
-  const mudaTransportadora = !!escolhida && !!dados && escolhida.codtra !== dados.pedido.codtra
-  const mudaFrete = !!frete && !!dados && frete !== dados.pedido.frete
+  // comparações contra o "onde se lê" (baseline), não contra o valor cru da nota: depois de uma carta
+  // do Separa apagada no Senior a nota já carrega o valor novo, e a carta precisa poder ser refeita
+  const mudaTransportadora = !!escolhida && !!dados && escolhida.codtra !== dados.baseline.codtra
+  const mudaFrete = !!frete && !!dados && frete !== dados.baseline.frete
   const volumesNum = volumes.trim() === '' ? null : Number(volumes)
   const volumesValido = volumesNum == null || (Number.isInteger(volumesNum) && volumesNum >= 1 && volumesNum <= 999)
-  const mudaVolumes = volumesNum != null && volumesValido && !!dados && volumesNum !== (dados.volumes.nf ?? -1)
+  const mudaVolumes = volumesNum != null && volumesValido && !!dados && volumesNum !== (dados.baseline.volumes ?? -1)
   const haMudanca = mudaTransportadora || mudaFrete || mudaVolumes || complemento.trim().length > 0
 
   // prévia do texto
@@ -286,6 +301,14 @@ export function ModalCarta({
                   </div>
                 )}
 
+                {dados.refazer && (
+                  <div className="rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-200 mb-3">
+                    <strong>Carta apagada no Senior.</strong> A carta de {fmt(dados.refazer.criado_em)} ({resumoMudancas(dados.refazer) || 'texto complementar'}) não está mais na nota.
+                    A nota ficou com os valores novos, mas o documento autorizado não — por isso a carta refeita diz "onde se lê" os valores de antes.
+                    Os campos já vieram preenchidos: confira e grave.
+                  </div>
+                )}
+
                 {/* Cartas anteriores */}
                 {dados.cartas_anteriores.disponivel ? (
                   dados.cartas_anteriores.cartas.length > 0 && (
@@ -347,9 +370,9 @@ export function ModalCarta({
                         <button
                           key={t.codtra}
                           onClick={() => setEscolhida(t)}
-                          className={`w-full text-left px-3 py-2 text-sm min-h-[40px] hover:bg-surface-elev ${t.codtra === dados.pedido.codtra ? 'text-ink-subtle' : 'text-ink'}`}
+                          className={`w-full text-left px-3 py-2 text-sm min-h-[40px] hover:bg-surface-elev ${t.codtra === dados.baseline.codtra ? 'text-ink-subtle' : 'text-ink'}`}
                         >
-                          {t.nome} <span className="text-ink-subtle text-xs">({t.codtra}){t.codtra === dados.pedido.codtra ? ' · atual' : ''}</span>
+                          {t.nome} <span className="text-ink-subtle text-xs">({t.codtra}){t.codtra === dados.baseline.codtra ? ' · atual' : ''}</span>
                         </button>
                       ))}
                     </div>

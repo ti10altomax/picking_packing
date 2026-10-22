@@ -85,17 +85,18 @@ def _ascii_maiusculo(texto: str) -> str:
     return ' '.join(sem_acento.upper().split())
 
 
-def montar_texto(pedido: Pedido, nova: dict | None, frete_novo: str, volumes: tuple, complemento: str,
+def montar_texto(base: dict, nova: dict | None, frete_novo: str, vol_novo: int | None, complemento: str,
                  anteriores: list[dict]) -> str:
-    """`volumes` = (anterior na NF ou None, novo informado ou None)."""
+    """`base` = o que o documento autorizado diz hoje ({codtra, transportadora, frete, volumes}, ver
+    `_baseline`); é o "onde se lê". `vol_novo` = quantidade informada ou None."""
     partes = []
-    if nova and nova['codtra'] != (pedido.codtra or ''):
-        de = f"'{_ascii_maiusculo(pedido.transportadora)}' ({pedido.codtra})" if pedido.codtra else 'SEM TRANSPORTADORA'
+    if nova and nova['codtra'] != base['codtra']:
+        de = f"'{_ascii_maiusculo(base['transportadora'])}' ({base['codtra']})" if base['codtra'] else 'SEM TRANSPORTADORA'
         partes.append(f"TRANSPORTADORA: ONDE SE LE {de}, LEIA-SE '{_ascii_maiusculo(nova['nome'])}' ({nova['codtra']}).")
-    if frete_novo and frete_novo != (pedido.frete or ''):
-        de = FRETE_LABEL.get(pedido.frete, 'NAO INFORMADO')
+    if frete_novo and frete_novo != base['frete']:
+        de = FRETE_LABEL.get(base['frete'], 'NAO INFORMADO')
         partes.append(f"FRETE: ONDE SE LE '{de}', LEIA-SE '{FRETE_LABEL[frete_novo]}'.")
-    vol_antes, vol_novo = volumes
+    vol_antes = base['volumes']
     if vol_novo is not None and vol_novo != vol_antes:
         de = str(vol_antes) if vol_antes is not None else 'NAO INFORMADO'
         partes.append(f"QUANTIDADE DE VOLUMES: ONDE SE LE {de}, LEIA-SE {vol_novo}.")
@@ -173,6 +174,47 @@ def _sincronizar_com_nf(pedido: Pedido, situacao: dict) -> None:
         logger.info('carta_correcao: pedido alinhado com a NF (%s)', ', '.join(campos), extra={'pedido': pedido.id})
 
 
+def _cartas_apagadas(pedido: Pedido, ident: tuple, anteriores: dict) -> list[CartaCorrecao]:
+    """Cartas efetivas do Separa nesta NF cujo texto não está mais na E140CCE: o fiscal apagou no
+    Senior (possível enquanto `sitcce` = 1, "Não enviada"). Apagar a carta NÃO desfaz o que o
+    `Gravar` mudou na nota (codtra/ciffob/qtdemb), mas o documento autorizado continua com os
+    valores antigos — então o "onde se lê" de uma carta refeita tem que voltar a eles.
+    Da mais nova para a mais antiga. Vazio quando a E140CCE não pôde ser lida."""
+    if not anteriores.get('disponivel'):
+        return []
+    textos_senior = {_ascii_maiusculo(c.get('texto') or '') for c in anteriores.get('cartas', [])}
+    apagadas = [c for c in pedido.cartas_correcao.all()
+                if c.efetiva and (c.nf_codsnf, c.nf_numero) == (ident[1], ident[2])
+                and _ascii_maiusculo(c.texto) not in textos_senior]
+    return sorted(apagadas, key=lambda c: c.criado_em, reverse=True)
+
+
+def _baseline(pedido: Pedido, situacao: dict, apagadas: list[CartaCorrecao]) -> dict:
+    """O que o documento autorizado diz hoje = valores atuais da nota, desfazendo em memória cada
+    carta do Separa que foi apagada no Senior (da mais nova para a mais antiga, só quando a nota
+    ainda carrega o valor que aquela carta pôs)."""
+    base = {'codtra': pedido.codtra or '', 'transportadora': pedido.transportadora or '',
+            'frete': pedido.frete or '', 'volumes': situacao.get('qtdemb')}
+    for c in apagadas:
+        if c.codtra_novo != c.codtra_anterior and base['codtra'] == c.codtra_novo:
+            base['codtra'], base['transportadora'] = c.codtra_anterior, c.transportadora_anterior
+        if c.frete_novo != c.frete_anterior and base['frete'] == c.frete_novo:
+            base['frete'] = c.frete_anterior
+        if c.volumes_novo is not None and base['volumes'] == c.volumes_novo:
+            base['volumes'] = c.volumes_anterior
+    return base
+
+
+def _contexto(pedido: Pedido, ident: tuple, situacao: dict | None = None) -> tuple[dict, dict, list, dict]:
+    """(situacao, anteriores, apagadas, base) — tudo que previa/executar precisam para montar o texto."""
+    if situacao is None:
+        situacao = senior.situacao_nf(*ident)
+        _sincronizar_com_nf(pedido, situacao)
+    anteriores = senior.cartas_anteriores(*ident)
+    apagadas = _cartas_apagadas(pedido, ident, anteriores)
+    return situacao, anteriores, apagadas, _baseline(pedido, situacao, apagadas)
+
+
 def preparar(pedido: Pedido) -> dict:
     try:
         bloqueio = elegibilidade(pedido)
@@ -180,11 +222,11 @@ def preparar(pedido: Pedido) -> dict:
         bloqueio = {'codigo': e.codigo, 'mensagem': e.mensagem}
     situacao = {'disponivel': False, 'autorizada': None, 'erro': ''}
     anteriores = {'disponivel': False, 'cartas': [], 'erro': ''}
+    apagadas: list[CartaCorrecao] = []
+    base = _baseline(pedido, situacao, [])
     ident = pedido.identificacao_nf
     if not bloqueio and ident:
-        situacao = senior.situacao_nf(*ident)
-        _sincronizar_com_nf(pedido, situacao)
-        anteriores = senior.cartas_anteriores(*ident)
+        situacao, anteriores, apagadas, base = _contexto(pedido, ident)
         if situacao.get('disponivel') and situacao.get('encontrada') is False:
             bloqueio = {'codigo': 'nf_nao_encontrada', 'mensagem': situacao['erro']}
         elif situacao.get('disponivel') and situacao.get('autorizada') is False:
@@ -199,6 +241,9 @@ def preparar(pedido: Pedido) -> dict:
         },
         'nf': {'codfil': ident[0], 'codsnf': ident[1], 'numero': ident[2]} if ident else None,
         'volumes': {'nf': situacao.get('qtdemb'), 'separa': _volumes_separa(pedido)},
+        # "onde se lê": valores atuais, desfazendo cartas do Separa apagadas no Senior
+        'baseline': base,
+        'refazer': serializar(apagadas[0]) if apagadas else None,
         'bloqueio': bloqueio,
         'situacao': situacao,
         'cartas_anteriores': anteriores,
@@ -225,15 +270,13 @@ def previa(pedido: Pedido, codtra_novo: str, frete_novo: str, volumes_novo, comp
     nova = _resolver_transportadora(codtra_novo) if str(codtra_novo or '').strip() else None
     vol_novo = _parse_volumes(volumes_novo)
     ident = identificar_nf(pedido)
-    vol_antes = None
     anteriores = {'cartas': []}
+    base = _baseline(pedido, {}, [])
     if ident:
-        anteriores = senior.cartas_anteriores(*ident)
-        if vol_novo is not None:
-            vol_antes = senior.situacao_nf(*ident).get('qtdemb')
-    texto = montar_texto(pedido, nova, frete_novo, (vol_antes, vol_novo), complemento, anteriores['cartas'])
+        _, anteriores, _, base = _contexto(pedido, ident)
+    texto = montar_texto(base, nova, frete_novo, vol_novo, complemento, anteriores['cartas'])
     return {'texto': texto, 'tamanho': len(texto), 'limite': LIMITE_TEXTO, 'transportadora_nova': nova,
-            'volumes_anterior': vol_antes, 'volumes_novo': vol_novo}
+            'volumes_anterior': base['volumes'], 'volumes_novo': vol_novo, 'baseline': base}
 
 
 def _resolver_transportadora(codtra: str) -> dict:
@@ -277,16 +320,18 @@ def executar(pedido: Pedido, usuario, codtra_novo: str, frete_novo: str, volumes
             raise ErroCarta('nf_nao_autorizada',
                             f"A NF está '{situacao.get('sitdoe_label')}' no Senior; só NF Autorizada aceita carta de correção.", http=409)
     _sincronizar_com_nf(pedido, situacao)
-    vol_antes = situacao.get('qtdemb')
+    _, anteriores, apagadas, base = _contexto(pedido, (nf_codfil, nf_codsnf, nf_numero), situacao)
+    vol_antes = base['volumes']
 
-    muda_transportadora = bool(nova) and nova['codtra'] != (pedido.codtra or '')
-    muda_frete = bool(frete_novo) and frete_novo != (pedido.frete or '')
+    # Comparação contra o "onde se lê" (base), não contra o valor cru da nota: depois de uma carta
+    # do Separa apagada no Senior, a nota já carrega o valor novo e a carta precisa poder ser refeita.
+    muda_transportadora = bool(nova) and nova['codtra'] != base['codtra']
+    muda_frete = bool(frete_novo) and frete_novo != base['frete']
     muda_volumes = vol_novo is not None and vol_novo != vol_antes
     if not (muda_transportadora or muda_frete or muda_volumes or complemento):
         raise ErroCarta('sem_mudanca', 'Nada a corrigir: transportadora, frete e volumes são os mesmos e não há texto complementar.')
 
-    anteriores = senior.cartas_anteriores(nf_codfil, nf_codsnf, nf_numero)
-    texto = montar_texto(pedido, nova, frete_novo, (vol_antes, vol_novo), complemento, anteriores['cartas'])
+    texto = montar_texto(base, nova, frete_novo, vol_novo, complemento, anteriores['cartas'])
     if len(texto) > LIMITE_TEXTO:
         raise ErroCarta('texto_longo', f'Texto da carta com {len(texto)} caracteres; o limite é {LIMITE_TEXTO}. Encurte o complemento.')
 
@@ -313,10 +358,10 @@ def executar(pedido: Pedido, usuario, codtra_novo: str, frete_novo: str, volumes
         modo=CartaCorrecao.Modo.DRY_RUN if senior.dry_run() else modo,
         status=CartaCorrecao.Status.SIMULADA,
         nf_codfil=nf_codfil, nf_codsnf=nf_codsnf, nf_numero=nf_numero,
-        codtra_anterior=pedido.codtra or '', transportadora_anterior=pedido.transportadora or '',
-        codtra_novo=nova['codtra'] if muda_transportadora else (pedido.codtra or ''),
-        transportadora_nova=nova['nome'] if muda_transportadora else (pedido.transportadora or ''),
-        frete_anterior=pedido.frete or '', frete_novo=frete_novo or (pedido.frete or ''),
+        codtra_anterior=base['codtra'], transportadora_anterior=base['transportadora'],
+        codtra_novo=nova['codtra'] if muda_transportadora else base['codtra'],
+        transportadora_nova=nova['nome'] if muda_transportadora else base['transportadora'],
+        frete_anterior=base['frete'], frete_novo=frete_novo or base['frete'],
         volumes_anterior=vol_antes if muda_volumes else None, volumes_novo=vol_novo if muda_volumes else None,
         texto=texto, complemento=complemento, cartas_anteriores=anteriores['cartas'],
         payload_gravar=payload,

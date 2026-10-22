@@ -648,6 +648,10 @@ export type CcePreparar = {
   nf: { codfil: string; codsnf: string; numero: string } | null
   // quantidade de volumes: na nota (E140NFV.qtdemb) e montados no Separa
   volumes: { nf: number | null; separa: number }
+  // "onde se lê": valores atuais da nota, desfazendo cartas do Separa que foram apagadas no Senior
+  baseline: { codtra: string; transportadora: string; frete: string; volumes: number | null }
+  // carta do Separa mais recente que o fiscal apagou no Senior (a nota ficou com os valores novos) — para refazer
+  refazer: CceCarta | null
   bloqueio: { codigo: string; mensagem: string } | null
   situacao: {
     disponivel: boolean; encontrada?: boolean; sitnfv?: number | null; sitdoe?: number | null
