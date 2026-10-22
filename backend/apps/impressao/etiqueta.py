@@ -19,6 +19,8 @@ ITENS_POR_PAGINA = 8
 
 # Texto fixo da antiga "carta de transporte" (docx da expedição, 2026-10-07)
 RODAPE_TITULO = 'TRANSPORTE E CONFERÊNCIA DE MERCADORIA'
+# Linha própria (não cabe junto do título em 10 cm — no HTML virava "responsabilidade…")
+RODAPE_SUBTITULO = 'É de responsabilidade do lojista:'
 RODAPE_RESPONSABILIDADES = [
     'Conferir eventuais avarias na mercadoria e nas caixas no ato do recebimento.',
     'Conferir se os produtos recebidos estão de acordo com o pedido.',
@@ -102,6 +104,7 @@ def dados_etiquetas(pedido: Pedido) -> dict:
         'etiquetas': etiquetas,
         'rodape': {
             'titulo': RODAPE_TITULO,
+            'subtitulo': RODAPE_SUBTITULO,
             'responsabilidades': RODAPE_RESPONSABILIDADES,
             'empresa': RODAPE_EMPRESA,
         },

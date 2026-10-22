@@ -378,7 +378,7 @@ export type EtiquetasPedido = {
   }
   total_volumes: number
   etiquetas: EtiquetaVolume[]
-  rodape: { titulo: string; responsabilidades: string[]; empresa: string[] }
+  rodape: { titulo: string; subtitulo: string; responsabilidades: string[]; empresa: string[] }
   gerado_em: string
   bloqueio: { codigo: string; mensagem: string } | null
   impressoes: ImpressaoEtiqueta[]
@@ -593,4 +593,82 @@ export type AgoraPainel = {
 
 export const agoraApi = {
   painel: () => api.get('/api/agora/').then((r) => r.data as AgoraPainel),
+}
+
+// ---------------------------------------------------------------------------
+// Carta de correção — troca de transportadora (ponto 6 da diretoria, 2026-10-22)
+// ---------------------------------------------------------------------------
+
+export type CceModo = 'desligado' | 'gravar' | 'gravar_e_transmitir'
+
+export type CceConfig = {
+  modo: CceModo
+  tipger: number
+  dry_run: boolean
+  wsdl_carta_configurado: boolean
+  wsdl_documento_configurado: boolean
+  codemp: number
+}
+
+export type CceCartaAnterior = {
+  sequencia: number | null; texto: string; sitcce: number | null; sitcce_label: string
+  data: string; hora: string; protocolo: string
+}
+
+export type CceCarta = {
+  id: number
+  criado_em: string
+  usuario: string | null
+  pedido_id: number
+  numero_externo: string
+  cliente: string
+  modo: 'dry_run' | 'gravar' | 'gravar_e_transmitir'; modo_label: string
+  status: 'simulada' | 'gravada' | 'transmitida' | 'erro_gravar' | 'erro_transmitir'; status_label: string
+  efetiva: boolean
+  codtra_anterior: string; transportadora_anterior: string
+  codtra_novo: string; transportadora_nova: string
+  frete_anterior: string; frete_novo: string
+  texto: string; complemento: string
+  cartas_anteriores: CceCartaAnterior[]
+  payload_gravar: Record<string, unknown>; retorno_gravar: Record<string, unknown>
+  payload_transmitir: Record<string, unknown>; retorno_transmitir: Record<string, unknown>
+  erro: string
+  sitdoe: number | null; protocolo: string; autorizada_em: string
+}
+
+export type CcePreparar = {
+  pedido: {
+    id: number; numero_externo: string; codfil: string; codsnf: string; tipo: string; status: string; cliente: string
+    codtra: string; transportadora: string; frete: string; frete_label: string
+  }
+  bloqueio: { codigo: string; mensagem: string } | null
+  situacao: {
+    disponivel: boolean; encontrada?: boolean; sitnfv?: number | null; sitdoe?: number | null
+    sitdoe_label?: string; autorizada: boolean | null; codtra?: string; nomtra?: string; ciffob?: string; erro: string
+  }
+  cartas_anteriores: { disponivel: boolean; cartas: CceCartaAnterior[]; erro: string }
+  cartas_separa: CceCarta[]
+  config: CceConfig
+  limite_texto: number
+}
+
+export type CceTransportadora = { codtra: string; nome: string }
+
+export const cartaCorrecaoApi = {
+  preparar: (pedidoId: number) =>
+    api.get(`/api/carta-correcao/pedidos/${pedidoId}/preparar/`).then((r) => r.data as CcePreparar),
+  previa: (pedidoId: number, body: { codtra: string; frete?: string; complemento?: string }) =>
+    api.post(`/api/carta-correcao/pedidos/${pedidoId}/previa/`, body)
+      .then((r) => r.data as { texto: string; tamanho: number; limite: number; transportadora_nova: CceTransportadora | null }),
+  executar: (pedidoId: number, body: { codtra: string; frete?: string; complemento?: string }) =>
+    api.post(`/api/carta-correcao/pedidos/${pedidoId}/`, body)
+      .then((r) => r.data as { carta: CceCarta; pedido: { id: number; codtra: string; transportadora: string; frete: string } }),
+  transportadoras: (q: string) =>
+    api.get('/api/carta-correcao/transportadoras/', { params: { q } })
+      .then((r) => r.data as { transportadoras: CceTransportadora[] }),
+  listar: (params: { status?: string; search?: string; pedido?: number } = {}) =>
+    api.get('/api/carta-correcao/', { params }).then((r) => r.data as { cartas: CceCarta[]; config: CceConfig }),
+  config: () => api.get('/api/carta-correcao/config/').then((r) => r.data as CceConfig),
+  salvarConfig: (dados: { modo?: CceModo; tipger?: '1' | '2' }) =>
+    api.put('/api/carta-correcao/config/', dados).then((r) => r.data as CceConfig),
 }

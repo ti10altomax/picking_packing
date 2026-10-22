@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'apps.sequencias',
     'apps.senior',
     'apps.impressao',
+    'apps.carta_correcao',
     'apps.vtex',
     'apps.etiquetas',
 ]
@@ -364,6 +365,12 @@ ORACLE_CLIENT_LIB = config('ORACLE_CLIENT_LIB', default='')
 SENIOR_WSDL_EMBALAGEM = config('SENIOR_WSDL_EMBALAGEM')
 SENIOR_WS_USER = config('SENIOR_WS_USER', default='')
 SENIOR_WS_PASSWORD = config('SENIOR_WS_PASSWORD', default='')
+# Carta de correção (ponto 6, 2026-10-22): mesmo host/usuário do embalagempfa.
+SENIOR_WSDL_CARTA_CORRECAO = config('SENIOR_WSDL_CARTA_CORRECAO', default='')
+SENIOR_WSDL_DOCUMENTO_FISCAL = config('SENIOR_WSDL_DOCUMENTO_FISCAL', default='')
+# True = monta o payload, grava o rastro como 'simulada' e NÃO chama o Senior.
+# Padrão ligado de propósito: produção precisa desligar explicitamente no .env.
+SENIOR_WS_DRY_RUN = config('SENIOR_WS_DRY_RUN', default=True, cast=bool)
 
 # VTEX API
 VTEX_ACCOUNT_NAME = config('VTEX_ACCOUNT_NAME', default='')

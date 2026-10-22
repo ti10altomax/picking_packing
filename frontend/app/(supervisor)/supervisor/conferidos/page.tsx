@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { supervisorApi, pedidosApi, type Paginado } from '@/lib/api'
 import { ImprimirEtiqueta } from '@/components/etiquetas/ImprimirEtiqueta'
 import { HistoricoBotao } from '@/components/pedidos/HistoricoPedido'
+import { TrocarTransportadora } from '@/components/cce/TrocarTransportadora'
 
 type Pedido = {
   id: number
@@ -208,6 +209,12 @@ export default function ConferidosPage() {
                         onImpresso={() => carregar(buscaAtiva, 1, false)}
                       />
                       <HistoricoBotao pedidoId={p.id} />
+                      {/* Carta de correção (ponto 6): troca de transportadora, só NF */}
+                      <TrocarTransportadora
+                        pedidoId={p.id}
+                        tipo={p.tipo}
+                        onAlterado={() => carregar(buscaAtiva, 1, false)}
+                      />
                     </div>
                     </div>
 

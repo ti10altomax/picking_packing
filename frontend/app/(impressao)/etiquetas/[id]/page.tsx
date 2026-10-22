@@ -103,8 +103,9 @@ function Etiqueta({ dados, et }: { dados: EtiquetasPedido; et: EtiquetaVolume })
       <div className="hr" />
 
       {/* Rodapé — antiga carta de transporte */}
-      <div className="corta" style={{ fontSize: '2.7mm', fontWeight: 700 }}>{dados.rodape.titulo} · responsabilidade do lojista</div>
-      <ul style={{ margin: '0.4mm 0 0', paddingLeft: '3mm', fontSize: '2.25mm', lineHeight: 1.25 }}>
+      <div className="corta" style={{ fontSize: '2.7mm', fontWeight: 700 }}>{dados.rodape.titulo}</div>
+      <div className="corta" style={{ fontSize: '2.5mm', fontWeight: 700, lineHeight: 1.2 }}>{dados.rodape.subtitulo}</div>
+      <ul style={{ margin: '0.3mm 0 0', paddingLeft: '3mm', fontSize: '2.25mm', lineHeight: 1.25 }}>
         {dados.rodape.responsabilidades.map((t, idx) => <li key={idx}>{t}</li>)}
       </ul>
       <div style={{ fontSize: '2.25mm', lineHeight: 1.25, marginTop: '0.8mm' }}>

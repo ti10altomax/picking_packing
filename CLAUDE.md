@@ -20,6 +20,8 @@ Sistema interno para **separação de pedidos no galpão da Altomax**. Não é m
 
 > **Observabilidade (2026-10-08)** — logs em **JSON** em produção (`config/logging.py`, `LOG_NIVEL`/`LOG_FORMATO`; `logger.info('…', extra={'pedido': id})` vira campo), uma linha por requisição `/api/` (`apps/core/middleware.py`). `GET /api/health/` (sem auth, Postgres+Redis) alimenta o `healthcheck` do compose. Toda task Celery leva `@registrar_execucao()` (`apps/core/tarefas.py`) → `ExecucaoTarefa` (heartbeat; "atrasada" = 3× o intervalo do beat). `GET /api/saude/` + tela **Admin → Saúde** (`/admin/saude`): componentes, tarefas e erros do web/coletor (`ErroCliente`, `POST /api/erros-cliente/` sem auth obrigatória; web `app/error.tsx` + `components/ErroReporter.tsx`; mobile `ErrorBoundary` + `ErrorUtils`). `GET /api/pedidos/<id>/historico/` traduz o `PedidoLog` (`apps/pedidos/historico.py`) → botão **Histórico** nas listas do supervisor. `GET /api/agora/` (`apps/pedidos/agora.py`) → **Gestão → Agora** (web e app): quem confere o quê, parados (20 min sem bip), filas, sequências, ritmo. `django-prometheus` em `/metrics/` (só rede Docker; `PROMETHEUS_MULTIPROC_DIR` no compose prod). Loki/Promtail + scrape job + alertas sugeridos em `deploy/monitoramento/` — aplicação manual na stack `mp-*` da VM.
 
+> **Carta de correção — troca de transportadora (2026-10-22, ponto 6 da diretoria)** — app `apps/carta_correcao`. Sup. Vendas, Sup. Pátio e admin trocam a transportadora (e o frete C/F) de uma **NF autorizada** pelo web (botão em Conferidos e página **Gestão → Cartas de correção**); o sistema monta o texto da carta (repetindo as cartas anteriores lidas de `E140CCE`, porque a última substitui as outras) e chama o WS Senior `cartadecorrecao.Gravar`, que grava a carta "Não enviada" e atualiza `codTra`/`cifFob` da própria NF. Modo em `Configuracao.cce_modo`: `desligado` (default) | `gravar` (faturamento transmite no Senior) | `gravar_e_transmitir` (`documentofiscal.EmitirCartaCorrecao`, `cce_tipger`). **`SENIOR_WS_DRY_RUN`** (default True) monta tudo e não chama o Senior — produção precisa desligar no `.env`. Situação eletrônica vem de `E140IDE.sitdoe` (3 = Autorizada). Pedido sem NF não tem CC-e. Rastro em `CartaCorrecao` + `PedidoLog`. Ver `STATUS.md` 2026-10-22 e `docs_pessoais/carta-correcao.html`.
+
 Atores principais: **Supervisor de Vendas**, **Supervisor de Pátio**, **Conferente** e **Admin**.
 
 ### Fluxo geral
@@ -213,6 +215,10 @@ PedidoLog(id, pedido_id, user_id, acao, payload, criado_em)
 
 ImpressaoEtiqueta(id, pedido_id, impressora_id, canal, status, qtd_etiquetas,
                   automatica, usuario_id, print_job_id, erro, criado_em)   # apps/impressao
+
+CartaCorrecao(id, pedido_id, usuario_id, modo, status, codtra/transportadora/frete antes e depois,
+              texto, complemento, cartas_anteriores, payload/retorno de Gravar e Transmitir,
+              erro, sitdoe, protocolo, autorizada_em, criado_em)              # apps/carta_correcao
 ```
 
 > O `Pedido` ganha campos novos (`selecionado_em`, `atribuido_para_id`, etc.) e perde a relevância dos campos de etiquetagem (`embalagem_*`, `etiqueta_vtex_*`, `etiqueta_impressa_em`) para o fluxo principal — esses ficam no schema (módulos congelados) mas não são tocados.
@@ -259,13 +265,14 @@ separa/
 │   │   ├── sequencias/     # sequências de separação (fluxo do Sup. Pátio)
 │   │   ├── senior/         # leitura Oracle + saída SOAP (operação a definir)
 │   │   ├── impressao/      # etiqueta de volume 10x15: dados, ZPL, impressão automática, pendentes
+│   │   ├── carta_correcao/ # CC-e: troca de transportadora da NF via WS Senior (Gravar / EmitirCartaCorrecao), dry-run
 │   │   ├── etiquetas/      # CONGELADO — mas Impressora/PrintAgent/PrintJob e printer.py são reaproveitados pela impressao
 │   │   └── vtex/           # CONGELADO — VTEX API
 ├── frontend/
 │   ├── app/
 │   │   ├── (conferente)/   # conferencia/ (atual) + pedidos/ (LEGADO congelado)
 │   │   ├── (impressao)/    # etiquetas/[id] — etiqueta 10x15 pelo navegador (sem header)
-│   │   ├── (supervisor)/   # telas de Sup. Vendas, Sup. Pátio, conferidos, não conformes, etiquetas, agora
+│   │   ├── (supervisor)/   # telas de Sup. Vendas, Sup. Pátio, conferidos, não conformes, etiquetas, agora, cartas (CC-e)
 │   │   ├── (admin)/
 │   │   │   └── admin/
 │   │   │       ├── saude/         # Admin → Saúde: componentes, heartbeat das tarefas, erros do web/coletor (2026-10-08)
@@ -321,7 +328,8 @@ Não tocar nesses arquivos durante o trabalho do escopo atual. Podem voltar ao f
 - [x] ~~Comportamento quando a separação termina parcial~~ — resolvido no redesenho (`DESIGN.md` §4.2): falta → Não conforme + erro registrado; sobra → conclui com erro registrado e fechamento pelo Sup. Pátio
 - [ ] Lista completa de ações disponíveis na lista de Não Conformes
 - [x] ~~Nota cancelada no Senior durante a conferência~~ — detectada pelo beat, bloqueio no conferente e transferência de conferência pelo Sup. Pátio (2026-09-30)
-- [ ] Demais pontos da diretoria de 2026-09-30 (transportadora + CC-e, liberação com mensageria) — esperam resposta da diretoria
+- [x] ~~Ponto 6 — troca de transportadora com carta de correção~~ — implementado em 2026-10-22 em `apps/carta_correcao` (dry-run ligado). Ficam abertos: teste real com NF combinada com o fiscal; transmissão pelo Separa (`gravar_e_transmitir`) depende da parametrização da F070FVE (`tipGer`); mandar `qtdEmb` (volumes) na mesma carta
+- [ ] Ponto 8 — liberação de exceção com mensageria — espera as respostas do supervisor (ver abaixo)
 - [x] ~~Ponto 7 — etiqueta de caixa~~ — implementado em 2026-10-07 como **etiqueta de volume 10x15** (não existia etiqueta; era pincel + carta de transporte). Ficam abertos: modelo/quantidade/local das impressoras (todos os caminhos prontos: Zebra rede, agente USB, navegador); dados do cliente além do nome (sync não traz endereço/CNPJ)
 - [ ] Ponto 8 — leitura do supervisor em 2026-10-07: o conferente faz a operação "não permitida" no coletor, o sistema **só persiste se o supervisor liberar**, em lote (fila de aprovação assíncrona; a mensageria é o aviso). Falta definir quais operações entram (barra divergente, excesso/item completo, concluir com falta), se o conferente fica travado, e o canal
 - [x] ~~Ponto 5 — avisar quantidade incorreta~~ — fechado em 2026-10-06 sem implementar: bloqueio de excesso na bipagem + sobra/falta no concluir já atendem

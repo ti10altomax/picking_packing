@@ -15,6 +15,8 @@ class Configuracao(models.Model):
         JANELA_SYNC_DIAS = 'janela_sync_dias', 'Janela do sync Senior (dias)'
         IMPRESSORA_PADRAO = 'impressora_padrao', 'Impressora padrão das etiquetas de volume'
         ETIQUETA_AUTOMATICA = 'etiqueta_automatica', 'Imprimir etiqueta de volume ao concluir'
+        CCE_MODO = 'cce_modo', 'Carta de correção: modo'
+        CCE_TIPGER = 'cce_tipger', 'Carta de correção: tipo de geração (tipGer)'
 
     # valores válidos por chave (documentação viva; o admin não valida à força)
     DEFAULTS = {
@@ -27,6 +29,11 @@ class Configuracao(models.Model):
         # automática ao virar Conferido ('' = ninguém; fica em "Etiquetas pendentes").
         'impressora_padrao': '',
         'etiqueta_automatica': 'sim',                              # | nao
+        # Carta de correção (2026-10-22): desligado | gravar | gravar_e_transmitir.
+        # 'gravar' cria a carta 'Não enviada' no Senior (o faturamento transmite lá);
+        # 'gravar_e_transmitir' também chama EmitirCartaCorrecao (evento na SEFAZ, sem volta).
+        'cce_modo': 'desligado',
+        'cce_tipger': '2',                                         # 1 gera XML | 2 WS eDocs
     }
 
     chave = models.CharField(max_length=50, choices=Chave.choices, unique=True)

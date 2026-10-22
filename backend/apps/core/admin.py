@@ -19,6 +19,8 @@ class ConfiguracaoAdmin(ModelAdmin):
 
     - liberacao_proxima_sequencia: ao_terminar_meus_pedidos | ao_concluir_sequencia_inteira
     - fechamento_sobra: supervisor_patio | conferente
+    - cce_modo: desligado | gravar | gravar_e_transmitir (também em Gestão → Cartas de correção)
+    - cce_tipger: 1 (gerar XML) | 2 (WS eDocs)
     """
     list_display = ('chave', 'valor', 'atualizado_em')
     readonly_fields = ('atualizado_em',)

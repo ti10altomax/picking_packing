@@ -18,6 +18,7 @@ const GESTAO_ITEMS: { href: string; label: string; soPatio?: boolean }[] = [
   { href: '/supervisor/divergencias', label: 'Divergências' },
   { href: '/supervisor/fechamentos', label: 'Fechamentos', soPatio: true },
   { href: '/supervisor/etiquetas', label: 'Etiquetas' },
+  { href: '/supervisor/cartas', label: 'Cartas de correção' },
   { href: '/supervisor/erros', label: 'Erros de separação' },
   { href: '/supervisor/conferidos', label: 'Conferidos' },
 ]

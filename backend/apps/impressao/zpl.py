@@ -154,9 +154,12 @@ def _etiqueta_zpl(dados: dict, et: dict, dpi: int, largura_mm: int, altura_mm: i
     c.linha(M, 884, CW)
 
     # --- Rodapé: antiga carta de transporte -------------------------------------
+    # Título e "É de responsabilidade do lojista:" em linhas separadas — juntos
+    # passam da largura e o ^FB desenharia o excesso por cima da linha seguinte.
     rod = dados['rodape']
-    c.texto(M, 892, 22, f"{rod['titulo']}  -  responsabilidade do lojista", largura=CW)
-    y = 918
+    c.texto(M, 892, 22, rod['titulo'], largura=CW)
+    c.texto(M, 916, 20, rod['subtitulo'], largura=CW)
+    y = 940
     for texto in rod['responsabilidades']:
         c.texto(M, y, 18, f'- {texto}', largura=CW)
         y += 22
