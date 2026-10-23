@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
-import { adminApi, impressaoApi } from '@/lib/api'
+import { adminApi, impressaoApi, type ModeloEtiqueta } from '@/lib/api'
 
 type Impressora = {
   id: number
@@ -312,6 +312,8 @@ function Campo({ label, children }: { label: string; children: React.ReactNode }
 function ConfigEtiquetas({ impressoras }: { impressoras: Impressora[] }) {
   const [padrao, setPadrao] = useState<number | null>(null)
   const [automatica, setAutomatica] = useState(true)
+  const [modelo, setModelo] = useState<ModeloEtiqueta>('padrao')
+  const [modelos, setModelos] = useState<{ valor: ModeloEtiqueta; label: string }[]>([])
   const [carregado, setCarregado] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [msg, setMsg] = useState('')
@@ -320,17 +322,20 @@ function ConfigEtiquetas({ impressoras }: { impressoras: Impressora[] }) {
     impressaoApi.config().then((c) => {
       setPadrao(c.impressora_padrao)
       setAutomatica(c.automatica)
+      setModelo(c.modelo)
+      setModelos(c.modelos)
       setCarregado(true)
     }).catch(() => setCarregado(true))
   }, [])
 
-  async function salvar(dados: { impressora_padrao?: number | null; automatica?: boolean }) {
+  async function salvar(dados: { impressora_padrao?: number | null; automatica?: boolean; modelo?: ModeloEtiqueta }) {
     setSalvando(true)
     setMsg('')
     try {
       const c = await impressaoApi.salvarConfig(dados)
       setPadrao(c.impressora_padrao)
       setAutomatica(c.automatica)
+      setModelo(c.modelo)
       setMsg('Salvo.')
     } catch (e: unknown) {
       const m = (e as { response?: { data?: { erro?: string } } })?.response?.data?.erro
@@ -372,6 +377,18 @@ function ConfigEtiquetas({ impressoras }: { impressoras: Impressora[] }) {
             onChange={(e) => salvar({ automatica: e.target.checked })}
           />
           Imprimir automaticamente ao concluir
+        </label>
+        <label className="flex items-center gap-2 text-sm text-ink">
+          <span className="text-ink-muted">Modelo</span>
+          <select
+            value={modelo}
+            disabled={salvando}
+            onChange={(e) => salvar({ modelo: e.target.value as ModeloEtiqueta })}
+            className="bg-surface-card border border-surface-border text-ink rounded-lg px-2 min-h-[40px] text-sm"
+            title="Vale para Zebra, agente USB e navegador. Na página da etiqueta dá para comparar com ?modelo=compacta"
+          >
+            {modelos.map((m) => <option key={m.valor} value={m.valor}>{m.label}</option>)}
+          </select>
         </label>
         {msg && <span className="text-xs text-ink-muted">{msg}</span>}
       </div>

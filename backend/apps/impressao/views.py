@@ -8,7 +8,7 @@ from apps.core.models import Configuracao
 from apps.pedidos.models import Impressora, Pedido
 
 from . import services
-from .etiqueta import dados_etiquetas
+from .etiqueta import MODELOS, dados_etiquetas, normalizar_modelo
 from .models import ImpressaoEtiqueta
 from .zpl import gerar_zpl
 
@@ -19,6 +19,14 @@ def _exige(request, perfis):
     if request.user.perfil not in perfis:
         return Response({'erro': 'sem permissão'}, status=http_status.HTTP_403_FORBIDDEN)
     return None
+
+
+def _modelo(request) -> str:
+    """Modelo da etiqueta: `?modelo=` (prévia/comparação) ou o configurado."""
+    pedido = request.query_params.get('modelo')
+    if pedido and pedido in MODELOS:
+        return pedido
+    return services.modelo_etiqueta()
 
 
 def _serializar_impressao(i: ImpressaoEtiqueta) -> dict:
@@ -59,7 +67,7 @@ def _serializar_impressora(imp: Impressora, padrao_id: int | None) -> dict:
 def etiquetas(request, pk):
     """Conteúdo das etiquetas (para a página HTML) + histórico + bloqueio, se houver."""
     pedido = get_object_or_404(Pedido.objects.select_related('conferente', 'sequencia'), pk=pk)
-    dados = dados_etiquetas(pedido)
+    dados = dados_etiquetas(pedido, _modelo(request))
     dados['bloqueio'] = services.motivo_bloqueio(pedido)
     dados['impressoes'] = [
         _serializar_impressao(i)
@@ -72,7 +80,7 @@ def etiquetas(request, pk):
 def etiquetas_zpl(request, pk):
     """ZPL cru — para testar numa Zebra à mão ou no labelary.com."""
     pedido = get_object_or_404(Pedido.objects.select_related('conferente', 'sequencia'), pk=pk)
-    dados = dados_etiquetas(pedido)
+    dados = dados_etiquetas(pedido, _modelo(request))
     imp = None
     if request.query_params.get('impressora'):
         imp = Impressora.objects.filter(pk=request.query_params['impressora']).first()
@@ -192,9 +200,18 @@ def config(request):
                 chave=Configuracao.Chave.ETIQUETA_AUTOMATICA,
                 defaults={'valor': 'sim' if request.data.get('automatica') else 'nao'},
             )
+        if 'modelo' in request.data:
+            modelo = request.data.get('modelo')
+            if modelo not in MODELOS:
+                return Response({'erro': 'modelo de etiqueta inválido'}, status=http_status.HTTP_400_BAD_REQUEST)
+            Configuracao.objects.update_or_create(
+                chave=Configuracao.Chave.ETIQUETA_MODELO, defaults={'valor': modelo},
+            )
     padrao = services.impressora_padrao()
     return Response({
         'impressora_padrao': padrao.id if padrao else None,
         'impressora_padrao_nome': padrao.nome if padrao else None,
         'automatica': services.impressao_automatica_ligada(),
+        'modelo': services.modelo_etiqueta(),
+        'modelos': [{'valor': k, 'label': v['label']} for k, v in MODELOS.items()],
     })

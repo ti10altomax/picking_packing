@@ -1,6 +1,18 @@
 # Status de implementação — Sistema de separação interna
 
-> Snapshot em **2026-10-22**. Objetivo: amanhã (e nas próximas semanas) você consegue retomar o trabalho sem precisar reler tudo.
+> Snapshot em **2026-10-23**. Objetivo: amanhã (e nas próximas semanas) você consegue retomar o trabalho sem precisar reler tudo.
+
+---
+
+## 2026-10-23 — Etiqueta de volume: modelo **compacto** (só SKU, 2 colunas)
+
+**Gatilho.** A supervisão pediu que a etiqueta coubesse o máximo de produtos e mostrasse **só o SKU**. O usuário não quis perder o desenho pronto → virou um **segundo modelo**, selecionável em `Configuracao.etiqueta_modelo` (`padrao` default | `compacta`; migration `core.0010`), que vale para Zebra, agente USB e navegador. O modelo padrão ficou intocado: o ZPL gerado é **byte a byte igual** ao do HEAD (conferido com dados fictícios, `zpl_old` × `zpl_new`), e o HTML só foi reorganizado em `Cabecalho`/`Rodape`/`EtiquetaPadrao` sem mudar estilo.
+
+**Compacta.** 2 colunas × 14 linhas = **28 itens por etiqueta** (era 8); cliente em 1 linha (fonte 28, condensada a 26, corte em ~57 caracteres), transportadora em 1 linha (fonte 44, continua grande), rodapé da carta de transporte **igual** ao padrão. SKU na fonte 24 **condensada a 20 de largura** — medido no Labelary: um SKU de 22 caracteres (o maior da base) a 24/24 passa de 300 dots e não cabia na coluna; a 24/20 fica em 266 e cabe nos 296 da coluna. Coluna da esquerda enche primeiro; divisória vertical e cabeçalho da 2ª coluna só aparecem com mais de 14 itens. No HTML, 14 linhas de 3,8 mm, SKU Arial bold 2,7 mm (a 2,8 mm o SKU de 22 caracteres já cortava), qtd 3,4 mm — conferido no Chrome com o pedido 179050 de dev (15 itens).
+
+**Código.** `etiqueta.py`: `MODELOS` (label, itens por página, colunas), `normalizar_modelo()`, `dados_etiquetas(pedido, modelo)` devolve `modelo`/`modelo_label`/`itens_por_pagina`/`colunas`. `zpl.py`: `_cabecalho()` e `_rodape()` compartilhados, `_etiqueta_padrao()` e `_etiqueta_compacta()`, `gerar_zpl()` despacha por `dados['modelo']`; `_Canvas.texto()` ganhou `largura_fonte` (condensa) e `fator` (largura média do caractere para truncar; 0,46 default, maiúsculas/dígitos medem ~0,60). `services.modelo_etiqueta()`; `imprimir()` usa o configurado e o `PedidoLog` da impressão guarda `modelo`. Views: `?modelo=` em `/etiquetas/` e `/etiquetas/zpl/` força um modelo (prévia/comparação); `GET/PUT /api/impressao/config/` ganhou `modelo` + `modelos`. Web: select **Modelo** no card "Etiqueta de volume" de `/admin/impressoras`; `/etiquetas/[id]?modelo=compacta` força o modelo e a barra avisa "(forçado pela URL)". Mobile não muda (não desenha a etiqueta).
+
+**Prévia sem impressora** (receita da memória): `scratchpad/previa.py` gera o ZPL dos dois modelos com stub do `django.utils.timezone` e o Labelary renderiza o PNG; `calib.zpl` mediu as larguras das fontes. Falta: commit (`core.0010` vai no próximo deploy), e o usuário decidir quando ligar `compacta` em produção.
 
 ---
 

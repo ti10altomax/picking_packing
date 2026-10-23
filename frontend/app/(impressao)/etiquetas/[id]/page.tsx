@@ -1,13 +1,18 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { api, impressaoApi, type EtiquetasPedido, type EtiquetaVolume } from '@/lib/api'
+import { api, impressaoApi, type EtiquetasPedido, type EtiquetaVolume, type ModeloEtiqueta } from '@/lib/api'
 import { svgCode128 } from '@/lib/code128'
 
 /**
  * Etiquetas de volume 10x15 cm para imprimir pelo navegador (qualquer
  * impressora) — mesmo conteúdo do ZPL que vai para a Zebra. Uma etiqueta por
- * volume com itens; volume com mais de 8 itens vira páginas de continuação.
+ * volume com itens; o que passa do que cabe vira página de continuação.
+ *
+ * Dois modelos (Configuracao.etiqueta_modelo; `?modelo=compacta` na URL força
+ * um para comparar): `padrao` (descrição + SKU, 8 por etiqueta) e `compacta`
+ * (só SKU em 2 colunas de 14, pedido da supervisão em 2026-10-23). Cabeçalho
+ * e rodapé são os mesmos — 1 mm aqui ≈ 8 dots do ZPL.
  */
 
 const CSS = `
@@ -38,18 +43,23 @@ function fmtData(iso: string | null | undefined) {
   })
 }
 
-function Etiqueta({ dados, et }: { dados: EtiquetasPedido; et: EtiquetaVolume }) {
+function linhaVolume(et: EtiquetaVolume) {
+  const partes = [et.volume.tipo_label.toUpperCase()]
+  if (et.volume.identificador) partes.push(et.volume.identificador)
+  partes.push(`${et.qtd_unidades} unid. em ${et.qtd_itens} item(ns)`)
+  return partes.join('  ·  ')
+}
+
+/** Marca + caixa "VOLUME N / M" + documento com Code 128 — igual nos dois modelos */
+function Cabecalho({ dados, et }: { dados: EtiquetasPedido; et: EtiquetaVolume }) {
   const p = dados.pedido
   const cab = (p.tipo === 'nota_fiscal'
     ? `NOTA FISCAL${p.codsnf ? ` · série ${p.codsnf}` : ''}`
     : 'PEDIDO') + (p.codfil ? ` · filial ${p.codfil}` : '')
   const rotuloVol = et.total_paginas > 1 ? `VOLUME · cont. ${et.pagina}/${et.total_paginas}` : 'VOLUME'
-  const partes = [et.volume.tipo_label.toUpperCase()]
-  if (et.volume.identificador) partes.push(et.volume.identificador)
-  partes.push(`${et.qtd_unidades} unid. em ${et.qtd_itens} item(ns)`)
 
   return (
-    <div className="etq shadow-xl">
+    <>
       {/* Cabeçalho */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: '12mm' }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -70,6 +80,42 @@ function Etiqueta({ dados, et }: { dados: EtiquetasPedido; et: EtiquetaVolume })
         <div style={{ width: '38mm', paddingTop: '0.5mm' }}
           dangerouslySetInnerHTML={{ __html: svgCode128(p.numero_externo, '9mm', '38mm') }} />
       </div>
+    </>
+  )
+}
+
+/** Antiga carta de transporte + "Conferido em" — igual nos dois modelos */
+function Rodape({ dados }: { dados: EtiquetasPedido }) {
+  const p = dados.pedido
+  return (
+    <>
+      <div className="hr" />
+      <div className="corta" style={{ fontSize: '2.7mm', fontWeight: 700 }}>{dados.rodape.titulo}</div>
+      <div className="corta" style={{ fontSize: '2.5mm', fontWeight: 700, lineHeight: 1.2 }}>{dados.rodape.subtitulo}</div>
+      <ul style={{ margin: '0.3mm 0 0', paddingLeft: '3mm', fontSize: '2.25mm', lineHeight: 1.25 }}>
+        {dados.rodape.responsabilidades.map((t, idx) => <li key={idx}>{t}</li>)}
+      </ul>
+      <div style={{ fontSize: '2.25mm', lineHeight: 1.25, marginTop: '0.8mm' }}>
+        {dados.rodape.empresa.map((t, idx) => <div key={idx} className="corta">{t}</div>)}
+      </div>
+      <div className="hr-fina" />
+      <div className="corta" style={{ fontSize: '2.5mm' }}>
+        {p.conferido_em ? `Conferido em ${fmtData(p.conferido_em)}` : 'Conferência concluída'}
+        {p.conferente ? ` · por ${p.conferente}` : ''}
+        {p.sequencia_numero ? ` · Seq. ${p.sequencia_numero}` : ''}
+        {' · Separa'}
+      </div>
+    </>
+  )
+}
+
+/** Modelo original (2026-10-07): descrição + SKU por item, 8 itens por etiqueta */
+function EtiquetaPadrao({ dados, et }: { dados: EtiquetasPedido; et: EtiquetaVolume }) {
+  const p = dados.pedido
+
+  return (
+    <div className="etq shadow-xl">
+      <Cabecalho dados={dados} et={et} />
       <div className="duas" style={{ fontSize: '3.6mm', fontWeight: 700, lineHeight: 1.15, marginTop: '0.8mm', minHeight: '4.2mm' }}>
         {p.cliente || '—'}
       </div>
@@ -83,7 +129,7 @@ function Etiqueta({ dados, et }: { dados: EtiquetasPedido; et: EtiquetaVolume })
       <div className="hr" />
 
       {/* Itens */}
-      <div className="corta" style={{ fontSize: '3.3mm', fontWeight: 700 }}>{partes.join('  ·  ')}</div>
+      <div className="corta" style={{ fontSize: '3.3mm', fontWeight: 700 }}>{linhaVolume(et)}</div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '2.6mm', fontWeight: 700, marginTop: '0.6mm' }}>
         <span>ITEM</span><span>QTD</span>
       </div>
@@ -100,26 +146,74 @@ function Etiqueta({ dados, et }: { dados: EtiquetasPedido; et: EtiquetaVolume })
           </div>
         ))}
       </div>
-      <div className="hr" />
-
-      {/* Rodapé — antiga carta de transporte */}
-      <div className="corta" style={{ fontSize: '2.7mm', fontWeight: 700 }}>{dados.rodape.titulo}</div>
-      <div className="corta" style={{ fontSize: '2.5mm', fontWeight: 700, lineHeight: 1.2 }}>{dados.rodape.subtitulo}</div>
-      <ul style={{ margin: '0.3mm 0 0', paddingLeft: '3mm', fontSize: '2.25mm', lineHeight: 1.25 }}>
-        {dados.rodape.responsabilidades.map((t, idx) => <li key={idx}>{t}</li>)}
-      </ul>
-      <div style={{ fontSize: '2.25mm', lineHeight: 1.25, marginTop: '0.8mm' }}>
-        {dados.rodape.empresa.map((t, idx) => <div key={idx} className="corta">{t}</div>)}
-      </div>
-      <div className="hr-fina" />
-      <div className="corta" style={{ fontSize: '2.5mm' }}>
-        {p.conferido_em ? `Conferido em ${fmtData(p.conferido_em)}` : 'Conferência concluída'}
-        {p.conferente ? ` · por ${p.conferente}` : ''}
-        {p.sequencia_numero ? ` · Seq. ${p.sequencia_numero}` : ''}
-        {' · Separa'}
-      </div>
+      <Rodape dados={dados} />
     </div>
   )
+}
+
+/**
+ * Modelo compacto (2026-10-23): só o SKU, em 2 colunas de 14 linhas (28 por
+ * etiqueta). Cliente e transportadora em uma linha cada — é o espaço que o
+ * padrão reservava para a 2ª linha que vira itens. Coluna da esquerda enche
+ * primeiro, de cima para baixo; a divisória só aparece quando há 2ª coluna.
+ */
+function EtiquetaCompacta({ dados, et }: { dados: EtiquetasPedido; et: EtiquetaVolume }) {
+  const p = dados.pedido
+  const linhas = Math.ceil(dados.itens_por_pagina / dados.colunas)   // 14
+  const colunas = [et.itens.slice(0, linhas), et.itens.slice(linhas, linhas * 2)]
+  const duasColunas = et.itens.length > linhas
+  const cabecalhoColuna = (
+    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '2.5mm', fontWeight: 700, lineHeight: 1.1 }}>
+      <span>SKU</span><span>QTD</span>
+    </div>
+  )
+
+  return (
+    <div className="etq shadow-xl">
+      <Cabecalho dados={dados} et={et} />
+      <div className="corta" style={{ fontSize: '3.3mm', fontWeight: 700, lineHeight: 1.15, marginTop: '0.8mm' }}>
+        {p.cliente || '—'}
+      </div>
+      <div className="hr" style={{ margin: '0.8mm 0' }} />
+
+      {/* Transportadora */}
+      <div className="mini" style={{ fontSize: '2.5mm', lineHeight: 1.1 }}>Transportadora</div>
+      <div className="corta" style={{ fontSize: '5.2mm', fontWeight: 800, lineHeight: 1.05 }}>
+        {p.transportadora || '—'}
+      </div>
+      <div className="hr" style={{ margin: '0.8mm 0' }} />
+
+      {/* Itens em 2 colunas */}
+      <div className="corta" style={{ fontSize: '3.1mm', fontWeight: 700, lineHeight: 1.15 }}>{linhaVolume(et)}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: '2mm', marginTop: '0.6mm' }}>
+        {cabecalhoColuna}
+        {duasColunas ? cabecalhoColuna : <div />}
+      </div>
+      <div className="hr-fina" style={{ margin: '0.3mm 0 0.4mm' }} />
+      {/* 14 linhas de 3.8mm = 53.2mm; o SKU mais longo (22 caracteres) mede 34.8mm em Arial bold 2.7mm e a coluna dá 37mm (a 2.8mm já cortava) */}
+      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: '2mm', alignContent: 'start', position: 'relative' }}>
+        {duasColunas && (
+          <div style={{ position: 'absolute', left: 'calc(50% - 0.125mm)', top: 0, bottom: '0.5mm', borderLeft: '0.25mm solid #000' }} />
+        )}
+        {colunas.map((col, c) => (
+          <div key={c} style={{ minWidth: 0 }}>
+            {col.map((i, idx) => (
+              <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '1mm', height: '3.8mm' }}>
+                <div className="corta" style={{ flex: 1, minWidth: 0, fontSize: '2.7mm', fontWeight: 700, lineHeight: 1 }}>{i.sku || i.descricao}</div>
+                <div style={{ fontSize: '3.4mm', fontWeight: 800, minWidth: '7.5mm', textAlign: 'right', lineHeight: 1 }}>{i.qtd}</div>
+              </div>
+            ))}
+          </div>
+        ))}
+        {et.itens.length === 0 && <div style={{ fontSize: '3mm' }}>(volume sem itens)</div>}
+      </div>
+      <Rodape dados={dados} />
+    </div>
+  )
+}
+
+function Etiqueta(props: { dados: EtiquetasPedido; et: EtiquetaVolume }) {
+  return props.dados.modelo === 'compacta' ? <EtiquetaCompacta {...props} /> : <EtiquetaPadrao {...props} />
 }
 
 export default function EtiquetasPedidoPage() {
@@ -129,9 +223,14 @@ export default function EtiquetasPedidoPage() {
   const [erro, setErro] = useState('')
   const [registrando, setRegistrando] = useState(false)
   const [aviso, setAviso] = useState('')
+  // `?modelo=padrao|compacta` força o modelo (comparar os dois); sem ele vale o configurado
+  const [modelo, setModelo] = useState<ModeloEtiqueta | undefined>(undefined)
 
   useEffect(() => {
-    impressaoApi.etiquetas(pedidoId).then(setDados).catch(() => setErro('Erro ao carregar as etiquetas'))
+    const m = new URLSearchParams(window.location.search).get('modelo')
+    const forcado = m === 'padrao' || m === 'compacta' ? m : undefined
+    setModelo(forcado)
+    impressaoApi.etiquetas(pedidoId, forcado).then(setDados).catch(() => setErro('Erro ao carregar as etiquetas'))
   }, [pedidoId])
 
   async function imprimir() {
@@ -141,7 +240,7 @@ export default function EtiquetasPedidoPage() {
       // Registra o disparo (histórico + sai da lista de pendentes) e abre a impressão
       await impressaoApi.imprimir(pedidoId, { canal: 'navegador' })
       setAviso('Impressão registrada.')
-      const d = await impressaoApi.etiquetas(pedidoId)
+      const d = await impressaoApi.etiquetas(pedidoId, modelo)
       setDados(d)
     } catch {
       setAviso('Não foi possível registrar a impressão (a página ainda pode ser impressa).')
@@ -152,7 +251,7 @@ export default function EtiquetasPedidoPage() {
   }
 
   async function baixarZpl() {
-    const r = await api.get(impressaoApi.zplUrl(pedidoId), { responseType: 'blob' })
+    const r = await api.get(impressaoApi.zplUrl(pedidoId, modelo), { responseType: 'blob' })
     const url = URL.createObjectURL(r.data)
     const a = document.createElement('a')
     a.href = url
@@ -179,6 +278,7 @@ export default function EtiquetasPedidoPage() {
           </h1>
           <p className="text-xs text-ink-muted">
             {dados.total_volumes} volume(s) · {dados.etiquetas.length} etiqueta(s) · {dados.pedido.transportadora || 'sem transportadora'}
+            {' · modelo '}{dados.modelo === 'compacta' ? 'compacto' : 'padrão'}{modelo ? ' (forçado pela URL)' : ''}
             {ultima && ` · última impressão ${fmtData(ultima.criado_em)} (${ultima.canal_label}${ultima.impressora ? ` ${ultima.impressora}` : ''})`}
           </p>
         </div>

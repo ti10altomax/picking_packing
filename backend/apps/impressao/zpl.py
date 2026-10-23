@@ -1,7 +1,9 @@
 """Gerador ZPL da etiqueta de volume (10x15 cm, desenhada a 203 dpi).
 
 Recebe a estrutura de `etiqueta.dados_etiquetas()` e devolve o ZPL de todas as
-etiquetas do pedido, uma `^XA…^XZ` por volume/página. Coordenadas são pensadas
+etiquetas do pedido, uma `^XA…^XZ` por volume/página. O desenho depende de
+`dados['modelo']`: `padrao` (descrição + SKU, 8 itens) ou `compacta` (só SKU em
+2 colunas, 28 itens) — cabeçalho e rodapé são os mesmos nos dois. Coordenadas são pensadas
 para 800x1200 dots (100x150 mm a 203 dpi) e escaladas pelo dpi/tamanho da
 impressora cadastrada.
 
@@ -39,10 +41,11 @@ def _txt(valor, maximo: int | None = None) -> str:
     return s
 
 
-def _cabem(largura_dots: int, fonte: int, linhas: int = 1) -> int:
-    """Quantos caracteres cabem (estimativa conservadora para a fonte 0 da Zebra,
-    largura média ~0.46 da altura)."""
-    por_linha = int(largura_dots / (fonte * 0.46))
+def _cabem(largura_dots: int, fonte: int, linhas: int = 1, fator: float = 0.46) -> int:
+    """Quantos caracteres cabem (estimativa para a fonte 0 da Zebra: largura média
+    ~0.46 da altura em texto normal; medido no Labelary em 2026-10-23, maiúsculas
+    e dígitos chegam a ~0.60 — por isso o `fator` é ajustável por campo)."""
+    por_linha = int(largura_dots / (fonte * fator))
     return max(1, por_linha * linhas - (2 if linhas > 1 else 0))
 
 
@@ -66,13 +69,17 @@ class _Canvas:
     def f(self, v):
         return max(10, round(v * self.ff))
 
-    def texto(self, x, y, tam, valor, *, largura=None, linhas=1, alinh='L'):
-        maximo = _cabem(largura, tam, linhas) if largura else None
+    def texto(self, x, y, tam, valor, *, largura=None, linhas=1, alinh='L',
+              largura_fonte=None, fator=0.46):
+        """`largura_fonte` < `tam` condensa a fonte (mesma altura, caracteres mais
+        estreitos); `fator` é a largura média do caractere usada para truncar."""
+        lf = largura_fonte or tam
+        maximo = _cabem(largura, lf, linhas, fator) if largura else None
         fd = _txt(valor, maximo)
         if not fd:
             return
         bloco = f'^FB{self.x(largura)},{linhas},0,{alinh}' if largura else ''
-        self.cmds.append(f'^FO{self.x(x)},{self.y(y)}{bloco}^A0N,{self.f(tam)},{self.f(tam)}^FD{fd}^FS')
+        self.cmds.append(f'^FO{self.x(x)},{self.y(y)}{bloco}^A0N,{self.f(tam)},{self.f(lf)}^FD{fd}^FS')
 
     def linha(self, x, y, largura, espessura=2):
         e = max(1, self.y(espessura))
@@ -95,14 +102,16 @@ class _Canvas:
         return f'^XA\n^PW{self.pw}\n^LL{self.ll}\n^LH0,0\n{corpo}\n^PQ1\n^XZ\n'
 
 
-def _etiqueta_zpl(dados: dict, et: dict, dpi: int, largura_mm: int, altura_mm: int) -> str:
+CW = W - 2 * M          # 752 — largura útil
+X2 = W - M              # 776 — borda direita
+XR = 460                # coluna direita (caixa do volume / código de barras)
+WR = X2 - XR            # 316
+
+
+def _cabecalho(c: _Canvas, dados: dict, et: dict) -> None:
+    """Marca + caixa "VOLUME N / M" + documento com Code 128 (igual nos dois modelos)."""
     p = dados['pedido']
     vol = et['volume']
-    c = _Canvas(dpi, largura_mm, altura_mm)
-    CW = W - 2 * M          # 752
-    X2 = W - M              # 776
-    XR = 460                # coluna direita (caixa do volume / código de barras)
-    WR = X2 - XR            # 316
 
     # --- Cabeçalho: marca + caixa "VOLUME N / M" -------------------------------
     c.texto(M, 22, 64, 'ALTOMAX')
@@ -124,33 +133,11 @@ def _etiqueta_zpl(dados: dict, et: dict, dpi: int, largura_mm: int, altura_mm: i
     c.texto(M, 130, 24, cab, largura=XR - M - 10)
     c.texto(M, 158, 64, p['numero_externo'], largura=XR - M - 10)
     c.code128(XR, 128, 70, p['numero_externo'])
-    c.texto(M, 232, 30, p['cliente'] or '-', largura=CW, linhas=2)
-    c.linha(M, 306, CW)
 
-    # --- Transportadora (o dado que o pátio precisa ler de longe) ---------------
-    c.texto(M, 316, 24, 'TRANSPORTADORA')
-    c.texto(M, 342, 50, p['transportadora'] or '-', largura=CW, linhas=2)
-    c.linha(M, 456, CW)
 
-    # --- Volume: tipo, identificador, totais ------------------------------------
-    partes = [vol['tipo_label'].upper()]
-    if vol['identificador']:
-        partes.append(vol['identificador'])
-    partes.append(f"{et['qtd_unidades']} unid. em {et['qtd_itens']} item(ns)")
-    c.texto(M, 466, 28, '  -  '.join(partes), largura=CW)
-    c.texto(M, 502, 22, 'ITEM')
-    c.texto(X2 - 120, 502, 22, 'QTD', largura=120, alinh='R')
-    c.linha(M, 526, CW, 1)
-
-    # 8 itens por etiqueta (etiqueta.ITENS_POR_PAGINA), 2 linhas cada: descrição + SKU
-    y = 534
-    for item in et['itens']:
-        c.texto(M, y, 24, item.get('descricao') or item.get('sku') or '-', largura=CW - 130)
-        c.texto(M, y + 25, 16, item.get('sku') or '', largura=CW - 130)
-        c.texto(X2 - 120, y + 2, 34, item['qtd'], largura=120, alinh='R')
-        y += 43
-    if not et['itens']:
-        c.texto(M, y, 24, '(volume sem itens)')
+def _rodape(c: _Canvas, dados: dict) -> None:
+    """Antiga carta de transporte + linha "Conferido em" (igual nos dois modelos)."""
+    p = dados['pedido']
     c.linha(M, 884, CW)
 
     # --- Rodapé: antiga carta de transporte -------------------------------------
@@ -180,12 +167,117 @@ def _etiqueta_zpl(dados: dict, et: dict, dpi: int, largura_mm: int, altura_mm: i
     extras.append('Separa')
     c.texto(M, y + 14, 20, ' - '.join(extras), largura=CW)
 
+
+def _etiqueta_padrao(dados: dict, et: dict, dpi: int, largura_mm: int, altura_mm: int) -> str:
+    """Modelo original (2026-10-07): descrição + SKU por item, 8 itens por etiqueta."""
+    p = dados['pedido']
+    vol = et['volume']
+    c = _Canvas(dpi, largura_mm, altura_mm)
+    _cabecalho(c, dados, et)
+    c.texto(M, 232, 30, p['cliente'] or '-', largura=CW, linhas=2)
+    c.linha(M, 306, CW)
+
+    # --- Transportadora (o dado que o pátio precisa ler de longe) ---------------
+    c.texto(M, 316, 24, 'TRANSPORTADORA')
+    c.texto(M, 342, 50, p['transportadora'] or '-', largura=CW, linhas=2)
+    c.linha(M, 456, CW)
+
+    # --- Volume: tipo, identificador, totais ------------------------------------
+    partes = [vol['tipo_label'].upper()]
+    if vol['identificador']:
+        partes.append(vol['identificador'])
+    partes.append(f"{et['qtd_unidades']} unid. em {et['qtd_itens']} item(ns)")
+    c.texto(M, 466, 28, '  -  '.join(partes), largura=CW)
+    c.texto(M, 502, 22, 'ITEM')
+    c.texto(X2 - 120, 502, 22, 'QTD', largura=120, alinh='R')
+    c.linha(M, 526, CW, 1)
+
+    # 8 itens por etiqueta (etiqueta.ITENS_POR_PAGINA), 2 linhas cada: descrição + SKU
+    y = 534
+    for item in et['itens']:
+        c.texto(M, y, 24, item.get('descricao') or item.get('sku') or '-', largura=CW - 130)
+        c.texto(M, y + 25, 16, item.get('sku') or '', largura=CW - 130)
+        c.texto(X2 - 120, y + 2, 34, item['qtd'], largura=120, alinh='R')
+        y += 43
+    if not et['itens']:
+        c.texto(M, y, 24, '(volume sem itens)')
+    _rodape(c, dados)
     return c.render()
+
+
+# Modelo compacto: itens em 2 colunas, uma linha por item (só o SKU)
+COMPACTA_LINHAS = 14          # linhas por coluna (× 2 colunas = etiqueta.MODELOS['compacta'])
+COMPACTA_PASSO = 32           # altura de cada linha em dots
+COMPACTA_Y0 = 410             # primeira linha de item
+COMPACTA_GAP = 16             # vão entre as colunas
+COMPACTA_WQ = 64              # largura reservada à quantidade (4 dígitos na fonte 28)
+
+
+def _etiqueta_compacta(dados: dict, et: dict, dpi: int, largura_mm: int, altura_mm: int) -> str:
+    """Modelo compacto (2026-10-23, pedido da supervisão): só o SKU, em 2 colunas de 14.
+
+    Cliente e transportadora ficam em uma linha cada (fonte menor, sem a
+    segunda linha reservada), o que libera o espaço que o modelo padrão deixava
+    vazio abaixo deles. Cabeçalho e rodapé são os mesmos do padrão.
+    """
+    p = dados['pedido']
+    vol = et['volume']
+    c = _Canvas(dpi, largura_mm, altura_mm)
+    _cabecalho(c, dados, et)
+
+    # --- Cliente (1 linha) + transportadora (1 linha, ainda grande) --------------
+    # Fatores medidos no Labelary (maiúsculas): 28/26 → ~12.8 dots por caractere,
+    # 44 → ~23.8; o ^FB não trunca, então o corte é feito aqui com folga.
+    c.texto(M, 226, 28, p['cliente'] or '-', largura=CW, largura_fonte=26, fator=0.50)
+    c.linha(M, 258, CW)
+    c.texto(M, 266, 20, 'TRANSPORTADORA')
+    c.texto(M, 288, 44, p['transportadora'] or '-', largura=CW, fator=0.55)
+    c.linha(M, 340, CW)
+
+    # --- Volume: tipo, identificador, totais ------------------------------------
+    partes = [vol['tipo_label'].upper()]
+    if vol['identificador']:
+        partes.append(vol['identificador'])
+    partes.append(f"{et['qtd_unidades']} unid. em {et['qtd_itens']} item(ns)")
+    c.texto(M, 348, 26, '  -  '.join(partes), largura=CW, fator=0.52)
+
+    # --- Itens em 2 colunas (preenche a esquerda de cima a baixo, depois a direita)
+    # SKU na fonte 24 condensada a 20 de largura: 22 caracteres (o maior SKU) = 266
+    # dots, cabe na coluna de 296 sem truncar; a 24/24 passaria de 300.
+    wc = (CW - COMPACTA_GAP) // 2                       # 368 — largura de cada coluna
+    xs = (M, M + wc + COMPACTA_GAP)                     # 24, 408
+    x_sep = M + wc + COMPACTA_GAP // 2                  # 400 — divisória vertical
+    y_fim = COMPACTA_Y0 + COMPACTA_LINHAS * COMPACTA_PASSO   # 858
+    w_sku = wc - COMPACTA_WQ - 8                        # 296
+    duas_colunas = len(et['itens']) > COMPACTA_LINHAS
+    for x in xs[: 2 if duas_colunas else 1]:
+        c.texto(x, 380, 20, 'SKU')
+        c.texto(x + wc - COMPACTA_WQ, 380, 20, 'QTD', largura=COMPACTA_WQ, alinh='R')
+    c.linha(M, 402, CW, 1)
+    if duas_colunas:
+        c.cmds.append(f'^FO{c.x(x_sep)},{c.y(380)}^GB1,{c.y(y_fim - 380)},1^FS')
+
+    for i, item in enumerate(et['itens']):
+        col, lin = divmod(i, COMPACTA_LINHAS)
+        x = xs[col]
+        y = COMPACTA_Y0 + lin * COMPACTA_PASSO
+        c.texto(x, y + 2, 24, item.get('sku') or item.get('descricao') or '-',
+                largura=w_sku, largura_fonte=20, fator=0.61)
+        c.texto(x + wc - COMPACTA_WQ, y, 28, item['qtd'], largura=COMPACTA_WQ, alinh='R', fator=0.55)
+    if not et['itens']:
+        c.texto(M, COMPACTA_Y0, 24, '(volume sem itens)')
+
+    _rodape(c, dados)
+    return c.render()
+
+
+_DESENHOS = {'padrao': _etiqueta_padrao, 'compacta': _etiqueta_compacta}
 
 
 def gerar_zpl(dados: dict, *, dpi: int = DPI_BASE, largura_mm: int = LARGURA_MM_BASE,
               altura_mm: int = ALTURA_MM_BASE) -> str:
     """ZPL de todas as etiquetas do pedido (uma ^XA…^XZ por volume/página)."""
+    desenho = _DESENHOS.get(dados.get('modelo') or 'padrao', _etiqueta_padrao)
     return ''.join(
-        _etiqueta_zpl(dados, et, dpi, largura_mm, altura_mm) for et in dados['etiquetas']
+        desenho(dados, et, dpi, largura_mm, altura_mm) for et in dados['etiquetas']
     )

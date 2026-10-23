@@ -25,7 +25,7 @@ from apps.core.models import Configuracao
 from apps.etiquetas.printer import enviar_para_rede  # cliente TCP 9100 (congelado, reaproveitado)
 from apps.pedidos.models import Impressora, Pedido, PedidoLog, PrintJob
 
-from .etiqueta import dados_etiquetas
+from .etiqueta import dados_etiquetas, normalizar_modelo
 from .models import ImpressaoEtiqueta
 from .zpl import gerar_zpl
 
@@ -52,6 +52,11 @@ def impressora_padrao() -> Impressora | None:
 
 def impressao_automatica_ligada() -> bool:
     return Configuracao.obter(Configuracao.Chave.ETIQUETA_AUTOMATICA) != 'nao'
+
+
+def modelo_etiqueta() -> str:
+    """Modelo configurado (`padrao` | `compacta`) — ver `etiqueta.MODELOS`."""
+    return normalizar_modelo(Configuracao.obter(Configuracao.Chave.ETIQUETA_MODELO))
 
 
 def _janela_dias() -> int:
@@ -103,7 +108,8 @@ def _registrar(pedido, *, canal, status, impressora=None, qtd=0, automatica=Fals
         pedido=pedido, usuario=usuario,
         acao='etiqueta_impressa' if status == ImpressaoEtiqueta.Status.OK else 'etiqueta_erro',
         payload={
-            'canal': canal, 'impressora': impressora.nome if impressora else None,
+            'canal': canal, 'modelo': modelo_etiqueta(),
+            'impressora': impressora.nome if impressora else None,
             'impressora_id': impressora.id if impressora else None,
             'qtd_etiquetas': qtd, 'automatica': automatica, 'erro': erro or None,
         },
@@ -121,7 +127,7 @@ def imprimir(pedido: Pedido, *, impressora: Impressora | None = None, canal: str
     Erros de rede viram registro `erro` (não levantam) para o histórico mostrar.
     """
     verificar_elegivel(pedido)
-    dados = dados_etiquetas(pedido)
+    dados = dados_etiquetas(pedido, modelo_etiqueta())
     qtd = len(dados['etiquetas'])
     if not qtd:
         raise ErroImpressao('sem_volumes', 'pedido sem volume com itens — nada para imprimir')

@@ -370,7 +370,14 @@ export type ImpressaoEtiqueta = {
   erro: string
 }
 
+export type ModeloEtiqueta = 'padrao' | 'compacta'
+
 export type EtiquetasPedido = {
+  /** padrao = descrição + SKU (8 por etiqueta); compacta = só SKU em 2 colunas (28) */
+  modelo: ModeloEtiqueta
+  modelo_label: string
+  itens_por_pagina: number
+  colunas: number
   pedido: {
     id: number; tipo: string; tipo_label: string; numero_externo: string; codfil: string; codsnf: string
     cliente: string; transportadora: string; codtra: string; frete: string; frete_label: string
@@ -421,10 +428,21 @@ export type VereditoEtiqueta = {
   qtd_volumes: number
 }
 
+export type ConfigEtiqueta = {
+  impressora_padrao: number | null
+  impressora_padrao_nome: string | null
+  automatica: boolean
+  modelo: ModeloEtiqueta
+  modelos: { valor: ModeloEtiqueta; label: string }[]
+}
+
 export const impressaoApi = {
-  etiquetas: (pedidoId: number) =>
-    api.get(`/api/impressao/pedidos/${pedidoId}/etiquetas/`).then((r) => r.data as EtiquetasPedido),
-  zplUrl: (pedidoId: number) => `/api/impressao/pedidos/${pedidoId}/etiquetas/zpl/`,
+  // `modelo` força um modelo (prévia/comparação); sem ele vale o configurado
+  etiquetas: (pedidoId: number, modelo?: ModeloEtiqueta) =>
+    api.get(`/api/impressao/pedidos/${pedidoId}/etiquetas/`, { params: modelo ? { modelo } : undefined })
+      .then((r) => r.data as EtiquetasPedido),
+  zplUrl: (pedidoId: number, modelo?: ModeloEtiqueta) =>
+    `/api/impressao/pedidos/${pedidoId}/etiquetas/zpl/${modelo ? `?modelo=${modelo}` : ''}`,
   imprimir: (pedidoId: number, body: { impressora_id?: number; canal?: 'navegador' }) =>
     api.post(`/api/impressao/pedidos/${pedidoId}/imprimir/`, body)
       .then((r) => r.data as { resultado: string; erro: string | null; impressao: ImpressaoEtiqueta }),
@@ -435,11 +453,9 @@ export const impressaoApi = {
     api.get('/api/impressao/impressoras/')
       .then((r) => r.data as { impressoras: ImpressoraEtiqueta[]; impressora_padrao: number | null; automatica: boolean }),
   config: () =>
-    api.get('/api/impressao/config/')
-      .then((r) => r.data as { impressora_padrao: number | null; impressora_padrao_nome: string | null; automatica: boolean }),
-  salvarConfig: (dados: { impressora_padrao?: number | null; automatica?: boolean }) =>
-    api.put('/api/impressao/config/', dados)
-      .then((r) => r.data as { impressora_padrao: number | null; impressora_padrao_nome: string | null; automatica: boolean }),
+    api.get('/api/impressao/config/').then((r) => r.data as ConfigEtiqueta),
+  salvarConfig: (dados: { impressora_padrao?: number | null; automatica?: boolean; modelo?: ModeloEtiqueta }) =>
+    api.put('/api/impressao/config/', dados).then((r) => r.data as ConfigEtiqueta),
 }
 
 // ---------------------------------------------------------------------------
