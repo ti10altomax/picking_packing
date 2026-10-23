@@ -288,7 +288,7 @@ export type Paginado<T> = {
 }
 
 export const supervisorApi = {
-  listarPendentes: (params: { search?: string; page?: number; tipo?: string; frete?: string } = {}) =>
+  listarPendentes: (params: { search?: string; page?: number; tipo?: string; frete?: string; transportadora?: 'com' | 'sem' | '' } = {}) =>
     api.get('/api/pedidos/', {
       params: { status: 'pendente', ...params },
     }).then((r) => r.data),

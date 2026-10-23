@@ -228,7 +228,7 @@ export const separadoresApi = {
 }
 
 export const supervisorApi = {
-  listarPendentes: (params: { search?: string; page?: number; tipo?: string; frete?: string } = {}) =>
+  listarPendentes: (params: { search?: string; page?: number; tipo?: string; frete?: string; transportadora?: 'com' | 'sem' | '' } = {}) =>
     api.get('/api/pedidos/', { params: { status: 'pendente', ...params } }).then((r) => r.data),
   selecionar: (pedidoIds: number[]) =>
     api.post('/api/pedidos/selecionar/', { pedido_ids: pedidoIds }).then((r) => r.data),

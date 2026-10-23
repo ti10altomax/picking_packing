@@ -21,6 +21,7 @@ type Pedido = {
   numero_externo: string
   tipo?: string
   frete?: string
+  transportadora?: string
   cliente: string
   qtd_itens: number
   tempo_espera: string
@@ -44,7 +45,11 @@ export default function SupervisorVendas() {
   const buscaAtivaRef = useRef('')
   const [tipo, setTipo] = useState('')      // '' | 'pedido' | 'nota_fiscal'
   const [frete, setFrete] = useState('')    // '' | 'C' (entrega) | 'F' (retira)
-  const filtrosRef = useRef({ tipo: '', frete: '' })
+  // '' | 'com' | 'sem' — a etiqueta de volume só sai com transportadora (2026-10-23)
+  const [transportadora, setTransportadora] = useState<'' | 'com' | 'sem'>('')
+  const filtrosRef = useRef<{ tipo: string; frete: string; transportadora: '' | 'com' | 'sem' }>({
+    tipo: '', frete: '', transportadora: '',
+  })
   const primeiraCargaRef = useRef(true)
 
   const carregar = useCallback(async (search: string, page = 1, append = false) => {
@@ -71,15 +76,15 @@ export default function SupervisorVendas() {
     }
   }, [])
 
-  // Busca (com debounce) e filtros de tipo/frete: uma única fonte de recarga
+  // Busca (com debounce) e filtros de tipo/frete/transportadora: uma única fonte de recarga
   useEffect(() => {
-    filtrosRef.current = { tipo, frete }
+    filtrosRef.current = { tipo, frete, transportadora }
     const atraso = primeiraCargaRef.current ? 0 : 300
     primeiraCargaRef.current = false
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => carregar(busca, 1, false), atraso)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
-  }, [busca, tipo, frete, carregar])
+  }, [busca, tipo, frete, transportadora, carregar])
 
   function toggle(id: number) {
     setSelecionados((prev) => {
@@ -142,6 +147,11 @@ export default function SupervisorVendas() {
             valor={frete}
             onChange={setFrete}
             opcoes={[['', 'Qualquer'], ['C', 'Entrega'], ['F', 'Retira'], ['X', 'Sem frete']]}
+          />
+          <FiltroChips
+            valor={transportadora}
+            onChange={(v) => setTransportadora(v as '' | 'com' | 'sem')}
+            opcoes={[['', 'Qualquer'], ['com', 'Com transp.'], ['sem', 'Sem transp.']]}
           />
         </View>
       </View>
@@ -212,6 +222,12 @@ export default function SupervisorVendas() {
                     </View>
                     <Text className="text-sm text-ink-muted" numberOfLines={1}>
                       {p.cliente || '—'}
+                    </Text>
+                    <Text
+                      className={`text-xs ${p.transportadora ? 'text-ink-muted' : 'text-amber-500'}`}
+                      numberOfLines={1}
+                    >
+                      {p.transportadora ? `🚚 ${p.transportadora}` : 'Sem transportadora'}
                     </Text>
                   </View>
                   <Text className="text-xs text-ink-muted">

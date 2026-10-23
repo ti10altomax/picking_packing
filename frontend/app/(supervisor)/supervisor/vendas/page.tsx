@@ -8,6 +8,7 @@ type Pedido = {
   numero_externo: string
   tipo?: string
   frete?: string
+  transportadora?: string
   cliente: string
   status: string
   criado_em: string
@@ -27,7 +28,12 @@ export default function SupervisorVendasPage() {
   const [buscaAtiva, setBuscaAtiva] = useState('')
   const [tipo, setTipo] = useState('')      // '' | 'pedido' | 'nota_fiscal'
   const [frete, setFrete] = useState('')    // '' | 'C' (entrega) | 'F' (retira)
-  const filtrosRef = useRef({ tipo: '', frete: '' })
+  // '' | 'com' | 'sem' — a etiqueta de volume só sai com transportadora; o Sup. Vendas
+  // quer ver isso antes de mandar para o pátio (2026-10-23)
+  const [transportadora, setTransportadora] = useState<'' | 'com' | 'sem'>('')
+  const filtrosRef = useRef<{ tipo: string; frete: string; transportadora: '' | 'com' | 'sem' }>({
+    tipo: '', frete: '', transportadora: '',
+  })
   const primeiraCargaRef = useRef(true)
   const [mensagem, setMensagem] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -54,9 +60,9 @@ export default function SupervisorVendasPage() {
     }
   }, [])
 
-  // Busca (com debounce) e filtros de tipo/frete: uma única fonte de recarga
+  // Busca (com debounce) e filtros de tipo/frete/transportadora: uma única fonte de recarga
   useEffect(() => {
-    filtrosRef.current = { tipo, frete }
+    filtrosRef.current = { tipo, frete, transportadora }
     const atraso = primeiraCargaRef.current ? 0 : 300
     primeiraCargaRef.current = false
     if (debounceRef.current) clearTimeout(debounceRef.current)
@@ -67,7 +73,7 @@ export default function SupervisorVendasPage() {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
     }
-  }, [busca, tipo, frete, carregar])
+  }, [busca, tipo, frete, transportadora, carregar])
 
   function toggle(id: number) {
     setSelecionados((prev) => {
@@ -150,6 +156,11 @@ export default function SupervisorVendasPage() {
           onChange={setFrete}
           opcoes={[['', 'Qualquer'], ['C', 'Entrega'], ['F', 'Retira'], ['X', 'Sem frete']]}
         />
+        <FiltroChips
+          valor={transportadora}
+          onChange={(v) => setTransportadora(v as '' | 'com' | 'sem')}
+          opcoes={[['', 'Qualquer'], ['com', 'Com transportadora'], ['sem', 'Sem transportadora']]}
+        />
       </div>
 
       {mensagem && (
@@ -210,6 +221,9 @@ export default function SupervisorVendasPage() {
                         <span className="text-xs text-ink-subtle">{p.tempo_espera}</span>
                       </div>
                       <p className="text-sm text-ink-muted truncate">{p.cliente || '—'}</p>
+                      <p className={`text-xs truncate ${p.transportadora ? 'text-ink-muted' : 'text-amber-600 dark:text-amber-400'}`}>
+                        {p.transportadora ? `🚚 ${p.transportadora}` : 'Sem transportadora'}
+                      </p>
                     </div>
                     <span className="text-xs text-ink-muted whitespace-nowrap">
                       {p.qtd_itens} {p.qtd_itens === 1 ? 'item' : 'itens'}

@@ -51,6 +51,9 @@ class PedidoViewSet(viewsets.ModelViewSet):
         marketplace = self.request.query_params.get('marketplace')
         tipo = self.request.query_params.get('tipo', '').strip()
         frete = self.request.query_params.get('frete', '').strip().upper()
+        # 'com' | 'sem' — o Sup. Vendas quer saber antes de enviar se o documento já
+        # tem transportadora (a etiqueta de volume só sai com ela), 2026-10-23.
+        transportadora = self.request.query_params.get('transportadora', '').strip().lower()
         search = self.request.query_params.get('search', '').strip()
 
         if status_filter:
@@ -59,6 +62,10 @@ class PedidoViewSet(viewsets.ModelViewSet):
             qs = qs.filter(tipo=tipo)
         if frete:
             qs = qs.filter(frete=frete)
+        if transportadora == 'com':
+            qs = qs.exclude(transportadora='')
+        elif transportadora == 'sem':
+            qs = qs.filter(transportadora='')
         if self.request.query_params.get('sem_sequencia') == '1':
             qs = qs.filter(sequencia__isnull=True)
         if marketplace:
@@ -79,6 +86,10 @@ class PedidoViewSet(viewsets.ModelViewSet):
                 fila = fila.filter(tipo=tipo)
             if frete:
                 fila = fila.filter(frete=frete)
+            if transportadora == 'com':
+                fila = fila.exclude(transportadora='')
+            elif transportadora == 'sem':
+                fila = fila.filter(transportadora='')
             if self.request.query_params.get('sem_sequencia') == '1':
                 fila = fila.filter(sequencia__isnull=True)
             qtd_transportadora = (

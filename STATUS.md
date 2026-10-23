@@ -4,6 +4,10 @@
 
 ---
 
+## 2026-10-23 (tarde) — Sup. Vendas vê a transportadora antes de enviar
+
+**Gatilho.** Para testar a etiqueta de volume é preciso conferir um documento que **já tenha transportadora** (sem ela a etiqueta fica pendente), e a lista de pendentes do Sup. Vendas não mostrava isso — era adivinhar. Agora cada linha de **Vendas** (web e mobile) traz a transportadora abaixo do cliente (ou "Sem transportadora" em âmbar) e há um terceiro grupo de chips: **Qualquer · Com transportadora · Sem transportadora** → `GET /api/pedidos/?transportadora=com|sem` (filtro genérico da lista, também respeitado na contagem do `?ordem=transportadora` do Pátio). Sem migration. Em dev: 16.075 pendentes, 833 com transportadora.
+
 ## 2026-10-23 — Etiqueta de volume: modelo **compacto** (só SKU, 2 colunas)
 
 **Gatilho.** A supervisão pediu que a etiqueta coubesse o máximo de produtos e mostrasse **só o SKU**. O usuário não quis perder o desenho pronto → virou um **segundo modelo**, selecionável em `Configuracao.etiqueta_modelo` (`padrao` default | `compacta`; migration `core.0010`), que vale para Zebra, agente USB e navegador. O modelo padrão ficou intocado: o ZPL gerado é **byte a byte igual** ao do HEAD (conferido com dados fictícios, `zpl_old` × `zpl_new`), e o HTML só foi reorganizado em `Cabecalho`/`Rodape`/`EtiquetaPadrao` sem mudar estilo.
