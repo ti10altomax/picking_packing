@@ -97,7 +97,9 @@ def _importar_itens(pedido, query, params, col_qtd):
 
         ean = str(r.get('codbar') or '').strip()
         descricao = str(r.get('despro') or '').strip() or f'{codpro}-{codder}'
-        sku = f'{codpro}-{codder}-{SENIOR_CODEMP}'
+        # SKU = produto-derivação (ex.: 1234-GG). Até 2026-10-26 levava '-{codemp}' no fim;
+        # a empresa fica só no campo `codemp` (migration pedidos.0016 limpou os antigos).
+        sku = f'{codpro}-{codder}'
 
         PedidoItem.objects.create(
             pedido=pedido,

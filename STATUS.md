@@ -4,6 +4,10 @@
 
 ---
 
+## 2026-10-26 (tarde) — SKU sem o sufixo da empresa
+
+**Gatilho.** O usuário viu `GG-1`, `G-1`, `M-1` nos SKUs e perguntou se vinha do Oracle. Não vinha: o sync montava `sku = codpro-codder-codemp` desde o primeiro commit (época do marketplace), e `codemp` é fixo em 1. A empresa já fica no campo `PedidoItem.codemp`, então o `-1` só atrapalhava (etiqueta compacta mostra só o SKU; bipagem por SKU exigia o sufixo). Agora `sku = codpro-codder` em `apps/senior/tasks.py`, e a migration **`pedidos.0016_limpar_sufixo_sku`** tira o `-<codemp>` de todos os itens existentes (só quando o SKU é exatamente `codpro-codder-codemp`), para a comparação de itens da transferência de conferência e o relatório por sequência continuarem agrupando entre documentos antigos e novos. Em dev: 234.318 itens limpos, 0 divergentes. **Cuidado na leitura:** produto cuja derivação é `1` continua terminando em `-1` (ex.: `004ALMC21604-1`) — isso é o `codder` real do Senior, não o sufixo. Sem mudança no web/mobile (ninguém interpreta o SKU). Próximo deploy leva a migration.
+
 ## 2026-10-26 (tarde) — "ALTOMAX" no cabeçalho do web, na fonte do logotipo
 
 **Gatilho.** Pedido do usuário: trocar o "Separa" dos cabeçalhos por **ALTOMAX** com a cara do logotipo (capital romana, tipo Trajan). Fonte escolhida: **Cinzel** (Google Fonts, alternativa livre à Trajan), carregada pelo `next/font` em `app/layout.tsx` como `--font-marca` / `font-marca` no Tailwind — self-hosted como as outras três, sem CDN em runtime. Componente `components/Marca.tsx` (17px, semibold, `tracking-[0.2em]`) usado nos layouts supervisor, admin e conferente. "Separa" continua no título da aba, no manifest e no login. Coletor não mudou (cabeçalho próprio; embutir a fonte no APK fica para quando for pedido). Conferido no Chrome nos dois temas. Antes disso, no mesmo dia, uma marca d'água do wallpaper atrás das telas foi feita e **revertida** a pedido do usuário (sem commit).

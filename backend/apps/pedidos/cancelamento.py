@@ -51,7 +51,7 @@ def cancelar(pedido: Pedido, origem: str, usuario=None, payload: dict | None = N
 
 
 def _chave(item: PedidoItem) -> str:
-    # codpro/codder identificam o produto no Senior; sku é derivado deles (+codemp).
+    # codpro/codder identificam o produto no Senior; sku é derivado deles (codpro-codder).
     return item.sku
 
 
