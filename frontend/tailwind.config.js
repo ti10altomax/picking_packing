@@ -11,6 +11,7 @@ module.exports = {
         sans: ['var(--font-sans)', 'system-ui', 'sans-serif'],
         display: ['var(--font-display)', 'Georgia', 'serif'],
         mono: ['var(--font-mono)', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        marca: ['var(--font-marca)', 'Cinzel', 'Georgia', 'serif'],
       },
       colors: {
         // Paleta de status (mantida para legados)

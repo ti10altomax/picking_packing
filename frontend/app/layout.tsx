@@ -1,12 +1,13 @@
 import type { Metadata, Viewport } from 'next'
-import { Fraunces, Manrope, JetBrains_Mono } from 'next/font/google'
+import { Cinzel, Fraunces, Manrope, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 import { ThemeProvider } from '@/components/ThemeToggle'
 import { DialogProvider } from '@/components/Dialog'
 import { ErroReporter } from '@/components/ErroReporter'
 
 // Tipografia do sistema (self-hosted pelo next/font — zero CDN em runtime):
-// Fraunces = serifa de display (títulos, marca); Manrope = UI; JetBrains Mono = códigos/EAN
+// Fraunces = serifa de display (títulos); Manrope = UI; JetBrains Mono = códigos/EAN;
+// Cinzel = só a marca ALTOMAX do cabeçalho (capital romana, como o logotipo)
 const manrope = Manrope({ subsets: ['latin'], variable: '--font-sans', display: 'swap' })
 const fraunces = Fraunces({
   subsets: ['latin'],
@@ -16,6 +17,7 @@ const fraunces = Fraunces({
   axes: ['opsz'],
 })
 const jetbrainsMono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-mono', display: 'swap' })
+const cinzel = Cinzel({ subsets: ['latin'], variable: '--font-marca', display: 'swap' })
 
 export const metadata: Metadata = {
   title: 'Separa — Altomax',
@@ -58,7 +60,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html
       lang="pt-BR"
       suppressHydrationWarning
-      className={`${manrope.variable} ${fraunces.variable} ${jetbrainsMono.variable}`}
+      className={`${manrope.variable} ${fraunces.variable} ${jetbrainsMono.variable} ${cinzel.variable}`}
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: noFlashScript }} />

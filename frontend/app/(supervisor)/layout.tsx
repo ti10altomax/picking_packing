@@ -7,6 +7,7 @@ import { destinoPorPerfil } from '@/lib/destino'
 import { useExitGuard } from '@/lib/useExitGuard'
 import { FullscreenOnFirstTap, FullscreenToggle } from '@/components/FullscreenLayer'
 import { ThemeToggle } from '@/components/ThemeToggle'
+import { Marca } from '@/components/Marca'
 
 const PERFIS_PERMITIDOS = ['supervisor_vendas', 'supervisor_patio', 'admin']
 
@@ -59,7 +60,7 @@ export default function SupervisorLayout({ children }: { children: React.ReactNo
       <FullscreenOnFirstTap />
       <header className="bg-surface-card border-b border-surface-border px-4 h-14 flex items-center justify-between sticky top-0 z-10 shadow-sm dark:shadow-none">
         <div className="flex items-center gap-3">
-          <Link href={destinoPorPerfil(user?.perfil)} className="font-display italic font-semibold text-xl tracking-tight hover:opacity-70 transition-opacity">Separa</Link>
+          <Marca href={destinoPorPerfil(user?.perfil)} />
           <nav className="flex items-center gap-1 ml-2">
             {podeVendas && (
               <NavLink href="/supervisor/vendas" ativo={pathname?.startsWith('/supervisor/vendas')}>

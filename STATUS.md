@@ -4,6 +4,10 @@
 
 ---
 
+## 2026-10-26 (tarde) — "ALTOMAX" no cabeçalho do web, na fonte do logotipo
+
+**Gatilho.** Pedido do usuário: trocar o "Separa" dos cabeçalhos por **ALTOMAX** com a cara do logotipo (capital romana, tipo Trajan). Fonte escolhida: **Cinzel** (Google Fonts, alternativa livre à Trajan), carregada pelo `next/font` em `app/layout.tsx` como `--font-marca` / `font-marca` no Tailwind — self-hosted como as outras três, sem CDN em runtime. Componente `components/Marca.tsx` (17px, semibold, `tracking-[0.2em]`) usado nos layouts supervisor, admin e conferente. "Separa" continua no título da aba, no manifest e no login. Coletor não mudou (cabeçalho próprio; embutir a fonte no APK fica para quando for pedido). Conferido no Chrome nos dois temas. Antes disso, no mesmo dia, uma marca d'água do wallpaper atrás das telas foi feita e **revertida** a pedido do usuário (sem commit).
+
 ## 2026-10-26 — Etiqueta de volume **aprovada**; margem de 3 mm na impressora
 
 **Gatilho.** A etiqueta impressa na Zebra foi aprovada pela supervisão, com um ajuste: em cima o conteúdo saía no limite do corte da etiqueta e, à esquerda, o corte comia metade do "A" de ALTOMAX — a origem da impressora cai em cima da borda física. Em `apps/impressao/zpl.py` o desenho inteiro agora é deslocado 3 mm para a direita e para baixo (`^LH`, constante `MARGEM_IMPRESSORA_MM`) e **reescalado** para a área que sobra, então nada sai pela direita nem pelo rodapé (encolhe ~3%, imperceptível). Vale para os dois modelos (`padrao` e `compacta`) e para qualquer dpi/tamanho cadastrado na impressora. Página HTML (`/etiquetas/[id]`) não mudou — lá a margem é do navegador/driver. Prévia conferida no Labelary nos dois modelos. Sem migration.
