@@ -10,9 +10,13 @@ import { svgCode128 } from '@/lib/code128'
  * volume com itens; o que passa do que cabe vira página de continuação.
  *
  * Dois modelos (Configuracao.etiqueta_modelo; `?modelo=compacta` na URL força
- * um para comparar): `padrao` (descrição + SKU, 8 por etiqueta) e `compacta`
- * (só SKU em 2 colunas de 14, pedido da supervisão em 2026-10-23). Cabeçalho
- * e rodapé são os mesmos — 1 mm aqui ≈ 8 dots do ZPL.
+ * um para comparar): `padrao` (descrição + SKU, 10 por etiqueta) e `compacta`
+ * (só SKU em 18 linhas × 2 ou 3 colunas, pedido da supervisão em 2026-10-23).
+ * Cabeçalho e rodapé são os mesmos — 1 mm aqui ≈ 8 dots do ZPL.
+ *
+ * 2026-10-26: "pág. N/M"; NF ao lado do pedido e no código de barras quando já
+ * existe, com "NF/PEDIDO nº" pequeno embaixo; rodapé sem endereço/telefone;
+ * compacta com 3 colunas quando nenhuma quantidade do volume passa de 99.
  */
 
 const CSS = `
@@ -24,7 +28,7 @@ const CSS = `
   .etq + .etq { break-before: page; page-break-before: always; }
 }
 .etq {
-  width: 100mm; height: 150mm; box-sizing: border-box; padding: 3mm 3.5mm;
+  width: 100mm; height: 150mm; box-sizing: border-box; padding: 3mm 3mm;   /* 3mm = os 24 dots do ZPL */
   background: #fff; color: #000; font-family: Arial, Helvetica, sans-serif;
   overflow: hidden; display: flex; flex-direction: column; break-inside: avoid;
 }
@@ -56,7 +60,8 @@ function Cabecalho({ dados, et }: { dados: EtiquetasPedido; et: EtiquetaVolume }
   const cab = (p.tipo === 'nota_fiscal'
     ? `NOTA FISCAL${p.codsnf ? ` · série ${p.codsnf}` : ''}`
     : 'PEDIDO') + (p.codfil ? ` · filial ${p.codfil}` : '')
-  const rotuloVol = et.total_paginas > 1 ? `VOLUME · cont. ${et.pagina}/${et.total_paginas}` : 'VOLUME'
+  const rotuloVol = et.total_paginas > 1 ? `VOLUME · pág. ${et.pagina}/${et.total_paginas}` : 'VOLUME'
+  const barra = dados.barra
 
   return (
     <>
@@ -75,10 +80,17 @@ function Cabecalho({ dados, et }: { dados: EtiquetasPedido; et: EtiquetaVolume }
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '3mm' }}>
         <div style={{ minWidth: 0 }}>
           <div className="mini corta">{cab}</div>
-          <div style={{ fontSize: '8mm', fontWeight: 800, lineHeight: 1.05 }}>{p.numero_externo}</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '2mm', minWidth: 0 }}>
+            <div style={{ fontSize: '8mm', fontWeight: 800, lineHeight: 1.05 }}>{p.numero_externo}</div>
+            {p.nf_numero && (
+              <div className="corta" style={{ fontSize: '5mm', fontWeight: 800, lineHeight: 1.05 }}>NF {p.nf_numero}</div>
+            )}
+          </div>
         </div>
-        <div style={{ width: '38mm', paddingTop: '0.5mm' }}
-          dangerouslySetInnerHTML={{ __html: svgCode128(p.numero_externo, '9mm', '38mm') }} />
+        <div style={{ width: '38mm', paddingTop: '0.5mm', textAlign: 'center' }}>
+          <div dangerouslySetInnerHTML={{ __html: svgCode128(barra.valor, '9mm', '38mm') }} />
+          <div style={{ fontSize: '2mm', fontWeight: 700, lineHeight: 1, marginTop: '0.3mm' }}>{barra.rotulo} {barra.valor}</div>
+        </div>
       </div>
     </>
   )
@@ -95,9 +107,6 @@ function Rodape({ dados }: { dados: EtiquetasPedido }) {
       <ul style={{ margin: '0.3mm 0 0', paddingLeft: '3mm', fontSize: '2.25mm', lineHeight: 1.25 }}>
         {dados.rodape.responsabilidades.map((t, idx) => <li key={idx}>{t}</li>)}
       </ul>
-      <div style={{ fontSize: '2.25mm', lineHeight: 1.25, marginTop: '0.8mm' }}>
-        {dados.rodape.empresa.map((t, idx) => <div key={idx} className="corta">{t}</div>)}
-      </div>
       <div className="hr-fina" />
       <div className="corta" style={{ fontSize: '2.5mm' }}>
         {p.conferido_em ? `Conferido em ${fmtData(p.conferido_em)}` : 'Conferência concluída'}
@@ -109,7 +118,7 @@ function Rodape({ dados }: { dados: EtiquetasPedido }) {
   )
 }
 
-/** Modelo original (2026-10-07): descrição + SKU por item, 8 itens por etiqueta */
+/** Modelo original (2026-10-07): descrição + SKU por item, 10 itens por etiqueta (eram 8 até 26/10) */
 function EtiquetaPadrao({ dados, et }: { dados: EtiquetasPedido; et: EtiquetaVolume }) {
   const p = dados.pedido
 
@@ -152,16 +161,29 @@ function EtiquetaPadrao({ dados, et }: { dados: EtiquetasPedido; et: EtiquetaVol
 }
 
 /**
- * Modelo compacto (2026-10-23): só o SKU, em 2 colunas de 14 linhas (28 por
- * etiqueta). Cliente e transportadora em uma linha cada — é o espaço que o
- * padrão reservava para a 2ª linha que vira itens. Coluna da esquerda enche
- * primeiro, de cima para baixo; a divisória só aparece quando há 2ª coluna.
+ * Modelo compacto (2026-10-23): só o SKU, em 18 linhas × 2 ou 3 colunas (36 ou
+ * 54 por etiqueta; 3 colunas só quando toda quantidade do volume tem até 2
+ * dígitos e todo SKU até 16 caracteres — decidido no backend, `et.colunas`; a
+ * fonte dos itens é a mesma nos dois casos). Cliente e transportadora em uma
+ * linha cada — é o espaço que o padrão reservava para a 2ª linha que vira itens.
+ * As colunas enchem da esquerda para a direita, de cima para baixo; a divisória
+ * só aparece entre colunas usadas.
  */
 function EtiquetaCompacta({ dados, et }: { dados: EtiquetasPedido; et: EtiquetaVolume }) {
   const p = dados.pedido
-  const linhas = Math.ceil(dados.itens_por_pagina / dados.colunas)   // 14
-  const colunas = [et.itens.slice(0, linhas), et.itens.slice(linhas, linhas * 2)]
-  const duasColunas = et.itens.length > linhas
+  const nCol = et.colunas === 3 ? 3 : 2
+  const linhas = dados.linhas || 18
+  const colunas = Array.from({ length: nCol }, (_, c) => et.itens.slice(c * linhas, (c + 1) * linhas))
+  const usadas = Math.max(1, Math.min(nCol, Math.ceil(et.itens.length / linhas)))
+  const grid = `repeat(${nCol}, 1fr)`
+  // O TAMANHO da fonte do SKU é o mesmo nas 2 ou 3 colunas (ordem da supervisão: não
+  // diminuir). Nas 3 colunas a Arial comum não cabe (16 caracteres ≈ 27mm numa coluna de
+  // ~26mm), então o texto é condensado com scaleX(0.83) — mesma altura, letras mais
+  // estreitas, exatamente a proporção 24/20 da fonte que a Zebra usa no compacto aprovado.
+  // (Arial Narrow dependeria de estar instalada na máquina que imprime.)
+  const gap = nCol === 3 ? '1mm' : '2mm'
+  const largQtd = nCol === 3 ? '4mm' : '9mm'
+  const condensa = nCol === 3
   const cabecalhoColuna = (
     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '2.5mm', fontWeight: 700, lineHeight: 1.1 }}>
       <span>SKU</span><span>QTD</span>
@@ -183,24 +205,22 @@ function EtiquetaCompacta({ dados, et }: { dados: EtiquetasPedido; et: EtiquetaV
       </div>
       <div className="hr" style={{ margin: '0.8mm 0' }} />
 
-      {/* Itens em 2 colunas */}
+      {/* Itens em 2 ou 3 colunas */}
       <div className="corta" style={{ fontSize: '3.1mm', fontWeight: 700, lineHeight: 1.15 }}>{linhaVolume(et)}</div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: '2mm', marginTop: '0.6mm' }}>
-        {cabecalhoColuna}
-        {duasColunas ? cabecalhoColuna : <div />}
+      <div style={{ display: 'grid', gridTemplateColumns: grid, columnGap: gap, marginTop: '0.6mm' }}>
+        {colunas.map((_, c) => (c < usadas ? <div key={c}>{cabecalhoColuna}</div> : <div key={c} />))}
       </div>
       <div className="hr-fina" style={{ margin: '0.3mm 0 0.4mm' }} />
-      {/* 14 linhas de 3.8mm = 53.2mm; o SKU mais longo (22 caracteres) mede 34.8mm em Arial bold 2.7mm e a coluna dá 37mm (a 2.8mm já cortava) */}
-      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: '2mm', alignContent: 'start', position: 'relative' }}>
-        {duasColunas && (
-          <div style={{ position: 'absolute', left: 'calc(50% - 0.125mm)', top: 0, bottom: '0.5mm', borderLeft: '0.25mm solid #000' }} />
-        )}
+      {/* 18 linhas de 3.75mm = 67.5mm (o rodapé perdeu as linhas da empresa em 26/10) */}
+      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'grid', gridTemplateColumns: grid, columnGap: gap, alignContent: 'start', position: 'relative' }}>
         {colunas.map((col, c) => (
-          <div key={c} style={{ minWidth: 0 }}>
+          <div key={c} style={{ minWidth: 0, borderLeft: c > 0 && c < usadas ? '0.25mm solid #000' : 'none', marginLeft: c > 0 ? `calc(-${gap} / 2)` : 0, paddingLeft: c > 0 ? `calc(${gap} / 2)` : 0 }}>
             {col.map((i, idx) => (
-              <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '1mm', height: '3.8mm' }}>
-                <div className="corta" style={{ flex: 1, minWidth: 0, fontSize: '2.7mm', fontWeight: 700, lineHeight: 1 }}>{i.sku || i.descricao}</div>
-                <div style={{ fontSize: '3.4mm', fontWeight: 800, minWidth: '7.5mm', textAlign: 'right', lineHeight: 1 }}>{i.qtd}</div>
+              <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: nCol === 3 ? '0.5mm' : '1mm', height: '3.75mm' }}>
+                <div className={condensa ? '' : 'corta'} style={{ flex: 1, minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap', fontSize: '2.7mm', fontWeight: 700, lineHeight: 1 }}>
+                  <span style={condensa ? { display: 'inline-block', transform: 'scaleX(0.83)', transformOrigin: 'left center' } : undefined}>{i.sku || i.descricao}</span>
+                </div>
+                <div className="corta" style={{ fontSize: '3.4mm', fontWeight: 800, minWidth: largQtd, textAlign: 'right', lineHeight: 1 }}>{i.qtd}</div>
               </div>
             ))}
           </div>

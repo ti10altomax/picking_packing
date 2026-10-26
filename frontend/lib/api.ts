@@ -351,6 +351,9 @@ export type EtiquetaVolume = {
   volume: { id: number; numero: number; tipo: string; tipo_label: string; identificador: string }
   pagina: number
   total_paginas: number
+  /** compacta: 2 ou 3 (3 só com quantidades de até 2 dígitos e SKUs de até 16 caracteres, mesma fonte); padrao: 1 */
+  colunas: number
+  itens_por_pagina: number
   itens: EtiquetaItem[]
   qtd_unidades: number
   qtd_itens: number
@@ -373,19 +376,24 @@ export type ImpressaoEtiqueta = {
 export type ModeloEtiqueta = 'padrao' | 'compacta'
 
 export type EtiquetasPedido = {
-  /** padrao = descrição + SKU (8 por etiqueta); compacta = só SKU em 2 colunas (28) */
+  /** padrao = descrição + SKU (10 por etiqueta); compacta = só SKU em 18 linhas × 2 ou 3 colunas */
   modelo: ModeloEtiqueta
   modelo_label: string
-  itens_por_pagina: number
+  itens_por_pagina: number   // máximo do modelo; o real é `etiquetas[i].itens_por_pagina`
   colunas: number
+  linhas: number
   pedido: {
     id: number; tipo: string; tipo_label: string; numero_externo: string; codfil: string; codsnf: string
     cliente: string; transportadora: string; codtra: string; frete: string; frete_label: string
     conferido_em: string | null; conferente: string | null; sequencia_numero: number | null
+    /** NF emitida do pedido (vínculo E140IPV); vazio enquanto não faturado. Em documento NF fica vazio */
+    nf_numero: string; nf_codsnf: string
   }
+  /** O que vai no código de barras: a NF quando existe, senão o pedido */
+  barra: { valor: string; rotulo: 'NF' | 'PEDIDO' }
   total_volumes: number
   etiquetas: EtiquetaVolume[]
-  rodape: { titulo: string; subtitulo: string; responsabilidades: string[]; empresa: string[] }
+  rodape: { titulo: string; subtitulo: string; responsabilidades: string[] }
   gerado_em: string
   bloqueio: { codigo: string; mensagem: string } | null
   impressoes: ImpressaoEtiqueta[]

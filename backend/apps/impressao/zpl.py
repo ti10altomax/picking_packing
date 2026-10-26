@@ -2,8 +2,8 @@
 
 Recebe a estrutura de `etiqueta.dados_etiquetas()` e devolve o ZPL de todas as
 etiquetas do pedido, uma `^XA…^XZ` por volume/página. O desenho depende de
-`dados['modelo']`: `padrao` (descrição + SKU, 8 itens) ou `compacta` (só SKU em
-2 colunas, 28 itens) — cabeçalho e rodapé são os mesmos nos dois. Coordenadas são pensadas
+`dados['modelo']`: `padrao` (descrição + SKU, 10 itens) ou `compacta` (só SKU em
+18 linhas x 2 ou 3 colunas) — cabeçalho e rodapé são os mesmos nos dois. Coordenadas são pensadas
 para 800x1200 dots (100x150 mm a 203 dpi) e escaladas pelo dpi/tamanho da
 impressora cadastrada. Desde 2026-10-26 o desenho inteiro é deslocado
 `MARGEM_IMPRESSORA_MM` para a direita e para baixo (`^LH`) e encolhido para
@@ -118,16 +118,22 @@ WR = X2 - XR            # 316
 
 
 def _cabecalho(c: _Canvas, dados: dict, et: dict) -> None:
-    """Marca + caixa "VOLUME N / M" + documento com Code 128 (igual nos dois modelos)."""
+    """Marca + caixa "VOLUME N / M" + documento com Code 128 (igual nos dois modelos).
+
+    2026-10-26: "pag. N/M" em vez de "cont."; NF ao lado do número do pedido quando
+    já existe; o código de barras leva a NF (ou o pedido, se ainda não faturado) e
+    ganha "NF 123456" / "PEDIDO 123456" pequeno embaixo.
+    """
     p = dados['pedido']
     vol = et['volume']
+    barra = dados['barra']
 
     # --- Cabeçalho: marca + caixa "VOLUME N / M" -------------------------------
     c.texto(M, 22, 64, 'ALTOMAX')
     c.caixa(XR, 16, WR, 92)
     rotulo = 'VOLUME'
     if et['total_paginas'] > 1:
-        rotulo = f"VOLUME - cont. {et['pagina']}/{et['total_paginas']}"
+        rotulo = f"VOLUME - pag. {et['pagina']}/{et['total_paginas']}"
     c.texto(XR, 22, 24, rotulo, largura=WR, alinh='C')
     c.texto(XR, 48, 56, f"{vol['numero']} / {dados['total_volumes']}", largura=WR, alinh='C')
     c.linha(M, 118, CW)
@@ -139,29 +145,41 @@ def _cabecalho(c: _Canvas, dados: dict, et: dict) -> None:
         cab = 'PEDIDO'
     if p.get('codfil'):
         cab += f" - filial {p['codfil']}"
-    c.texto(M, 130, 24, cab, largura=XR - M - 10)
-    c.texto(M, 158, 64, p['numero_externo'], largura=XR - M - 10)
-    c.code128(XR, 128, 70, p['numero_externo'])
+    largura_doc = XR - M - 10                       # 426 — coluna do documento
+    numero = _txt(p['numero_externo'])
+    c.texto(M, 130, 24, cab, largura=largura_doc)
+    c.texto(M, 158, 64, numero, largura=largura_doc, fator=0.60)
+    nf = p.get('nf_numero')
+    if nf:
+        # "NF 147911" à direita do número do pedido, na largura que sobrar (dígitos
+        # na fonte 0 medem ~0.60 da altura; condensa até caber, sem descer de 18)
+        x_nf = M + int(len(numero) * 64 * 0.60) + 12
+        sobra = XR - 10 - x_nf
+        texto_nf = f'NF {nf}'
+        lf = max(18, min(30, int(sobra / (len(texto_nf) * 0.60))))
+        c.texto(x_nf, 180, 40, texto_nf, largura=sobra, largura_fonte=lf, fator=0.60)
+    c.code128(XR, 128, 70, barra['valor'])
+    c.texto(XR, 202, 16, f"{barra['rotulo']} {barra['valor']}", largura=WR, alinh='C', fator=0.60)
 
 
-def _rodape(c: _Canvas, dados: dict) -> None:
-    """Antiga carta de transporte + linha "Conferido em" (igual nos dois modelos)."""
+RODAPE_Y = 972   # linha que abre o rodapé; ele termina em ~1172 (folga até 1200)
+
+
+def _rodape(c: _Canvas, dados: dict, y0: int = RODAPE_Y) -> None:
+    """Antiga carta de transporte + linha "Conferido em" (igual nos dois modelos).
+    Sem as 2 linhas de endereço/telefone desde 2026-10-26 — o espaço virou itens."""
     p = dados['pedido']
-    c.linha(M, 884, CW)
+    c.linha(M, y0, CW)
 
     # --- Rodapé: antiga carta de transporte -------------------------------------
     # Título e "É de responsabilidade do lojista:" em linhas separadas — juntos
     # passam da largura e o ^FB desenharia o excesso por cima da linha seguinte.
     rod = dados['rodape']
-    c.texto(M, 892, 22, rod['titulo'], largura=CW)
-    c.texto(M, 916, 20, rod['subtitulo'], largura=CW)
-    y = 940
+    c.texto(M, y0 + 8, 22, rod['titulo'], largura=CW)
+    c.texto(M, y0 + 32, 20, rod['subtitulo'], largura=CW)
+    y = y0 + 56
     for texto in rod['responsabilidades']:
         c.texto(M, y, 18, f'- {texto}', largura=CW)
-        y += 22
-    y += 6
-    for texto in rod['empresa']:
-        c.texto(M, y, 18, texto, largura=CW)
         y += 22
     c.linha(M, y + 6, CW, 1)
 
@@ -177,8 +195,12 @@ def _rodape(c: _Canvas, dados: dict) -> None:
     c.texto(M, y + 14, 20, ' - '.join(extras), largura=CW)
 
 
+PADRAO_PASSO = 42   # altura de cada item (descrição 24 + SKU 16); 10 itens = 534..954
+
+
 def _etiqueta_padrao(dados: dict, et: dict, dpi: int, largura_mm: int, altura_mm: int) -> str:
-    """Modelo original (2026-10-07): descrição + SKU por item, 8 itens por etiqueta."""
+    """Modelo original (2026-10-07): descrição + SKU por item; 10 itens por etiqueta
+    desde 2026-10-26 (eram 8 — o rodapé encolheu)."""
     p = dados['pedido']
     vol = et['volume']
     c = _Canvas(dpi, largura_mm, altura_mm)
@@ -201,33 +223,42 @@ def _etiqueta_padrao(dados: dict, et: dict, dpi: int, largura_mm: int, altura_mm
     c.texto(X2 - 120, 502, 22, 'QTD', largura=120, alinh='R')
     c.linha(M, 526, CW, 1)
 
-    # 8 itens por etiqueta (etiqueta.ITENS_POR_PAGINA), 2 linhas cada: descrição + SKU
+    # 10 itens por etiqueta (etiqueta.MODELOS['padrao']), 2 linhas cada: descrição + SKU
     y = 534
     for item in et['itens']:
         c.texto(M, y, 24, item.get('descricao') or item.get('sku') or '-', largura=CW - 130)
         c.texto(M, y + 25, 16, item.get('sku') or '', largura=CW - 130)
         c.texto(X2 - 120, y + 2, 34, item['qtd'], largura=120, alinh='R')
-        y += 43
+        y += PADRAO_PASSO
     if not et['itens']:
         c.texto(M, y, 24, '(volume sem itens)')
     _rodape(c, dados)
     return c.render()
 
 
-# Modelo compacto: itens em 2 colunas, uma linha por item (só o SKU)
-COMPACTA_LINHAS = 14          # linhas por coluna (× 2 colunas = etiqueta.MODELOS['compacta'])
-COMPACTA_PASSO = 32           # altura de cada linha em dots
+# Modelo compacto: itens em 2 ou 3 colunas, uma linha por item (só o SKU)
+COMPACTA_LINHAS = 18          # linhas por coluna (etiqueta.MODELOS['compacta']['linhas'])
+COMPACTA_PASSO = 30           # altura de cada linha em dots (18 linhas = 410..950)
 COMPACTA_Y0 = 410             # primeira linha de item
-COMPACTA_GAP = 16             # vão entre as colunas
-COMPACTA_WQ = 64              # largura reservada à quantidade (4 dígitos na fonte 28)
+# Por número de colunas: vão entre colunas e largura reservada à quantidade. A fonte
+# do SKU é a MESMA (24/20) nos dois casos — ordem da supervisão: não diminuir. Por isso
+# 3 colunas só entram com quantidades de até 2 dígitos e SKUs de até 16 caracteres
+# (etiqueta.colunas_do_volume): 16 x 0.61 x 20 = 195 dots cabem nos 198 da coluna de 3
+# (244 de largura - 40 da quantidade - 6 de respiro).
+COMPACTA_SKU_FONTE = (24, 20)   # altura, largura
+COMPACTA_GEOMETRIA = {
+    2: {'gap': 16, 'wq': 72, 'pad': 8},
+    3: {'gap': 10, 'wq': 40, 'pad': 6},
+}
 
 
 def _etiqueta_compacta(dados: dict, et: dict, dpi: int, largura_mm: int, altura_mm: int) -> str:
-    """Modelo compacto (2026-10-23, pedido da supervisão): só o SKU, em 2 colunas de 14.
+    """Modelo compacto (2026-10-23, pedido da supervisão): só o SKU, em colunas de 18.
 
     Cliente e transportadora ficam em uma linha cada (fonte menor, sem a
     segunda linha reservada), o que libera o espaço que o modelo padrão deixava
-    vazio abaixo deles. Cabeçalho e rodapé são os mesmos do padrão.
+    vazio abaixo deles. 2026-10-26: 18 linhas (eram 14) e 3 colunas quando
+    nenhuma quantidade do volume passa de 99 nem SKU de 16 caracteres (mesma fonte). Cabeçalho e rodapé são os mesmos do padrão.
     """
     p = dados['pedido']
     vol = et['volume']
@@ -250,29 +281,35 @@ def _etiqueta_compacta(dados: dict, et: dict, dpi: int, largura_mm: int, altura_
     partes.append(f"{et['qtd_unidades']} unid. em {et['qtd_itens']} item(ns)")
     c.texto(M, 348, 26, '  -  '.join(partes), largura=CW, fator=0.52)
 
-    # --- Itens em 2 colunas (preenche a esquerda de cima a baixo, depois a direita)
-    # SKU na fonte 24 condensada a 20 de largura: 22 caracteres (o maior SKU) = 266
-    # dots, cabe na coluna de 296 sem truncar; a 24/24 passaria de 300.
-    wc = (CW - COMPACTA_GAP) // 2                       # 368 — largura de cada coluna
-    xs = (M, M + wc + COMPACTA_GAP)                     # 24, 408
-    x_sep = M + wc + COMPACTA_GAP // 2                  # 400 — divisória vertical
-    y_fim = COMPACTA_Y0 + COMPACTA_LINHAS * COMPACTA_PASSO   # 858
-    w_sku = wc - COMPACTA_WQ - 8                        # 296
-    duas_colunas = len(et['itens']) > COMPACTA_LINHAS
-    for x in xs[: 2 if duas_colunas else 1]:
+    # --- Itens em colunas (enche a 1a de cima a baixo, depois a 2a, depois a 3a)
+    n_col = 3 if et.get('colunas') == 3 else 2
+    g = COMPACTA_GEOMETRIA[n_col]
+    wc = (CW - g['gap'] * (n_col - 1)) // n_col                # 368 (2 col) / 244 (3 col)
+    xs = [M + i * (wc + g['gap']) for i in range(n_col)]
+    y_fim = COMPACTA_Y0 + COMPACTA_LINHAS * COMPACTA_PASSO     # 950
+    w_sku = wc - g['wq'] - g['pad']                            # 288 (2 col) / 198 (3 col)
+    # Fonte da quantidade: 28 de altura, condensada se a maior quantidade da etiqueta não couber
+    maior_qtd = max((len(str(i['qtd'])) for i in et['itens']), default=1)
+    lf_qtd = max(14, min(28, int(g['wq'] / (maior_qtd * 0.62))))
+    usadas = min(n_col, -(-len(et['itens']) // COMPACTA_LINHAS)) if et['itens'] else 1
+    for x in xs[:usadas]:
         c.texto(x, 380, 20, 'SKU')
-        c.texto(x + wc - COMPACTA_WQ, 380, 20, 'QTD', largura=COMPACTA_WQ, alinh='R')
+        c.texto(x + wc - g['wq'], 380, 20, 'QTD', largura=g['wq'], alinh='R')
     c.linha(M, 402, CW, 1)
-    if duas_colunas:
+    for k in range(1, usadas):
+        x_sep = xs[k] - g['gap'] // 2
         c.cmds.append(f'^FO{c.x(x_sep)},{c.y(380)}^GB1,{c.y(y_fim - 380)},1^FS')
 
-    for i, item in enumerate(et['itens']):
-        col, lin = divmod(i, COMPACTA_LINHAS)
+    for k, item in enumerate(et['itens']):
+        col, lin = divmod(k, COMPACTA_LINHAS)
+        if col >= n_col:
+            break   # não acontece: a paginação em etiqueta.py usa linhas x colunas
         x = xs[col]
         y = COMPACTA_Y0 + lin * COMPACTA_PASSO
-        c.texto(x, y + 2, 24, item.get('sku') or item.get('descricao') or '-',
-                largura=w_sku, largura_fonte=20, fator=0.61)
-        c.texto(x + wc - COMPACTA_WQ, y, 28, item['qtd'], largura=COMPACTA_WQ, alinh='R', fator=0.55)
+        c.texto(x, y + 2, COMPACTA_SKU_FONTE[0], item.get('sku') or item.get('descricao') or '-',
+                largura=w_sku, largura_fonte=COMPACTA_SKU_FONTE[1], fator=0.61)
+        c.texto(x + wc - g['wq'], y, 28, item['qtd'], largura=g['wq'], alinh='R',
+                largura_fonte=lf_qtd, fator=0.62)
     if not et['itens']:
         c.texto(M, COMPACTA_Y0, 24, '(volume sem itens)')
 
