@@ -1,8 +1,12 @@
 # Status de implementação — Sistema de separação interna
 
-> Snapshot em **2026-10-23**. Objetivo: amanhã (e nas próximas semanas) você consegue retomar o trabalho sem precisar reler tudo.
+> Snapshot em **2026-10-26**. Objetivo: amanhã (e nas próximas semanas) você consegue retomar o trabalho sem precisar reler tudo.
 
 ---
+
+## 2026-10-26 — Etiqueta de volume **aprovada**; margem de 3 mm na impressora
+
+**Gatilho.** A etiqueta impressa na Zebra foi aprovada pela supervisão, com um ajuste: em cima o conteúdo saía no limite do corte da etiqueta e, à esquerda, o corte comia metade do "A" de ALTOMAX — a origem da impressora cai em cima da borda física. Em `apps/impressao/zpl.py` o desenho inteiro agora é deslocado 3 mm para a direita e para baixo (`^LH`, constante `MARGEM_IMPRESSORA_MM`) e **reescalado** para a área que sobra, então nada sai pela direita nem pelo rodapé (encolhe ~3%, imperceptível). Vale para os dois modelos (`padrao` e `compacta`) e para qualquer dpi/tamanho cadastrado na impressora. Página HTML (`/etiquetas/[id]`) não mudou — lá a margem é do navegador/driver. Prévia conferida no Labelary nos dois modelos. Sem migration.
 
 ## 2026-10-23 (tarde) — Sup. Vendas vê a transportadora antes de enviar
 

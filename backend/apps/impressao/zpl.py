@@ -5,7 +5,11 @@ etiquetas do pedido, uma `^XA…^XZ` por volume/página. O desenho depende de
 `dados['modelo']`: `padrao` (descrição + SKU, 8 itens) ou `compacta` (só SKU em
 2 colunas, 28 itens) — cabeçalho e rodapé são os mesmos nos dois. Coordenadas são pensadas
 para 800x1200 dots (100x150 mm a 203 dpi) e escaladas pelo dpi/tamanho da
-impressora cadastrada.
+impressora cadastrada. Desde 2026-10-26 o desenho inteiro é deslocado
+`MARGEM_IMPRESSORA_MM` para a direita e para baixo (`^LH`) e encolhido para
+continuar cabendo: na impressora real a origem fica em cima do corte da
+etiqueta — o topo saía no limite e a borda esquerda comia metade do "A" de
+ALTOMAX.
 
 Texto vai em ASCII puro, de propósito: firmware antigo de Zebra (GK420 etc.)
 não tem fonte Unicode e imprime lixo com ^CI28. E o `^FB` da Zebra não trunca —
@@ -21,7 +25,8 @@ ALTURA_MM_BASE = 150
 DPI_BASE = 203
 W = 800   # dots @203dpi
 H = 1200
-M = 24    # margem lateral
+M = 24    # margem lateral (no desenho; a da impressora é MARGEM_IMPRESSORA_MM)
+MARGEM_IMPRESSORA_MM = 3   # folga real em cima e à esquerda, medida na etiqueta impressa
 
 _TROCAS = str.maketrans({
     '·': '-', '•': '-', '–': '-', '—': '-', '‘': "'", '’': "'", '“': '"', '”': '"',
@@ -53,12 +58,16 @@ class _Canvas:
     """Acumula comandos já escalados para o dpi/tamanho da impressora."""
 
     def __init__(self, dpi: int, largura_mm: int, altura_mm: int):
-        self.fx = (largura_mm / LARGURA_MM_BASE) * (dpi / DPI_BASE)
-        self.fy = (altura_mm / ALTURA_MM_BASE) * (dpi / DPI_BASE)
+        self.pw = round(W * (largura_mm / LARGURA_MM_BASE) * (dpi / DPI_BASE))
+        self.ll = round(H * (altura_mm / ALTURA_MM_BASE) * (dpi / DPI_BASE))
+        # Origem (^LH) afastada do corte; o desenho de WxH é escalado para a
+        # área que sobra, então nada sai pela direita nem pelo rodapé.
+        self.ox = round(MARGEM_IMPRESSORA_MM * dpi / 25.4)
+        self.oy = round(MARGEM_IMPRESSORA_MM * dpi / 25.4)
+        self.fx = (self.pw - self.ox) / W
+        self.fy = (self.ll - self.oy) / H
         self.ff = min(self.fx, self.fy)
         self.cmds: list[str] = []
-        self.pw = round(W * self.fx)
-        self.ll = round(H * self.fy)
 
     def x(self, v):
         return round(v * self.fx)
@@ -99,7 +108,7 @@ class _Canvas:
 
     def render(self) -> str:
         corpo = '\n'.join(self.cmds)
-        return f'^XA\n^PW{self.pw}\n^LL{self.ll}\n^LH0,0\n{corpo}\n^PQ1\n^XZ\n'
+        return f'^XA\n^PW{self.pw}\n^LL{self.ll}\n^LH{self.ox},{self.oy}\n{corpo}\n^PQ1\n^XZ\n'
 
 
 CW = W - 2 * M          # 752 — largura útil
