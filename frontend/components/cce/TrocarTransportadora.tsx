@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import { cartaCorrecaoApi, type CceCarta, type CcePreparar, type CceTransportadora } from '@/lib/api'
+import { cartaCorrecaoApi, type BloqueioEtiqueta, type CceCarta, type CcePreparar, type CceTransportadora } from '@/lib/api'
 import { useDialog } from '@/components/Dialog'
 
 /**
@@ -71,12 +71,20 @@ function fmt(iso: string) {
   return new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
+/** O que o modal devolve para a lista atualizar a linha no lugar (sem recarregar a tela) */
+export type PedidoAtualizado = {
+  id: number; codtra: string; transportadora: string; frete: string; nf_numero: string
+  etiqueta_bloqueio?: BloqueioEtiqueta | null
+}
+
 export function TrocarTransportadora({
-  pedidoId, compacto = false, onAlterado,
+  pedidoId, compacto = false, onAlterado, onCarregado,
 }: {
   pedidoId: number
   compacto?: boolean
-  onAlterado?: (pedido: { id: number; codtra: string; transportadora: string; frete: string; nf_numero: string }) => void
+  onAlterado?: (pedido: PedidoAtualizado) => void
+  /** Chamado assim que o modal lê a nota: se o vínculo sob demanda acabou de achar a NF, a lista já sabe */
+  onCarregado?: (pedido: Pick<PedidoAtualizado, 'id' | 'nf_numero' | 'etiqueta_bloqueio'>) => void
 }) {
   const [aberto, setAberto] = useState(false)
   return (
@@ -94,6 +102,7 @@ export function TrocarTransportadora({
           pedidoId={pedidoId}
           onFechar={() => setAberto(false)}
           onAlterado={(p) => { onAlterado?.(p) }}
+          onCarregado={onCarregado}
         />
       )}
     </>
@@ -101,11 +110,12 @@ export function TrocarTransportadora({
 }
 
 export function ModalCarta({
-  pedidoId, onFechar, onAlterado,
+  pedidoId, onFechar, onAlterado, onCarregado,
 }: {
   pedidoId: number
   onFechar: () => void
-  onAlterado?: (pedido: { id: number; codtra: string; transportadora: string; frete: string; nf_numero: string }) => void
+  onAlterado?: (pedido: PedidoAtualizado) => void
+  onCarregado?: (pedido: Pick<PedidoAtualizado, 'id' | 'nf_numero' | 'etiqueta_bloqueio'>) => void
 }) {
   const dialog = useDialog()
   const [dados, setDados] = useState<CcePreparar | null>(null)
@@ -132,6 +142,9 @@ export function ModalCarta({
     cartaCorrecaoApi.preparar(pedidoId)
       .then((d) => {
         setDados(d)
+        if (d.pedido.tipo === 'pedido') {
+          onCarregado?.({ id: d.pedido.id, nf_numero: d.nf?.numero ?? '', etiqueta_bloqueio: d.etiqueta_bloqueio })
+        }
         const r = d.refazer
         if (r) {
           // carta do Separa apagada no Senior: pré-preenche para refazer com um clique
@@ -172,7 +185,11 @@ export function ModalCarta({
   const volumesNum = volumes.trim() === '' ? null : Number(volumes)
   const volumesValido = volumesNum == null || (Number.isInteger(volumesNum) && volumesNum >= 1 && volumesNum <= 999)
   const mudaVolumes = volumesNum != null && volumesValido && !!dados && volumesNum !== (dados.baseline.volumes ?? -1)
-  const haMudanca = mudaTransportadora || mudaFrete || mudaVolumes || complemento.trim().length > 0
+  // Texto livre (cce_texto): o usuário escreve a carta inteira; o campo passa a ser obrigatório
+  const textoLivre = dados?.config.texto === 'livre'
+  const haMudanca = textoLivre
+    ? complemento.trim().length > 0
+    : mudaTransportadora || mudaFrete || mudaVolumes || complemento.trim().length > 0
 
   // prévia do texto
   useEffect(() => {
@@ -413,13 +430,17 @@ export function ModalCarta({
                   </div>
                 </div>
 
-                {/* Complemento */}
-                <label className="block text-xs font-semibold text-ink-muted uppercase tracking-wide mb-1">Complemento (opcional)</label>
+                {/* Complemento (texto montado) ou o texto inteiro (texto livre) */}
+                <label className="block text-xs font-semibold text-ink-muted uppercase tracking-wide mb-1">
+                  {textoLivre ? 'Texto da carta' : 'Complemento (opcional)'}
+                </label>
                 <textarea
                   value={complemento}
                   onChange={(e) => setComplemento(e.target.value)}
-                  rows={2}
-                  placeholder="Texto livre que entra na carta junto com as correções"
+                  rows={textoLivre ? 4 : 2}
+                  placeholder={textoLivre
+                    ? 'Escreva a carta inteira. Transportadora, frete e volumes escolhidos acima são alterados na nota, mas o texto é só este.'
+                    : 'Texto livre que entra na carta junto com as correções'}
                   className={`${INPUT} mb-3`}
                 />
 
@@ -435,14 +456,18 @@ export function ModalCarta({
                     ) : previa ? (
                       previa.texto
                         ? <p className="text-sm text-ink whitespace-pre-wrap font-mono">{previa.texto}</p>
-                        : <p className="text-sm text-ink-subtle italic">Nada a corrigir: troque a transportadora, o frete, os volumes ou escreva um complemento.</p>
+                        : <p className="text-sm text-ink-subtle italic">{textoLivre ? 'Escreva o texto da carta.' : 'Nada a corrigir: troque a transportadora, o frete, os volumes ou escreva um complemento.'}</p>
                     ) : (
                       <p className="text-sm text-ink-subtle">Montando…</p>
                     )}
                   </div>
                 )}
                 {!haMudanca && (
-                  <p className="text-xs text-ink-subtle mb-3">Escolha o que corrigir: transportadora, frete, quantidade de volumes ou um complemento.</p>
+                  <p className="text-xs text-ink-subtle mb-3">
+                    {textoLivre
+                      ? 'Texto livre (configuração): escreva a carta. Transportadora, frete e volumes mudam na nota se você alterar acima, mas o texto não é montado pelo sistema.'
+                      : 'Escolha o que corrigir: transportadora, frete, quantidade de volumes ou um complemento.'}
+                  </p>
                 )}
 
                 {erroEnvio && <p className="text-sm text-red-600 dark:text-red-400 mb-3">{erroEnvio}</p>}

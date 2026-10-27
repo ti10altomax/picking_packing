@@ -134,7 +134,15 @@ def descobrir_nf(pedido: Pedido) -> dict | None:
         logger.warning('pedido com mais de uma NF fechada; usando a mais recente',
                        extra={'pedido': pedido.id, 'nfs': [_int(r.get('numnfv')) for r in rows]})
         rows.sort(key=lambda r: (_int(r.get('numnfv')) or 0), reverse=True)
-    aplicar_vinculo(pedido, rows[0])
+    mudou = aplicar_vinculo(pedido, rows[0])
+    if mudou['nf'] or mudou['transportadora']:
+        # Mesma consequência do beat: Conferido recente que acabou de ganhar a NF pode
+        # imprimir a etiqueta de volume (só se a automática estiver ligada; nunca reimprime).
+        from apps.impressao.services import disparar_se_pendente  # lazy: evita ciclo
+        try:
+            disparar_se_pendente(pedido)
+        except Exception:
+            logger.exception('etiqueta de volume: falha ao disparar após vínculo sob demanda', extra={'pedido': pedido.id})
     return rows[0]
 
 

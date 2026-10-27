@@ -6,6 +6,7 @@ from rest_framework.response import Response
 
 from apps.core.models import Configuracao
 from apps.pedidos.models import Pedido
+from apps.impressao.services import motivo_bloqueio
 from apps.pedidos.nf_vinculo import aplicar_vinculo, descobrir_nf, pedidos_da_nf
 
 from . import senior, services
@@ -42,7 +43,11 @@ def preparar(request, pk):
     if err:
         return err
     pedido = get_object_or_404(Pedido, pk=pk)
-    return Response(services.preparar(pedido))
+    dados = services.preparar(pedido)
+    # O vínculo sob demanda pode ter acabado de gravar a NF no pedido: a lista de Conferidos
+    # usa isto para liberar o botão Etiqueta na hora, sem recarregar.
+    dados['etiqueta_bloqueio'] = motivo_bloqueio(pedido)
+    return Response(dados)
 
 
 @api_view(['POST'])
@@ -73,7 +78,7 @@ def executar(request, pk):
     return Response({
         'carta': services.serializar(carta),
         'pedido': {'id': pedido.id, 'codtra': pedido.codtra, 'transportadora': pedido.transportadora, 'frete': pedido.frete,
-                   'nf_numero': pedido.nf_numero},
+                   'nf_numero': pedido.nf_numero, 'etiqueta_bloqueio': motivo_bloqueio(pedido)},
     }, status=http_status.HTTP_201_CREATED)
 
 
@@ -165,7 +170,8 @@ def listar(request):
 
 @api_view(['GET', 'PUT'])
 def config(request):
-    """Modo (desligado | gravar | gravar_e_transmitir) e tipGer. Leitura: gestão; escrita: admin."""
+    """Modo (desligado | gravar | gravar_e_transmitir), tipGer e texto (montado | livre).
+    Leitura: gestão; escrita: admin. As mesmas chaves existem no Django Admin → Configurações."""
     err = _exige(request)
     if err:
         return err
@@ -183,4 +189,9 @@ def config(request):
             if tipger not in ('1', '2'):
                 return Response({'erro': 'tipger deve ser 1 (gerar XML) ou 2 (eDocs)'}, status=http_status.HTTP_400_BAD_REQUEST)
             Configuracao.objects.update_or_create(chave=Configuracao.Chave.CCE_TIPGER, defaults={'valor': tipger})
+        if 'texto' in request.data:
+            texto = str(request.data.get('texto') or '')
+            if texto not in services.TEXTOS:
+                return Response({'erro': f'texto inválido; use {", ".join(services.TEXTOS)}'}, status=http_status.HTTP_400_BAD_REQUEST)
+            Configuracao.objects.update_or_create(chave=Configuracao.Chave.CCE_TEXTO, defaults={'valor': texto})
     return Response(services.configuracao())

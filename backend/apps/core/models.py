@@ -19,6 +19,7 @@ class Configuracao(models.Model):
         ETIQUETA_EXIGE_NF = 'etiqueta_exige_nf', 'Etiqueta de volume só com NF emitida'
         CCE_MODO = 'cce_modo', 'Carta de correção: modo'
         CCE_TIPGER = 'cce_tipger', 'Carta de correção: tipo de geração (tipGer)'
+        CCE_TEXTO = 'cce_texto', 'Carta de correção: texto (montado | livre)'
 
     # valores válidos por chave (documentação viva; o admin não valida à força)
     DEFAULTS = {
@@ -43,6 +44,10 @@ class Configuracao(models.Model):
         # 'gravar_e_transmitir' também chama EmitirCartaCorrecao (evento na SEFAZ, sem volta).
         'cce_modo': 'desligado',
         'cce_tipger': '2',                                         # 1 gera XML | 2 WS eDocs
+        # Texto da carta (2026-10-27, enquanto a diretoria discute): 'montado' = o sistema
+        # escreve "ONDE SE LE X, LEIA-SE Y" + complemento opcional | 'livre' = o usuário
+        # digita o texto inteiro (obrigatório). As cartas anteriores são repetidas nos dois.
+        'cce_texto': 'montado',                                    # | livre
     }
 
     chave = models.CharField(max_length=50, choices=Chave.choices, unique=True)

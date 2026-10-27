@@ -633,10 +633,13 @@ export const agoraApi = {
 // ---------------------------------------------------------------------------
 
 export type CceModo = 'desligado' | 'gravar' | 'gravar_e_transmitir'
+/** Texto da carta: montado pelo sistema ("ONDE SE LE…" + complemento) ou digitado inteiro pelo usuário (2026-10-27) */
+export type CceTexto = 'montado' | 'livre'
 
 export type CceConfig = {
   modo: CceModo
   tipger: number
+  texto: CceTexto
   dry_run: boolean
   wsdl_carta_configurado: boolean
   wsdl_documento_configurado: boolean
@@ -679,6 +682,8 @@ export type CcePreparar = {
   }
   // NF alvo: a própria (documento NF) ou a emitida a partir do pedido (Pedido.nf_*); null = pedido sem nota
   nf: { codfil: string; codsnf: string; numero: string } | null
+  // Bloqueio do botão Etiqueta depois do vínculo sob demanda (a lista de Conferidos atualiza a linha sem recarregar)
+  etiqueta_bloqueio: BloqueioEtiqueta | null
   // quantidade de volumes: na nota (E140NFV.qtdemb) e montados no Separa
   volumes: { nf: number | null; separa: number }
   // "onde se lê": valores atuais da nota, desfazendo cartas do Separa que foram apagadas no Senior
@@ -731,6 +736,6 @@ export const cartaCorrecaoApi = {
   listar: (params: { status?: string; search?: string; pedido?: number } = {}) =>
     api.get('/api/carta-correcao/', { params }).then((r) => r.data as { cartas: CceCarta[]; config: CceConfig }),
   config: () => api.get('/api/carta-correcao/config/').then((r) => r.data as CceConfig),
-  salvarConfig: (dados: { modo?: CceModo; tipger?: '1' | '2' }) =>
+  salvarConfig: (dados: { modo?: CceModo; tipger?: '1' | '2' ; texto?: CceTexto }) =>
     api.put('/api/carta-correcao/config/', dados).then((r) => r.data as CceConfig),
 }

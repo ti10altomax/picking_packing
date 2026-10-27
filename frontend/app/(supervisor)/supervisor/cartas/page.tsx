@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { DocBadges } from '@/components/ui/DocBadges'
 import { ChipStatusCarta, ModalCarta, IconeCaminhao, resumoMudancas, rotuloDocumento } from '@/components/cce/TrocarTransportadora'
-import { cartaCorrecaoApi, type CceCarta, type CceConfig, type CceDocumento, type CceModo } from '@/lib/api'
+import { cartaCorrecaoApi, type CceCarta, type CceConfig, type CceDocumento, type CceModo, type CceTexto } from '@/lib/api'
 import { useAuthStore } from '@/stores/authStore'
 
 /**
@@ -11,7 +11,7 @@ import { useAuthStore } from '@/stores/authStore'
  *    e/ou volumes da nota (qualquer status, menos cancelado). Número de NF que o Separa não
  *    conhece → o servidor pergunta ao Senior de qual pedido ela saiu e vincula;
  * 2) histórico das cartas feitas pelo Separa, com o rastro dos WS;
- * 3) configuração do modo (admin): desligado | gravar | gravar e transmitir.
+ * 3) configuração (admin): modo desligado | gravar | gravar e transmitir; texto montado | livre.
  */
 
 const STATUS_LABEL: Record<string, string> = {
@@ -95,6 +95,19 @@ export default function CartasCorrecaoPage() {
     }
   }
 
+  async function salvarTexto(texto: CceTexto) {
+    setSalvando(true)
+    setErroConfig(null)
+    try {
+      setConfig(await cartaCorrecaoApi.salvarConfig({ texto }))
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { erro?: string } } }
+      setErroConfig(err.response?.data?.erro ?? 'Falha ao salvar.')
+    } finally {
+      setSalvando(false)
+    }
+  }
+
   async function salvarTipger(tipger: '1' | '2') {
     setSalvando(true)
     setErroConfig(null)
@@ -125,6 +138,7 @@ export default function CartasCorrecaoPage() {
           : 'border-surface-border bg-surface-card text-ink'}`}>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <span>Modo: <strong>{MODO_LABEL[config.modo]}</strong></span>
+            <span>Texto: <strong>{config.texto === 'livre' ? 'livre' : 'montado pelo sistema'}</strong></span>
             {config.dry_run && (
               <span className="text-xs px-2 py-0.5 rounded-full font-semibold bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-300">
                 simulação (dry-run) — não chama o Senior
@@ -151,6 +165,16 @@ export default function CartasCorrecaoPage() {
                   <option value="desligado">Desligado</option>
                   <option value="gravar">Só gravar</option>
                   <option value="gravar_e_transmitir">Gravar e transmitir</option>
+                </select>
+                <select
+                  value={config.texto}
+                  disabled={salvando}
+                  onChange={(e) => salvarTexto(e.target.value as CceTexto)}
+                  title="Montado: o sistema escreve 'ONDE SE LE X, LEIA-SE Y' e o usuário só complementa. Livre: o usuário digita o texto inteiro; transportadora, frete e volumes continuam sendo alterados na nota. As cartas anteriores são repetidas nos dois."
+                  className="bg-surface-card border border-surface-border text-ink rounded-lg px-2 min-h-[40px] text-sm"
+                >
+                  <option value="montado">Texto montado pelo sistema</option>
+                  <option value="livre">Texto livre</option>
                 </select>
                 {config.modo === 'gravar_e_transmitir' && (
                   <select

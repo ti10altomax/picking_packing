@@ -73,6 +73,12 @@ export default function ConferidosPage() {
 
   useEffect(() => { carregar('', 1, false) }, [carregar])
 
+  // Atualiza uma linha no lugar (NF descoberta pelo Corrigir NF, carta gravada, etiqueta impressa)
+  // em vez de recarregar a lista — sem "Carregando…" piscando na tela.
+  const atualizarLinha = useCallback((id: number, campos: Partial<Pedido>) => {
+    setPedidos((prev) => prev.map((p) => (p.id === id ? { ...p, ...campos } : p)))
+  }, [])
+
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
@@ -213,13 +219,17 @@ export default function ConferidosPage() {
                         pedidoId={p.id}
                         impressaEm={p.etiqueta_volume_em}
                         bloqueio={p.etiqueta_bloqueio ?? null}
-                        onImpresso={() => carregar(buscaAtiva, 1, false)}
+                        onImpresso={() => atualizarLinha(p.id, { etiqueta_volume_em: new Date().toISOString() })}
                       />
                       <HistoricoBotao pedidoId={p.id} />
                       {/* Carta de correção (ponto 6): transportadora/frete/volumes da NF — NF própria ou a do pedido faturado */}
                       <TrocarTransportadora
                         pedidoId={p.id}
-                        onAlterado={() => carregar(buscaAtiva, 1, false)}
+                        onCarregado={(a) => atualizarLinha(a.id, { nf_numero: a.nf_numero, etiqueta_bloqueio: a.etiqueta_bloqueio })}
+                        onAlterado={(a) => atualizarLinha(a.id, {
+                          transportadora: a.transportadora, nf_numero: a.nf_numero,
+                          ...(a.etiqueta_bloqueio !== undefined ? { etiqueta_bloqueio: a.etiqueta_bloqueio } : {}),
+                        })}
                       />
                     </div>
                     </div>

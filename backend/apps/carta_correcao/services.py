@@ -10,7 +10,9 @@ Regras (decididas com o usuário em 2026-10-22, sem passar pela diretoria):
     e quantidade de volumes (`qtdEmb`, padrão = volumes montados no Separa); qualquer
     combinação, mais um complemento livre;
   - texto gerado pelo sistema, SEMPRE repetindo as cartas anteriores da nota, porque a
-    última carta substitui todas as outras;
+    última carta substitui todas as outras; desde 2026-10-27 `Configuracao.cce_texto`
+    permite `livre` (o usuário digita o texto inteiro — a diretoria ainda discute o
+    formato), e as anteriores continuam sendo repetidas nos dois modos;
   - modo em `Configuracao.cce_modo`: desligado | gravar | gravar_e_transmitir;
     `cce_tipger` (1 gera XML, 2 eDocs) para a transmissão;
   - `SENIOR_WS_DRY_RUN` monta tudo, grava o rastro como `simulada` e não chama o Senior;
@@ -37,6 +39,7 @@ PERFIS_CCE = ('supervisor_vendas', 'supervisor_patio', 'admin')
 LIMITE_TEXTO = 999          # String(999) na porta de envio; a SEFAZ aceita até 1000 em xCorrecao
 LIMITE_VOLUMES = 999
 MODOS = ('desligado', 'gravar', 'gravar_e_transmitir')
+TEXTOS = ('montado', 'livre')   # cce_texto: o sistema monta "ONDE SE LE…" | o usuário digita tudo
 FRETE_LABEL = {'C': 'POR CONTA DO EMITENTE (CIF)', 'F': 'POR CONTA DO DESTINATARIO (FOB)', 'X': 'SEM FRETE'}
 SEPARADOR_ANTERIORES = ' | CORRECOES ANTERIORES MANTIDAS: '
 
@@ -63,11 +66,17 @@ def tipger_atual() -> int:
     return int(valor) if str(valor) in ('1', '2', '3') else 2
 
 
+def texto_modo_atual() -> str:
+    valor = Configuracao.obter(Configuracao.Chave.CCE_TEXTO) or 'montado'
+    return valor if valor in TEXTOS else 'montado'
+
+
 def configuracao() -> dict:
     from django.conf import settings
     return {
         'modo': modo_atual(),
         'tipger': tipger_atual(),
+        'texto': texto_modo_atual(),
         'dry_run': senior.dry_run(),
         'wsdl_carta_configurado': bool(getattr(settings, 'SENIOR_WSDL_CARTA_CORRECAO', '')),
         'wsdl_documento_configurado': bool(getattr(settings, 'SENIOR_WSDL_DOCUMENTO_FISCAL', '')),
@@ -86,10 +95,14 @@ def _ascii_maiusculo(texto: str) -> str:
 
 
 def montar_texto(base: dict, nova: dict | None, frete_novo: str, vol_novo: int | None, complemento: str,
-                 anteriores: list[dict]) -> str:
+                 anteriores: list[dict], livre: bool = False) -> str:
     """`base` = o que o documento autorizado diz hoje ({codtra, transportadora, frete, volumes}, ver
-    `_baseline`); é o "onde se lê". `vol_novo` = quantidade informada ou None."""
+    `_baseline`); é o "onde se lê". `vol_novo` = quantidade informada ou None.
+    `livre` (cce_texto = livre): o texto é só o que o usuário digitou em `complemento`; as
+    correções continuam indo nos campos do Gravar, mas o sistema não escreve nada por ele."""
     partes = []
+    if livre:
+        nova, frete_novo, vol_novo = None, '', None
     if nova and nova['codtra'] != base['codtra']:
         de = f"'{_ascii_maiusculo(base['transportadora'])}' ({base['codtra']})" if base['codtra'] else 'SEM TRANSPORTADORA'
         partes.append(f"TRANSPORTADORA: ONDE SE LE {de}, LEIA-SE '{_ascii_maiusculo(nova['nome'])}' ({nova['codtra']}).")
@@ -274,7 +287,8 @@ def previa(pedido: Pedido, codtra_novo: str, frete_novo: str, volumes_novo, comp
     base = _baseline(pedido, {}, [])
     if ident:
         _, anteriores, _, base = _contexto(pedido, ident)
-    texto = montar_texto(base, nova, frete_novo, vol_novo, complemento, anteriores['cartas'])
+    texto = montar_texto(base, nova, frete_novo, vol_novo, complemento, anteriores['cartas'],
+                         livre=texto_modo_atual() == 'livre')
     return {'texto': texto, 'tamanho': len(texto), 'limite': LIMITE_TEXTO, 'transportadora_nova': nova,
             'volumes_anterior': base['volumes'], 'volumes_novo': vol_novo, 'baseline': base}
 
@@ -309,6 +323,9 @@ def executar(pedido: Pedido, usuario, codtra_novo: str, frete_novo: str, volumes
     if frete_novo and frete_novo not in ('C', 'F'):
         raise ErroCarta('frete_invalido', 'Frete deve ser C (entrega) ou F (retira).')
     complemento = (complemento or '').strip()
+    livre = texto_modo_atual() == 'livre'
+    if livre and not complemento:
+        raise ErroCarta('texto_obrigatorio', 'Texto da carta em modo livre: escreva o texto antes de gravar.')
     nova = _resolver_transportadora(codtra_novo) if str(codtra_novo or '').strip() else None
     vol_novo = _parse_volumes(volumes_novo)
 
@@ -331,9 +348,9 @@ def executar(pedido: Pedido, usuario, codtra_novo: str, frete_novo: str, volumes
     if not (muda_transportadora or muda_frete or muda_volumes or complemento):
         raise ErroCarta('sem_mudanca', 'Nada a corrigir: transportadora, frete e volumes são os mesmos e não há texto complementar.')
 
-    texto = montar_texto(base, nova, frete_novo, vol_novo, complemento, anteriores['cartas'])
+    texto = montar_texto(base, nova, frete_novo, vol_novo, complemento, anteriores['cartas'], livre=livre)
     if len(texto) > LIMITE_TEXTO:
-        raise ErroCarta('texto_longo', f'Texto da carta com {len(texto)} caracteres; o limite é {LIMITE_TEXTO}. Encurte o complemento.')
+        raise ErroCarta('texto_longo', f'Texto da carta com {len(texto)} caracteres; o limite é {LIMITE_TEXTO}. Encurte o texto.')
 
     agora = timezone.localtime()
     payload = {
