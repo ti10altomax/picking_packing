@@ -129,6 +129,10 @@ export function ModalCarta({
   const [frete, setFrete] = useState<'' | 'C' | 'F'>('')
   const [volumes, setVolumes] = useState('')
   const [complemento, setComplemento] = useState('')
+  // Texto livre: última sugestão montada pelo sistema. Enquanto o campo for igual a ela,
+  // acompanha as escolhas; depois que o usuário edita, fica como está (botão "Remontar").
+  const sugestaoRef = useRef('')
+  const [sugestao, setSugestao] = useState('')
 
   const [previa, setPrevia] = useState<{ texto: string; tamanho: number; limite: number } | null>(null)
   const [erroPrevia, setErroPrevia] = useState<string | null>(null)
@@ -190,6 +194,22 @@ export function ModalCarta({
   const haMudanca = textoLivre
     ? complemento.trim().length > 0
     : mudaTransportadora || mudaFrete || mudaVolumes || complemento.trim().length > 0
+
+  // texto livre: monta a sugestão a partir das escolhas e põe no campo, se ele não foi editado
+  useEffect(() => {
+    if (!dados || dados.bloqueio || !textoLivre || !volumesValido) return
+    const t = setTimeout(async () => {
+      try {
+        const p = await cartaCorrecaoApi.previa(pedidoId, { codtra: escolhida?.codtra ?? '', frete, volumes, complemento: '' })
+        setComplemento((atual) => (atual === sugestaoRef.current ? p.sugestao : atual))
+        sugestaoRef.current = p.sugestao
+        setSugestao(p.sugestao)
+      } catch {
+        /* a prévia abaixo mostra o erro */
+      }
+    }, 300)
+    return () => clearTimeout(t)
+  }, [dados, escolhida, frete, volumes, pedidoId, textoLivre, volumesValido])
 
   // prévia do texto
   useEffect(() => {
@@ -431,15 +451,27 @@ export function ModalCarta({
                 </div>
 
                 {/* Complemento (texto montado) ou o texto inteiro (texto livre) */}
-                <label className="block text-xs font-semibold text-ink-muted uppercase tracking-wide mb-1">
-                  {textoLivre ? 'Texto da carta' : 'Complemento (opcional)'}
-                </label>
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <label className="block text-xs font-semibold text-ink-muted uppercase tracking-wide">
+                    {textoLivre ? 'Texto da carta' : 'Complemento (opcional)'}
+                  </label>
+                  {textoLivre && complemento !== sugestao && sugestao && (
+                    <button
+                      type="button"
+                      onClick={() => setComplemento(sugestao)}
+                      className="text-xs text-blue-600 dark:text-blue-400 underline underline-offset-2 min-h-[28px]"
+                      title="Volta ao texto montado pelo sistema para as escolhas acima"
+                    >
+                      Remontar pelo sistema
+                    </button>
+                  )}
+                </div>
                 <textarea
                   value={complemento}
                   onChange={(e) => setComplemento(e.target.value)}
                   rows={textoLivre ? 4 : 2}
                   placeholder={textoLivre
-                    ? 'Escreva a carta inteira. Transportadora, frete e volumes escolhidos acima são alterados na nota, mas o texto é só este.'
+                    ? 'Escolha transportadora, frete ou volumes acima e o texto é montado aqui. Edite, apague ou escreva outro.'
                     : 'Texto livre que entra na carta junto com as correções'}
                   className={`${INPUT} mb-3`}
                 />
@@ -465,7 +497,7 @@ export function ModalCarta({
                 {!haMudanca && (
                   <p className="text-xs text-ink-subtle mb-3">
                     {textoLivre
-                      ? 'Texto livre (configuração): escreva a carta. Transportadora, frete e volumes mudam na nota se você alterar acima, mas o texto não é montado pelo sistema.'
+                      ? 'Texto livre (configuração): o sistema monta o texto no campo a partir do que você escolher acima; você pode editar, apagar tudo ou escrever outro.'
                       : 'Escolha o que corrigir: transportadora, frete, quantidade de volumes ou um complemento.'}
                   </p>
                 )}

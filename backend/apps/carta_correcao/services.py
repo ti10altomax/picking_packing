@@ -11,8 +11,9 @@ Regras (decididas com o usuário em 2026-10-22, sem passar pela diretoria):
     combinação, mais um complemento livre;
   - texto gerado pelo sistema, SEMPRE repetindo as cartas anteriores da nota, porque a
     última carta substitui todas as outras; desde 2026-10-27 `Configuracao.cce_texto`
-    permite `livre` (o usuário digita o texto inteiro — a diretoria ainda discute o
-    formato), e as anteriores continuam sendo repetidas nos dois modos;
+    permite `livre` (o sistema sugere o texto montado no campo e o usuário edita, apaga
+    ou escreve outro — a diretoria ainda discute o formato), e as anteriores continuam
+    sendo repetidas nos dois modos;
   - modo em `Configuracao.cce_modo`: desligado | gravar | gravar_e_transmitir;
     `cce_tipger` (1 gera XML, 2 eDocs) para a transmissão;
   - `SENIOR_WS_DRY_RUN` monta tudo, grava o rastro como `simulada` e não chama o Senior;
@@ -126,7 +127,8 @@ def montar_texto(base: dict, nova: dict | None, frete_novo: str, vol_novo: int |
             vistos.add(t)
             unicos.append(t)
     if unicos:
-        texto = texto + SEPARADOR_ANTERIORES + ' / '.join(unicos)
+        # texto novo vazio (modo livre com o campo limpo): sem o ' | ' pendurado na frente
+        texto = (texto + SEPARADOR_ANTERIORES if texto else SEPARADOR_ANTERIORES.lstrip(' |')) + ' / '.join(unicos)
     return texto
 
 
@@ -289,7 +291,11 @@ def previa(pedido: Pedido, codtra_novo: str, frete_novo: str, volumes_novo, comp
         _, anteriores, _, base = _contexto(pedido, ident)
     texto = montar_texto(base, nova, frete_novo, vol_novo, complemento, anteriores['cartas'],
                          livre=texto_modo_atual() == 'livre')
-    return {'texto': texto, 'tamanho': len(texto), 'limite': LIMITE_TEXTO, 'transportadora_nova': nova,
+    # `sugestao` = só as frases que o sistema montaria para as escolhas atuais (sem complemento,
+    # sem anteriores): no modo livre o modal põe isso no campo editável como ponto de partida.
+    sugestao = montar_texto(base, nova, frete_novo, vol_novo, '', [])
+    return {'texto': texto, 'tamanho': len(texto), 'limite': LIMITE_TEXTO, 'sugestao': sugestao,
+            'transportadora_nova': nova,
             'volumes_anterior': base['volumes'], 'volumes_novo': vol_novo, 'baseline': base}
 
 

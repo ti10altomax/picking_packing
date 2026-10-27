@@ -717,7 +717,8 @@ export const cartaCorrecaoApi = {
   previa: (pedidoId: number, body: CceCorpo) =>
     api.post(`/api/carta-correcao/pedidos/${pedidoId}/previa/`, body)
       .then((r) => r.data as {
-        texto: string; tamanho: number; limite: number; transportadora_nova: CceTransportadora | null
+        // `sugestao` = frases montadas pelo sistema para as escolhas atuais (texto livre parte daí)
+        texto: string; tamanho: number; limite: number; sugestao: string; transportadora_nova: CceTransportadora | null
         volumes_anterior: number | null; volumes_novo: number | null
       }),
   executar: (pedidoId: number, body: CceCorpo) =>
