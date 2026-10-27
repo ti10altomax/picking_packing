@@ -14,7 +14,7 @@ import { SupervisorNav } from '@/components/SupervisorNav'
 import { DocBadges } from '@/components/DocBadges'
 import { CabecalhoLista } from '@/components/CabecalhoLista'
 import { EscolherImpressora } from '@/components/EscolherImpressora'
-import { supervisorApi, pedidosApi } from '@/lib/api'
+import { supervisorApi, pedidosApi, rotuloBloqueio, type BloqueioEtiqueta } from '@/lib/api'
 
 type Pedido = {
   id: number
@@ -30,6 +30,7 @@ type Pedido = {
   duracao_conferencia: string | null
   transportadora?: string
   etiqueta_volume_em?: string | null
+  etiqueta_bloqueio?: BloqueioEtiqueta | null
 }
 
 type Item = {
@@ -43,6 +44,12 @@ type Item = {
 }
 
 type Paginado = { count: number; next: string | null; results: Pedido[] }
+
+/** Bloqueio do botão Etiqueta: vem do backend; APK contra backend antigo cai na regra da transportadora */
+function bloqueioEtiqueta(p: { etiqueta_bloqueio?: BloqueioEtiqueta | null; transportadora?: string }): BloqueioEtiqueta | null {
+  if (p.etiqueta_bloqueio !== undefined) return p.etiqueta_bloqueio
+  return p.transportadora ? null : { codigo: 'sem_transportadora', mensagem: 'sem transportadora no Senior' }
+}
 
 function formatarData(iso: string | null): string {
   if (!iso) return ''
@@ -226,23 +233,24 @@ export default function Conferidos() {
                   </View>
                 </Pressable>
 
-                {/* Etiqueta de volume (ponto 7): imprime/reimprime; só com transportadora */}
+                {/* Etiqueta de volume (ponto 7): imprime/reimprime; o backend diz se pode
+                    (transportadora e, se configurado, NF emitida) em `etiqueta_bloqueio` */}
                 <View className="flex-row items-center justify-between px-4 pb-3 -mt-1">
                   <Text className="text-xs text-ink-subtle">
                     {p.etiqueta_volume_em
                       ? `etiqueta impressa ${formatarData(p.etiqueta_volume_em)}`
-                      : p.transportadora ? 'etiqueta não impressa' : 'sem transportadora — etiqueta aguardando'}
+                      : bloqueioEtiqueta(p) ? `${rotuloBloqueio(bloqueioEtiqueta(p))} — etiqueta aguardando` : 'etiqueta não impressa'}
                   </Text>
                   <Pressable
                     onPress={() => setPedidoImprimir(p.id)}
-                    disabled={!p.transportadora}
+                    disabled={!!bloqueioEtiqueta(p)}
                     className={`h-10 px-3 rounded-lg border items-center justify-center ${
-                      !p.transportadora ? 'border-surface-border opacity-40'
+                      bloqueioEtiqueta(p) ? 'border-surface-border opacity-40'
                         : p.etiqueta_volume_em ? 'border-surface-border bg-surface-card'
                         : 'border-emerald-500/40 bg-emerald-500/15'
                     }`}
                   >
-                    <Text className={`text-sm font-semibold ${p.etiqueta_volume_em || !p.transportadora ? 'text-ink-muted' : 'text-emerald-300'}`}>
+                    <Text className={`text-sm font-semibold ${p.etiqueta_volume_em || bloqueioEtiqueta(p) ? 'text-ink-muted' : 'text-emerald-300'}`}>
                       {p.etiqueta_volume_em ? 'Reimprimir' : 'Etiqueta'}
                     </Text>
                   </Pressable>

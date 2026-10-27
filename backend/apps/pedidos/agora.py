@@ -104,9 +104,10 @@ def painel() -> dict:
     ]
 
     # ----- filas -----
-    from apps.impressao.services import pendentes_qs
+    from apps.impressao.services import filtro_pronta, pendentes_qs
     from apps.conferencia.views import STATUS_COM_CONFERENCIA  # lazy: evita ciclo de import
     etiquetas = pendentes_qs()
+    pronta = filtro_pronta()  # transportadora e, se configurado, NF vinculada
     atribuidos_qs = Pedido.objects.filter(status=S.ATRIBUIDO)
     mais_antigo = atribuidos_qs.order_by('atribuido_em').values_list('atribuido_em', flat=True).first()
     filas = {
@@ -120,8 +121,9 @@ def painel() -> dict:
         'cancelados_a_transferir': Pedido.objects.filter(
             status=S.CANCELADO, status_anterior__in=STATUS_COM_CONFERENCIA, transferido_para__isnull=True,
         ).count(),
-        'etiquetas_prontas': etiquetas.filter(transportadora__gt='').count(),
-        'etiquetas_aguardando_transportadora': etiquetas.filter(transportadora='').count(),
+        'etiquetas_prontas': etiquetas.filter(pronta).count(),
+        # nome mantido por compatibilidade com o APK; é "aguardando o Senior" (transportadora ou NF)
+        'etiquetas_aguardando_transportadora': etiquetas.exclude(pronta).count(),
         'conferidos_hoje': Pedido.objects.filter(status=S.CONFERIDO, conferido_em__gte=hoje).count(),
         'conferidos_1h': Pedido.objects.filter(status=S.CONFERIDO, conferido_em__gte=uma_hora).count(),
         'bips_1h': PedidoLog.objects.filter(acao='item_bipado', criado_em__gte=uma_hora).count(),

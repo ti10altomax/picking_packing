@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import { impressaoApi, type ImpressoraEtiqueta } from '@/lib/api'
+import { impressaoApi, type BloqueioEtiqueta, type ImpressoraEtiqueta } from '@/lib/api'
 
 // Última impressora escolhida neste aparelho — conveniência local, nada de servidor
 const CHAVE_ULTIMA = 'etiqueta_impressora'
@@ -37,13 +37,21 @@ export function IconeEtiqueta({ className }: { className?: string }) {
  * Botão "Etiqueta / Reimprimir" com o seletor de destino (Zebra de rede, agente
  * USB ou navegador). Usado na lista de Conferidos e em Etiquetas pendentes.
  */
+/** Texto curto do botão desabilitado, por código do bloqueio vindo do backend */
+export function rotuloBloqueio(b: BloqueioEtiqueta | null | undefined): string {
+  if (!b) return ''
+  if (b.codigo === 'sem_transportadora') return 'Sem transportadora'
+  if (b.codigo === 'sem_nf') return 'Sem NF'
+  return 'Indisponível'
+}
+
 export function ImprimirEtiqueta({
   pedidoId, impressaEm, bloqueio, onImpresso, compacto = false,
 }: {
   pedidoId: number
   impressaEm?: string | null
-  /** Mensagem de bloqueio (ex.: sem transportadora) — desabilita o botão */
-  bloqueio?: string | null
+  /** Bloqueio vindo do backend (`etiqueta_bloqueio` / `bloqueio`) — desabilita o botão; a mensagem vai no title */
+  bloqueio?: BloqueioEtiqueta | null
   onImpresso?: () => void
   compacto?: boolean
 }) {
@@ -102,7 +110,7 @@ export function ImprimirEtiqueta({
       <button
         type="button"
         disabled={!!bloqueio}
-        title={bloqueio ?? undefined}
+        title={bloqueio?.mensagem}
         onClick={() => setAberto((v) => !v)}
         className={`inline-flex items-center gap-1.5 rounded-lg border text-sm font-medium min-h-[40px] px-3 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
           impressaEm
@@ -111,7 +119,7 @@ export function ImprimirEtiqueta({
         }`}
       >
         <IconeEtiqueta />
-        {!compacto && (bloqueio ? 'Sem transportadora' : rotulo)}
+        {!compacto && (bloqueio ? rotuloBloqueio(bloqueio) : rotulo)}
       </button>
       {quando && !compacto && (
         <span className="text-[11px] text-ink-subtle mt-0.5 whitespace-nowrap">impressa {quando}</span>

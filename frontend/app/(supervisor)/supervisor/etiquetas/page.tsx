@@ -2,14 +2,15 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { DocBadges } from '@/components/ui/DocBadges'
-import { ImprimirEtiqueta, escolhaInicial, guardarUltimaImpressora } from '@/components/etiquetas/ImprimirEtiqueta'
+import { ImprimirEtiqueta, escolhaInicial, guardarUltimaImpressora, rotuloBloqueio } from '@/components/etiquetas/ImprimirEtiqueta'
 import { impressaoApi, type EtiquetaPendente, type ImpressoraEtiqueta } from '@/lib/api'
 import { useAuthStore } from '@/stores/authStore'
 
 /**
  * Etiquetas de volume pendentes — conferidos (janela do sync) ainda sem
- * impressão `ok`. "Prontas" têm transportadora; "Aguardando transportadora"
- * saem sozinhas quando o Senior preencher (beat), se houver impressora padrão.
+ * impressão `ok`. "Prontas" têm transportadora (e NF, quando a configuração
+ * "só com NF" está ligada); "Aguardando Senior" saem sozinhas quando o Senior
+ * preencher (beats), se houver impressora padrão.
  */
 
 function fmt(iso: string | null) {
@@ -25,6 +26,7 @@ export default function EtiquetasPendentesPage() {
   const [impressoras, setImpressoras] = useState<ImpressoraEtiqueta[]>([])
   const [padrao, setPadrao] = useState<number | null>(null)
   const [automatica, setAutomatica] = useState(true)
+  const [exigeNf, setExigeNf] = useState(true)
   const [destinoLote, setDestinoLote] = useState<number | 'navegador'>('navegador')
   const [lote, setLote] = useState<{ total: number; feitas: number; erros: string[] } | null>(null)
 
@@ -37,6 +39,7 @@ export default function EtiquetasPendentesPage() {
       setImpressoras(i.impressoras)
       setPadrao(i.impressora_padrao)
       setAutomatica(i.automatica)
+      setExigeNf(p.exige_nf)
       setDestinoLote(escolhaInicial(i.impressoras))
     } finally {
       setCarregando(false)
@@ -76,6 +79,7 @@ export default function EtiquetasPendentesPage() {
             Conferidos ainda sem etiqueta impressa · impressão automática{' '}
             <strong className="text-ink">{automatica ? 'ligada' : 'desligada'}</strong>
             {' · '}padrão: <strong className="text-ink">{nomePadrao ?? 'nenhuma'}</strong>
+            {' · '}só com NF: <strong className="text-ink">{exigeNf ? 'sim' : 'não'}</strong>
             {user?.perfil === 'admin' && (
               <> · <Link href="/admin/impressoras" className="underline underline-offset-2 hover:text-ink">impressoras</Link></>
             )}
@@ -128,14 +132,14 @@ export default function EtiquetasPendentesPage() {
             )}
           </section>
 
-          {/* Aguardando transportadora */}
+          {/* Aguardando o Senior: transportadora ou NF */}
           <section>
             <h2 className="text-base font-semibold text-ink mb-2">
-              Aguardando transportadora <span className="text-ink-subtle font-normal">({aguardando.length})</span>
+              Aguardando Senior <span className="text-ink-subtle font-normal">({aguardando.length})</span>
             </h2>
             <p className="text-xs text-ink-muted mb-2">
-              Entregas conferidas cujo documento ainda não tem transportadora no Senior. Quando ela chegar, a etiqueta
-              sai na impressora padrão automaticamente (ou aparece em "Prontas").
+              Conferidos cujo documento ainda não tem transportadora no Senior{exigeNf ? ' ou cujo pedido ainda não foi faturado (sem NF)' : ''}.
+              Quando chegar, a etiqueta sai na impressora padrão automaticamente (ou aparece em "Prontas").
             </p>
             {aguardando.length === 0 ? (
               <p className="text-ink-subtle text-sm py-6 text-center bg-surface-card border border-surface-border rounded-xl">Nenhuma.</p>
@@ -165,6 +169,8 @@ function Linha({ p, onImpresso }: { p: EtiquetaPendente; onImpresso: () => void 
           {p.transportadora
             ? <strong className="text-ink">{p.transportadora}</strong>
             : <span className="text-amber-600 dark:text-amber-400">sem transportadora</span>}
+          {p.bloqueio?.codigo === 'sem_nf' && <> · <span className="text-amber-600 dark:text-amber-400">sem NF emitida</span></>}
+          {p.tipo === 'pedido' && p.nf_numero && <> · NF <strong className="text-ink">{p.nf_numero}</strong></>}
           {p.conferido_em && <> · conferido {fmt(p.conferido_em)}</>}
           {p.conferente && <> por <strong className="text-ink">{p.conferente}</strong></>}
           {p.sequencia_numero && <> · seq. {p.sequencia_numero}</>}
@@ -175,7 +181,7 @@ function Linha({ p, onImpresso }: { p: EtiquetaPendente; onImpresso: () => void 
       </div>
       <ImprimirEtiqueta
         pedidoId={p.id}
-        bloqueio={p.pronta ? null : 'Sem transportadora no Senior'}
+        bloqueio={p.bloqueio}
         onImpresso={onImpresso}
       />
     </li>

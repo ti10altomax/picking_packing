@@ -57,7 +57,7 @@ export default function Agora() {
     { rotulo: 'Fechamentos', valor: f.aguardando_fechamento, href: '/supervisor/patio', alerta: f.aguardando_fechamento > 0 },
     { rotulo: 'Não conformes', valor: f.nao_conformes, href: '/supervisor/nao-conformes', alerta: f.nao_conformes > 0 },
     { rotulo: 'Cancelados', valor: f.cancelados_a_transferir, href: '/supervisor/cancelados', alerta: f.cancelados_a_transferir > 0 },
-    { rotulo: 'Etiquetas', valor: f.etiquetas_prontas, href: '/supervisor/etiquetas', sub: f.etiquetas_aguardando_transportadora > 0 ? `${f.etiquetas_aguardando_transportadora} aguardando` : undefined, alerta: false },
+    { rotulo: 'Etiquetas', valor: f.etiquetas_prontas, href: '/supervisor/etiquetas', sub: f.etiquetas_aguardando_transportadora > 0 ? `${f.etiquetas_aguardando_transportadora} aguardando Senior` : undefined, alerta: false },
     { rotulo: 'Conferidos hoje', valor: f.conferidos_hoje, href: '/supervisor/conferidos', sub: `${f.conferidos_1h} na última hora`, alerta: false },
   ] : []
 

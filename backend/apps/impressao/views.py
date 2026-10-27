@@ -137,8 +137,10 @@ def pendentes(request):
     if err:
         return err
     lista = []
+    exige_nf = services.etiqueta_exige_nf()
     for p in services.pendentes_qs():
         ultimo_erro = p.impressoes_etiqueta.filter(status=ImpressaoEtiqueta.Status.ERRO).first()
+        bloqueio = services.motivo_bloqueio(p, exige_nf=exige_nf)
         lista.append({
             'id': p.id,
             'tipo': p.tipo,
@@ -146,16 +148,21 @@ def pendentes(request):
             'frete': p.frete,
             'cliente': p.cliente,
             'transportadora': p.transportadora,
+            'nf_numero': p.nf_numero if p.tipo == Pedido.Tipo.PEDIDO else p.numero_externo,
             'conferido_em': p.conferido_em,
             'conferente': p.conferente.username if p.conferente else None,
             'sequencia_numero': p.sequencia.numero if p.sequencia else None,
             'qtd_volumes': services.qtd_volumes_com_itens(p),
-            'pronta': bool((p.transportadora or '').strip()),
+            'pronta': bloqueio is None,
+            'bloqueio': bloqueio,  # {codigo, mensagem} — sem_transportadora | sem_nf
             'ultimo_erro': ultimo_erro.erro if ultimo_erro else None,
         })
+    # A chave `aguardando_transportadora` ficou com esse nome por compatibilidade com o
+    # APK já instalado; desde 2026-10-27 ela reúne o que aguarda o Senior (transportadora ou NF).
     return Response({
         'prontas': [x for x in lista if x['pronta']],
         'aguardando_transportadora': [x for x in lista if not x['pronta']],
+        'exige_nf': exige_nf,
     })
 
 
@@ -175,6 +182,7 @@ def impressoras(request):
         ],
         'impressora_padrao': padrao_id,
         'automatica': services.impressao_automatica_ligada(),
+        'exige_nf': services.etiqueta_exige_nf(),
     })
 
 
@@ -200,6 +208,11 @@ def config(request):
                 chave=Configuracao.Chave.ETIQUETA_AUTOMATICA,
                 defaults={'valor': 'sim' if request.data.get('automatica') else 'nao'},
             )
+        if 'exige_nf' in request.data:
+            Configuracao.objects.update_or_create(
+                chave=Configuracao.Chave.ETIQUETA_EXIGE_NF,
+                defaults={'valor': 'sim' if request.data.get('exige_nf') else 'nao'},
+            )
         if 'modelo' in request.data:
             modelo = request.data.get('modelo')
             if modelo not in MODELOS:
@@ -212,6 +225,7 @@ def config(request):
         'impressora_padrao': padrao.id if padrao else None,
         'impressora_padrao_nome': padrao.nome if padrao else None,
         'automatica': services.impressao_automatica_ligada(),
+        'exige_nf': services.etiqueta_exige_nf(),
         'modelo': services.modelo_etiqueta(),
         'modelos': [{'valor': k, 'label': v['label']} for k, v in MODELOS.items()],
     })

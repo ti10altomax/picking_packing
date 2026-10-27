@@ -5,11 +5,12 @@ import { Header } from '@/components/Header'
 import { SupervisorNav } from '@/components/SupervisorNav'
 import { DocBadges } from '@/components/DocBadges'
 import { EscolherImpressora } from '@/components/EscolherImpressora'
-import { impressaoApi, type EtiquetaPendente } from '@/lib/api'
+import { impressaoApi, rotuloBloqueio, type EtiquetaPendente } from '@/lib/api'
 
 /**
  * Etiquetas de volume pendentes (ponto 7) — paridade com /supervisor/etiquetas do web.
- * "Prontas" têm transportadora; "Aguardando" saem sozinhas quando o Senior preencher.
+ * "Prontas" têm transportadora (e NF, se "só com NF" estiver ligado); "Aguardando"
+ * saem sozinhas quando o Senior preencher.
  */
 
 function fmt(iso: string | null) {
@@ -25,6 +26,7 @@ export default function Etiquetas() {
   const [refreshing, setRefreshing] = useState(false)
   const [padraoNome, setPadraoNome] = useState<string | null>(null)
   const [automatica, setAutomatica] = useState(true)
+  const [exigeNf, setExigeNf] = useState(true)
   const [pedidoImprimir, setPedidoImprimir] = useState<number | null>(null)
 
   const carregar = useCallback(async () => {
@@ -34,6 +36,7 @@ export default function Etiquetas() {
       setAguardando(p.aguardando_transportadora)
       setPadraoNome(i.impressoras.find((x) => x.id === i.impressora_padrao)?.nome ?? null)
       setAutomatica(i.automatica)
+      setExigeNf(p.exige_nf ?? true)
     } finally {
       setCarregando(false)
       setRefreshing(false)
@@ -60,7 +63,8 @@ export default function Etiquetas() {
         >
           <Text className="text-sm text-ink-muted mb-1">
             Automática <Text className="text-ink">{automatica ? 'ligada' : 'desligada'}</Text> · padrão{' '}
-            <Text className="text-ink">{padraoNome ?? 'nenhuma'}</Text>
+            <Text className="text-ink">{padraoNome ?? 'nenhuma'}</Text> · só com NF{' '}
+            <Text className="text-ink">{exigeNf ? 'sim' : 'não'}</Text>
           </Text>
 
           <Text className="text-[11px] font-semibold tracking-[2px] text-ink-subtle mt-2">
@@ -73,10 +77,10 @@ export default function Etiquetas() {
           ))}
 
           <Text className="text-[11px] font-semibold tracking-[2px] text-ink-subtle mt-4">
-            AGUARDANDO TRANSPORTADORA · {aguardando.length}
+            AGUARDANDO SENIOR · {aguardando.length}
           </Text>
           <Text className="text-xs text-ink-subtle mb-1">
-            Entregas conferidas sem transportadora no Senior ainda. A etiqueta sai sozinha quando ela chegar.
+            Conferidos sem transportadora no Senior{exigeNf ? ' ou sem NF emitida ainda' : ''}. A etiqueta sai sozinha quando chegar.
           </Text>
           {aguardando.length === 0 ? (
             <Text className="text-ink-subtle text-sm text-center py-6">Nenhuma.</Text>
@@ -108,6 +112,8 @@ function Linha({ p, onImprimir }: { p: EtiquetaPendente; onImprimir?: () => void
           {p.transportadora
             ? <Text className="text-ink">{p.transportadora}</Text>
             : <Text className="text-amber-400">sem transportadora</Text>}
+          {p.bloqueio && p.bloqueio.codigo !== 'sem_transportadora' ? <Text className="text-amber-400"> · {rotuloBloqueio(p.bloqueio)}</Text> : null}
+          {p.tipo === 'pedido' && p.nf_numero ? ` · NF ${p.nf_numero}` : ''}
           {p.conferido_em ? ` · ${fmt(p.conferido_em)}` : ''}
           {p.conferente ? ` · ${p.conferente}` : ''}
         </Text>

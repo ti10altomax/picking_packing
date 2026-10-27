@@ -6,6 +6,10 @@ Regras fixas (decididas com o usuário em 2026-10-07):
   - **só imprime se já tiver transportadora** — sem ela o pedido fica em
     "Etiquetas pendentes" e o beat `monitorar_cancelamentos` dispara a impressão
     automática quando o Senior preencher;
+  - desde 2026-10-27, **só imprime pedido já faturado** (NF vinculada pela E140IPV,
+    `Pedido.nf_*`) — regra ligável em `Configuracao.etiqueta_exige_nf` (default
+    `sim`); o beat `vincular_nfs_pedidos` dispara a automática quando a NF chega.
+    Documento do tipo NF já é a nota e não é afetado;
   - reimpressão sempre disponível depois (web e mobile).
 
 Ninguém sabe ainda como vai imprimir (quantas impressoras, onde). Por isso o
@@ -59,6 +63,11 @@ def modelo_etiqueta() -> str:
     return normalizar_modelo(Configuracao.obter(Configuracao.Chave.ETIQUETA_MODELO))
 
 
+def etiqueta_exige_nf() -> bool:
+    """Pedido só imprime depois de faturado (NF vinculada)? Default sim (2026-10-27)."""
+    return Configuracao.obter(Configuracao.Chave.ETIQUETA_EXIGE_NF) != 'nao'
+
+
 def _janela_dias() -> int:
     try:
         return max(int(Configuracao.obter(Configuracao.Chave.JANELA_SYNC_DIAS)), 1)
@@ -70,14 +79,26 @@ def _janela_dias() -> int:
 # Elegibilidade
 # ---------------------------------------------------------------------------
 
-def verificar_elegivel(pedido: Pedido) -> None:
-    """Levanta ErroImpressao se o pedido não pode ter etiqueta agora."""
+def verificar_elegivel(pedido: Pedido, *, exige_nf: bool | None = None) -> None:
+    """Levanta ErroImpressao se o pedido não pode ter etiqueta agora.
+
+    `exige_nf` permite passar a configuração já lida (listas); None = lê agora.
+    A NF é checada antes da transportadora: quando a regra está ligada, é ela
+    que falta de verdade — e a transportadora costuma chegar junto com a nota.
+    """
     if pedido.status == Pedido.Status.CANCELADO:
         raise ErroImpressao('pedido_cancelado', 'documento cancelado no Senior — não imprime etiqueta')
     if pedido.status != Pedido.Status.CONFERIDO:
         raise ErroImpressao(
             'nao_conferido',
             f'etiqueta só depois da conferência concluída (status atual: "{pedido.get_status_display()}")',
+        )
+    if exige_nf is None:
+        exige_nf = etiqueta_exige_nf()
+    if exige_nf and pedido.identificacao_nf is None:
+        raise ErroImpressao(
+            'sem_nf',
+            'pedido ainda sem nota fiscal emitida no Senior — a etiqueta fica pendente até faturar',
         )
     if not (pedido.transportadora or '').strip():
         raise ErroImpressao(
@@ -86,12 +107,21 @@ def verificar_elegivel(pedido: Pedido) -> None:
         )
 
 
-def motivo_bloqueio(pedido: Pedido) -> dict | None:
+def motivo_bloqueio(pedido: Pedido, *, exige_nf: bool | None = None) -> dict | None:
     try:
-        verificar_elegivel(pedido)
+        verificar_elegivel(pedido, exige_nf=exige_nf)
     except ErroImpressao as e:
         return {'codigo': e.codigo, 'mensagem': e.mensagem}
     return None
+
+
+def filtro_pronta() -> Q:
+    """Q equivalente a `motivo_bloqueio(p) is None` num queryset de Conferidos
+    (contagens do painel Agora)."""
+    q = Q(transportadora__gt='')
+    if etiqueta_exige_nf():
+        q &= Q(tipo=Pedido.Tipo.NOTA_FISCAL) | Q(nf_numero__gt='')
+    return q
 
 
 # ---------------------------------------------------------------------------
@@ -207,6 +237,26 @@ def disparar_automatica(pedido: Pedido) -> dict:
     return {**base, 'resultado': 'enfileirada', 'impressora': imp.nome, 'impressora_id': imp.id}
 
 
+def disparar_se_pendente(pedido: Pedido) -> dict | None:
+    """Versão para os beats (transportadora ou NF que acabou de chegar): só dispara
+    se o pedido é Conferido **recente** (dentro da janela do sync) e ainda não teve
+    impressão `ok` — nunca reimprime sozinho.
+
+    Os beats já só percorrem Conferidos da janela e só chamam aqui no instante em que
+    a NF/transportadora chega (depois disso o pedido sai do universo deles), então
+    ligar a impressão automática mais tarde não dispara o acumulado. A checagem da
+    janela aqui é a garantia disso independente de quem chama.
+    """
+    if pedido.status != Pedido.Status.CONFERIDO:
+        return None
+    limite = timezone.now() - dt.timedelta(days=_janela_dias())
+    if not pedido.conferido_em or pedido.conferido_em < limite:
+        return None
+    if pedido.impressoes_etiqueta.filter(status=ImpressaoEtiqueta.Status.OK).exists():
+        return None
+    return disparar_automatica(pedido)
+
+
 # ---------------------------------------------------------------------------
 # Pendentes
 # ---------------------------------------------------------------------------
@@ -216,7 +266,8 @@ def pendentes_qs():
 
     Retira/sem frete sem transportadora nunca vão ter etiqueta (não existe
     transportadora) e ficam de fora; entrega (CIF) sem transportadora entra como
-    "aguardando Senior".
+    "aguardando Senior". Quem está "pronta" × "aguardando" é `motivo_bloqueio`
+    (transportadora e, com `etiqueta_exige_nf`, NF vinculada).
     """
     limite = timezone.now() - dt.timedelta(days=_janela_dias())
     return (

@@ -43,6 +43,10 @@ class PedidoListSerializer(serializers.ModelSerializer):
     qtd_transportadora = serializers.IntegerField(read_only=True, required=False)
     # Última impressão `ok` da etiqueta de volume (anotação no queryset da lista)
     etiqueta_volume_em = serializers.DateTimeField(read_only=True, required=False)
+    # Por que o botão Etiqueta está desabilitado ({codigo, mensagem}) ou null = pode imprimir.
+    # Regra única no servidor (apps/impressao/services.verificar_elegivel), inclusive a
+    # configuração "só com NF" — web e mobile só exibem.
+    etiqueta_bloqueio = serializers.SerializerMethodField()
     tempo_espera = serializers.SerializerMethodField()
     duracao_conferencia = serializers.SerializerMethodField()
     conferente_username = serializers.CharField(source='conferente.username', read_only=True)
@@ -62,11 +66,18 @@ class PedidoListSerializer(serializers.ModelSerializer):
             'sequencia', 'sequencia_numero',
             'separado_por', 'separado_por_nome', 'separador_nao_identificado',
             'qtd_itens', 'qtd_divergencias', 'tempo_espera', 'duracao_conferencia',
-            'etiqueta_volume_em',
+            'etiqueta_volume_em', 'etiqueta_bloqueio',
         ]
 
     def get_separado_por_nome(self, obj):
         return _nome_separado_por(obj)
+
+    def get_etiqueta_bloqueio(self, obj):
+        from apps.impressao.services import etiqueta_exige_nf, motivo_bloqueio
+        ctx = self.context  # dict compartilhado pela lista: lê a Configuracao uma vez
+        if '_etiqueta_exige_nf' not in ctx:
+            ctx['_etiqueta_exige_nf'] = etiqueta_exige_nf()
+        return motivo_bloqueio(obj, exige_nf=ctx['_etiqueta_exige_nf'])
 
     def get_tempo_espera(self, obj):
         if not obj.criado_em:

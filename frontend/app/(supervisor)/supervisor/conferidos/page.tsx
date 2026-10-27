@@ -3,6 +3,7 @@ import { DocBadges } from '@/components/ui/DocBadges'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { supervisorApi, pedidosApi, type Paginado } from '@/lib/api'
 import { ImprimirEtiqueta } from '@/components/etiquetas/ImprimirEtiqueta'
+import type { BloqueioEtiqueta } from '@/lib/api'
 import { HistoricoBotao } from '@/components/pedidos/HistoricoPedido'
 import { TrocarTransportadora } from '@/components/cce/TrocarTransportadora'
 
@@ -22,6 +23,7 @@ type Pedido = {
   transportadora?: string
   nf_numero?: string
   etiqueta_volume_em?: string | null
+  etiqueta_bloqueio?: BloqueioEtiqueta | null
 }
 
 type Item = {
@@ -204,12 +206,13 @@ export default function ConferidosPage() {
                         </span>
                       </div>
                     </button>
-                    {/* Etiqueta de volume (ponto 7): imprime/reimprime; só com transportadora */}
+                    {/* Etiqueta de volume (ponto 7): imprime/reimprime; o backend diz se pode
+                        (transportadora e, se configurado, NF emitida) em `etiqueta_bloqueio` */}
                     <div className="pr-3 pt-3 shrink-0 flex flex-col items-end gap-1.5">
                       <ImprimirEtiqueta
                         pedidoId={p.id}
                         impressaEm={p.etiqueta_volume_em}
-                        bloqueio={p.transportadora ? null : 'Sem transportadora no Senior'}
+                        bloqueio={p.etiqueta_bloqueio ?? null}
                         onImpresso={() => carregar(buscaAtiva, 1, false)}
                       />
                       <HistoricoBotao pedidoId={p.id} />

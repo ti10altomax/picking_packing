@@ -312,6 +312,7 @@ function Campo({ label, children }: { label: string; children: React.ReactNode }
 function ConfigEtiquetas({ impressoras }: { impressoras: Impressora[] }) {
   const [padrao, setPadrao] = useState<number | null>(null)
   const [automatica, setAutomatica] = useState(true)
+  const [exigeNf, setExigeNf] = useState(true)
   const [modelo, setModelo] = useState<ModeloEtiqueta>('padrao')
   const [modelos, setModelos] = useState<{ valor: ModeloEtiqueta; label: string }[]>([])
   const [carregado, setCarregado] = useState(false)
@@ -322,19 +323,21 @@ function ConfigEtiquetas({ impressoras }: { impressoras: Impressora[] }) {
     impressaoApi.config().then((c) => {
       setPadrao(c.impressora_padrao)
       setAutomatica(c.automatica)
+      setExigeNf(c.exige_nf)
       setModelo(c.modelo)
       setModelos(c.modelos)
       setCarregado(true)
     }).catch(() => setCarregado(true))
   }, [])
 
-  async function salvar(dados: { impressora_padrao?: number | null; automatica?: boolean; modelo?: ModeloEtiqueta }) {
+  async function salvar(dados: { impressora_padrao?: number | null; automatica?: boolean; exige_nf?: boolean; modelo?: ModeloEtiqueta }) {
     setSalvando(true)
     setMsg('')
     try {
       const c = await impressaoApi.salvarConfig(dados)
       setPadrao(c.impressora_padrao)
       setAutomatica(c.automatica)
+      setExigeNf(c.exige_nf)
       setModelo(c.modelo)
       setMsg('Salvo.')
     } catch (e: unknown) {
@@ -352,7 +355,7 @@ function ConfigEtiquetas({ impressoras }: { impressoras: Impressora[] }) {
       <h2 className="text-sm font-semibold text-ink mb-1">Etiqueta de volume</h2>
       <p className="text-xs text-ink-muted mb-3">
         Ao concluir a conferência (ou fechar a sobra), a etiqueta 10x15 de cada volume sai na impressora padrão —
-        só quando o documento já tem transportadora. Sem padrão, fica em Gestão → Etiquetas para imprimir pelo botão.
+        só quando o documento já tem transportadora (e, com "Só imprimir com NF emitida", só depois de faturado). Sem padrão, fica em Gestão → Etiquetas para imprimir pelo botão.
       </p>
       <div className="flex flex-wrap items-center gap-4">
         <label className="flex items-center gap-2 text-sm text-ink">
@@ -377,6 +380,18 @@ function ConfigEtiquetas({ impressoras }: { impressoras: Impressora[] }) {
             onChange={(e) => salvar({ automatica: e.target.checked })}
           />
           Imprimir automaticamente ao concluir
+        </label>
+        <label
+          className="flex items-center gap-2 text-sm text-ink min-h-[40px] cursor-pointer"
+          title="Ligado: pedido só imprime depois de faturado (NF vinculada pelo Senior); até lá o botão fica desabilitado e o pedido espera em Gestão → Etiquetas. Documento que já é NF não muda. Desligado: basta a transportadora."
+        >
+          <input
+            type="checkbox"
+            checked={exigeNf}
+            disabled={salvando}
+            onChange={(e) => salvar({ exige_nf: e.target.checked })}
+          />
+          Só imprimir com NF emitida
         </label>
         <label className="flex items-center gap-2 text-sm text-ink">
           <span className="text-ink-muted">Modelo</span>

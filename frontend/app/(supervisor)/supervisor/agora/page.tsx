@@ -55,7 +55,7 @@ export default function AgoraPage() {
     { rotulo: 'Aguardando fechamento', valor: f.aguardando_fechamento, href: '/supervisor/fechamentos', alerta: f.aguardando_fechamento > 0 ? 'violet' : '' },
     { rotulo: 'Não conformes', valor: f.nao_conformes, href: '/supervisor/nao-conformes', alerta: f.nao_conformes > 0 ? 'red' : '' },
     { rotulo: 'Cancelados a transferir', valor: f.cancelados_a_transferir, href: '/supervisor/cancelados', alerta: f.cancelados_a_transferir > 0 ? 'red' : '' },
-    { rotulo: 'Etiquetas prontas', valor: f.etiquetas_prontas, href: '/supervisor/etiquetas', sub: f.etiquetas_aguardando_transportadora > 0 ? `${f.etiquetas_aguardando_transportadora} aguardando transportadora` : undefined, alerta: f.etiquetas_prontas > 0 ? 'emerald' : '' },
+    { rotulo: 'Etiquetas prontas', valor: f.etiquetas_prontas, href: '/supervisor/etiquetas', sub: f.etiquetas_aguardando_transportadora > 0 ? `${f.etiquetas_aguardando_transportadora} aguardando Senior (transportadora/NF)` : undefined, alerta: f.etiquetas_prontas > 0 ? 'emerald' : '' },
     { rotulo: 'Conferidos hoje', valor: f.conferidos_hoje, href: '/supervisor/conferidos', sub: `${f.conferidos_1h} na última hora` },
   ] : []
 

@@ -308,7 +308,7 @@ def monitorar_cancelamentos(passada_completa: bool = False):
     )
     from apps.pedidos.models import Pedido
     from apps.pedidos.cancelamento import STATUS_MONITORADOS, cancelar
-    from apps.impressao.services import disparar_automatica
+    from apps.impressao.services import disparar_se_pendente
 
     limite = timezone.now() - dt.timedelta(days=max(_janela_dias(), 1))
     qs = Pedido.objects.filter(status__in=STATUS_MONITORADOS).select_related('sequencia')
@@ -364,8 +364,9 @@ def monitorar_cancelamentos(passada_completa: bool = False):
                     if pedido.status == Pedido.Status.CONFERIDO:
                         # Etiqueta de volume (2026-10-07): estava em "aguardando
                         # transportadora" — agora pode sair na impressora padrão
+                        # (se ainda faltar a NF, `etiqueta_exige_nf`, fica para o vínculo)
                         try:
-                            disparar_automatica(pedido)
+                            disparar_se_pendente(pedido)
                         except Exception:
                             logger.exception(f'etiqueta de volume: falha ao disparar para {pedido}')
             if not cancelado_fn(row):
@@ -389,13 +390,14 @@ def vincular_nfs_pedidos():
     Conferido dentro da janela do sync) ainda sem `nf_numero`, pergunta à E140IPV se já
     saiu nota fechada e guarda filial/série/número no Pedido. É o que permite a carta de
     correção em nota que nasceu de pedido — a maioria. De carona, pedido sem transportadora
-    ou frete ganha o da nota (Conferido que ganhou transportadora dispara a etiqueta).
+    ou frete ganha o da nota. Conferido que ganhou NF ou transportadora e ainda não imprimiu
+    dispara a etiqueta de volume (com `etiqueta_exige_nf`, é aqui que ela sai).
     A cada 5 min via Celery Beat; uma consulta IN por bloco de 500 (E140IPV tem índice em numped).
     """
     from apps.pedidos.models import Pedido
     from apps.pedidos.cancelamento import STATUS_MONITORADOS
     from apps.pedidos.nf_vinculo import vincular_em_lote
-    from apps.impressao.services import disparar_automatica
+    from apps.impressao.services import disparar_se_pendente
 
     limite = timezone.now() - dt.timedelta(days=max(_janela_dias(), 1))
     qs = Pedido.objects.filter(tipo=Pedido.Tipo.PEDIDO, nf_numero='', status__in=STATUS_MONITORADOS)
@@ -403,9 +405,9 @@ def vincular_nfs_pedidos():
     qs = qs.exclude(status=Pedido.Status.PENDENTE, criado_em__lt=limite)
     vinc = vincular_em_lote(list(qs))
     for pedido, mudou in vinc['alterados']:
-        if mudou['transportadora'] and pedido.status == Pedido.Status.CONFERIDO:
+        if (mudou['nf'] or mudou['transportadora']) and pedido.status == Pedido.Status.CONFERIDO:
             try:
-                disparar_automatica(pedido)
+                disparar_se_pendente(pedido)
             except Exception:
                 logger.exception(f'etiqueta de volume: falha ao disparar para {pedido}')
     # `_teve_falha_oracle` procura a string 'falha_oracle' no resultado — só pode aparecer quando falhou

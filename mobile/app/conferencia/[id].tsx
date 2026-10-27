@@ -273,6 +273,14 @@ export default function ConferenciaDetalhe() {
       })
       return false
     }
+    if (e.resultado === 'sem_nf') {
+      await dialog.alert({
+        variant: 'warning',
+        title: 'Etiqueta pendente',
+        message: 'O pedido ainda não foi faturado. A etiqueta sai sozinha quando a nota fiscal for emitida no Senior.',
+      })
+      return false
+    }
     if (e.resultado === 'sem_impressora_padrao' || e.resultado === 'desligada') {
       return dialog.confirm({
         variant: 'question',

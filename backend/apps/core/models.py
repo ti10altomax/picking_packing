@@ -16,6 +16,7 @@ class Configuracao(models.Model):
         IMPRESSORA_PADRAO = 'impressora_padrao', 'Impressora padrão das etiquetas de volume'
         ETIQUETA_AUTOMATICA = 'etiqueta_automatica', 'Imprimir etiqueta de volume ao concluir'
         ETIQUETA_MODELO = 'etiqueta_modelo', 'Modelo da etiqueta de volume'
+        ETIQUETA_EXIGE_NF = 'etiqueta_exige_nf', 'Etiqueta de volume só com NF emitida'
         CCE_MODO = 'cce_modo', 'Carta de correção: modo'
         CCE_TIPGER = 'cce_tipger', 'Carta de correção: tipo de geração (tipGer)'
 
@@ -33,6 +34,10 @@ class Configuracao(models.Model):
         # Modelo da etiqueta (2026-10-23): 'padrao' (descrição + SKU, 8 itens por
         # etiqueta) | 'compacta' (só SKU em 2 colunas, 28 itens). Ver apps/impressao/etiqueta.py.
         'etiqueta_modelo': 'padrao',
+        # Etiqueta só com NF (2026-10-27): 'sim' = pedido só imprime depois de faturado
+        # (NF vinculada pela E140IPV); 'nao' = volta à regra antiga (só transportadora).
+        # Documento do tipo nota_fiscal já é a NF, não é afetado.
+        'etiqueta_exige_nf': 'sim',                                # | nao
         # Carta de correção (2026-10-22): desligado | gravar | gravar_e_transmitir.
         # 'gravar' cria a carta 'Não enviada' no Senior (o faturamento transmite lá);
         # 'gravar_e_transmitir' também chama EmitirCartaCorrecao (evento na SEFAZ, sem volta).

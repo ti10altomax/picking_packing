@@ -294,13 +294,27 @@ export type EtiquetaPendente = {
   conferente: string | null
   sequencia_numero: number | null
   qtd_volumes: number
+  nf_numero?: string
   pronta: boolean
+  /** Por que não está pronta (sem_transportadora | sem_nf); null = pronta */
+  bloqueio?: BloqueioEtiqueta | null
   ultimo_erro: string | null
+}
+
+/** Motivo de a etiqueta não poder sair agora (regra única no backend, 2026-10-27) */
+export type BloqueioEtiqueta = { codigo: string; mensagem: string }
+
+/** Texto curto para o botão desabilitado */
+export function rotuloBloqueio(b: BloqueioEtiqueta | null | undefined): string {
+  if (!b) return ''
+  if (b.codigo === 'sem_transportadora') return 'sem transportadora'
+  if (b.codigo === 'sem_nf') return 'sem NF emitida'
+  return 'indisponível'
 }
 
 /** Veredito da impressão automática devolvido pelo concluir */
 export type VereditoEtiqueta = {
-  resultado: 'enfileirada' | 'sem_transportadora' | 'sem_impressora_padrao' | 'desligada' | 'erro'
+  resultado: 'enfileirada' | 'sem_transportadora' | 'sem_nf' | 'sem_impressora_padrao' | 'desligada' | 'erro'
     | 'nao_conferido' | 'pedido_cancelado' | 'sem_volumes'
   impressora: string | null
   impressora_id?: number
@@ -314,10 +328,11 @@ export const impressaoApi = {
       .then((r) => r.data as { resultado: string; erro: string | null; impressao: ImpressaoEtiqueta }),
   pendentes: () =>
     api.get('/api/impressao/pendentes/')
-      .then((r) => r.data as { prontas: EtiquetaPendente[]; aguardando_transportadora: EtiquetaPendente[] }),
+      // `aguardando_transportadora` = aguardando o Senior (transportadora ou, com exige_nf, a NF)
+      .then((r) => r.data as { prontas: EtiquetaPendente[]; aguardando_transportadora: EtiquetaPendente[]; exige_nf?: boolean }),
   impressoras: () =>
     api.get('/api/impressao/impressoras/')
-      .then((r) => r.data as { impressoras: ImpressoraEtiqueta[]; impressora_padrao: number | null; automatica: boolean }),
+      .then((r) => r.data as { impressoras: ImpressoraEtiqueta[]; impressora_padrao: number | null; automatica: boolean; exige_nf?: boolean }),
 }
 
 // Painel "agora no galpão" (observabilidade, 2026-10-08)
