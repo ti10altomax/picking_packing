@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useAuthStore } from '@/stores/authStore'
 import { destinoPorPerfil } from '@/lib/destino'
 import { useExitGuard } from '@/lib/useExitGuard'
+import { useCcePermissao } from '@/lib/useCcePermissao'
 import { FullscreenOnFirstTap, FullscreenToggle } from '@/components/FullscreenLayer'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { Marca } from '@/components/Marca'
@@ -12,14 +13,14 @@ import { Marca } from '@/components/Marca'
 const PERFIS_PERMITIDOS = ['supervisor_vendas', 'supervisor_patio', 'admin']
 
 // Páginas de gestão/relatórios — agrupadas num dropdown pra nav não estourar
-const GESTAO_ITEMS: { href: string; label: string; soPatio?: boolean }[] = [
+const GESTAO_ITEMS: { href: string; label: string; soPatio?: boolean; soCce?: boolean }[] = [
   { href: '/supervisor/agora', label: 'Agora' },
   { href: '/supervisor/nao-conformes', label: 'Não conformes' },
   { href: '/supervisor/cancelados', label: 'Cancelados' },
   { href: '/supervisor/divergencias', label: 'Divergências' },
   { href: '/supervisor/fechamentos', label: 'Fechamentos', soPatio: true },
   { href: '/supervisor/etiquetas', label: 'Etiquetas' },
-  { href: '/supervisor/cartas', label: 'Cartas de correção' },
+  { href: '/supervisor/cartas', label: 'Cartas de correção', soCce: true },   // quem pode: Configuracao.cce_perfis (Django Admin)
   { href: '/supervisor/erros', label: 'Erros de separação' },
   { href: '/supervisor/conferidos', label: 'Conferidos' },
 ]
@@ -30,6 +31,7 @@ export default function SupervisorLayout({ children }: { children: React.ReactNo
   const { token, user, hydrate, logout } = useAuthStore()
   const [ready, setReady] = useState(false)
   const [gestaoAberta, setGestaoAberta] = useState(false)
+  const podeCce = useCcePermissao() === true
 
   // Fecha o dropdown ao navegar
   useEffect(() => { setGestaoAberta(false) }, [pathname])
@@ -97,7 +99,7 @@ export default function SupervisorLayout({ children }: { children: React.ReactNo
                   <>
                     <div className="fixed inset-0 z-20" onClick={() => setGestaoAberta(false)} />
                     <div className="absolute left-0 top-full mt-1 z-30 min-w-[200px] bg-surface-card border border-surface-border rounded-xl shadow-xl dark:shadow-black/40 py-1 overflow-hidden">
-                      {GESTAO_ITEMS.filter((i) => !i.soPatio || podePatio).map((i) => {
+                      {GESTAO_ITEMS.filter((i) => (!i.soPatio || podePatio) && (!i.soCce || podeCce)).map((i) => {
                         const ativo = pathname?.startsWith(i.href)
                         return (
                           <Link

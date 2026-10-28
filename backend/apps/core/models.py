@@ -20,6 +20,7 @@ class Configuracao(models.Model):
         CCE_MODO = 'cce_modo', 'Carta de correção: modo'
         CCE_TIPGER = 'cce_tipger', 'Carta de correção: tipo de geração (tipGer)'
         CCE_TEXTO = 'cce_texto', 'Carta de correção: texto (montado | livre)'
+        CCE_PERFIS = 'cce_perfis', 'Carta de correção: perfis que podem corrigir'
 
     # valores válidos por chave (documentação viva; o admin não valida à força)
     DEFAULTS = {
@@ -48,6 +49,11 @@ class Configuracao(models.Model):
         # escreve "ONDE SE LE X, LEIA-SE Y" + complemento opcional | 'livre' = o usuário
         # digita o texto inteiro (obrigatório). As cartas anteriores são repetidas nos dois.
         'cce_texto': 'montado',                                    # | livre
+        # Quem pode corrigir NF (2026-10-28): perfis separados por vírgula, entre
+        # supervisor_vendas e supervisor_patio. Admin sempre pode (não precisa listar).
+        # De propósito só editável aqui (Django Admin), nunca em Gestão → Cartas de
+        # correção: um supervisor não pode dar a permissão a si mesmo.
+        'cce_perfis': 'supervisor_vendas,supervisor_patio',
     }
 
     chave = models.CharField(max_length=50, choices=Chave.choices, unique=True)

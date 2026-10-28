@@ -8,5 +8,6 @@ urlpatterns = [
     path('carta-correcao/transportadoras/', views.transportadoras, name='cce_transportadoras'),
     path('carta-correcao/documentos/', views.documentos, name='cce_documentos'),
     path('carta-correcao/config/', views.config, name='cce_config'),
+    path('carta-correcao/permissao/', views.permissao, name='cce_permissao'),
     path('carta-correcao/', views.listar, name='cce_listar'),
 ]

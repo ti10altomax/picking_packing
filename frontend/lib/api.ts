@@ -640,6 +640,7 @@ export type CceConfig = {
   modo: CceModo
   tipger: number
   texto: CceTexto
+  perfis: string[]   // quem pode corrigir (Configuracao.cce_perfis + admin) — só leitura; muda no Django Admin
   dry_run: boolean
   wsdl_carta_configurado: boolean
   wsdl_documento_configurado: boolean
@@ -737,6 +738,8 @@ export const cartaCorrecaoApi = {
   listar: (params: { status?: string; search?: string; pedido?: number } = {}) =>
     api.get('/api/carta-correcao/', { params }).then((r) => r.data as { cartas: CceCarta[]; config: CceConfig }),
   config: () => api.get('/api/carta-correcao/config/').then((r) => r.data as CceConfig),
+  // o usuário logado pode corrigir NF? (esconde menu e botão; a regra de verdade é o 403 do backend)
+  permissao: () => api.get('/api/carta-correcao/permissao/').then((r) => r.data as { pode: boolean; perfis: string[] }),
   salvarConfig: (dados: { modo?: CceModo; tipger?: '1' | '2' ; texto?: CceTexto }) =>
     api.put('/api/carta-correcao/config/', dados).then((r) => r.data as CceConfig),
 }

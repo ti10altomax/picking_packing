@@ -11,13 +11,22 @@ from apps.pedidos.nf_vinculo import aplicar_vinculo, descobrir_nf, pedidos_da_nf
 
 from . import senior, services
 from .models import CartaCorrecao
-from .services import PERFIS_CCE, ErroCarta
+from .services import ErroCarta
 
 
-def _exige(request, perfis=PERFIS_CCE):
-    if request.user.perfil not in perfis:
+def _exige(request, perfis=None):
+    """Default = `Configuracao.cce_perfis` + admin (services.perfis_cce), lido a cada chamada
+    para a troca no Django Admin valer na hora."""
+    if request.user.perfil not in (perfis or services.perfis_cce()):
         return Response({'erro': 'sem permissão'}, status=http_status.HTTP_403_FORBIDDEN)
     return None
+
+
+@api_view(['GET'])
+def permissao(request):
+    """O web esconde o menu Gestão → Cartas de correção e o botão Corrigir NF com isto.
+    Qualquer usuário logado pode perguntar; a regra de verdade é o `_exige` de cada endpoint."""
+    return Response({'pode': services.pode_corrigir(request.user), 'perfis': list(services.perfis_cce())})
 
 
 def _erro(e: ErroCarta):
@@ -171,7 +180,9 @@ def listar(request):
 @api_view(['GET', 'PUT'])
 def config(request):
     """Modo (desligado | gravar | gravar_e_transmitir), tipGer e texto (montado | livre).
-    Leitura: gestão; escrita: admin. As mesmas chaves existem no Django Admin → Configurações."""
+    Leitura: gestão; escrita: admin. As mesmas chaves existem no Django Admin → Configurações.
+    `cce_perfis` (quem pode corrigir) NÃO entra aqui de propósito: só no Django Admin, para
+    um supervisor não conseguir se liberar sozinho (2026-10-28)."""
     err = _exige(request)
     if err:
         return err

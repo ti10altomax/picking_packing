@@ -6,6 +6,7 @@ import { ImprimirEtiqueta } from '@/components/etiquetas/ImprimirEtiqueta'
 import type { BloqueioEtiqueta } from '@/lib/api'
 import { HistoricoBotao } from '@/components/pedidos/HistoricoPedido'
 import { TrocarTransportadora } from '@/components/cce/TrocarTransportadora'
+import { useCcePermissao } from '@/lib/useCcePermissao'
 
 type Pedido = {
   id: number
@@ -45,6 +46,7 @@ export default function ConferidosPage() {
   const [busca, setBusca] = useState('')
   const [buscaAtiva, setBuscaAtiva] = useState('')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const podeCce = useCcePermissao() === true   // Corrigir NF só para os perfis em Configuracao.cce_perfis
 
   // Acordeão: quais estão abertos + cache + estado de loading por pedido
   const [expandidos, setExpandidos] = useState<Set<number>>(new Set())
@@ -223,14 +225,16 @@ export default function ConferidosPage() {
                       />
                       <HistoricoBotao pedidoId={p.id} />
                       {/* Carta de correção (ponto 6): transportadora/frete/volumes da NF — NF própria ou a do pedido faturado */}
-                      <TrocarTransportadora
-                        pedidoId={p.id}
-                        onCarregado={(a) => atualizarLinha(a.id, { nf_numero: a.nf_numero, etiqueta_bloqueio: a.etiqueta_bloqueio })}
-                        onAlterado={(a) => atualizarLinha(a.id, {
-                          transportadora: a.transportadora, nf_numero: a.nf_numero,
-                          ...(a.etiqueta_bloqueio !== undefined ? { etiqueta_bloqueio: a.etiqueta_bloqueio } : {}),
-                        })}
-                      />
+                      {podeCce && (
+                        <TrocarTransportadora
+                          pedidoId={p.id}
+                          onCarregado={(a) => atualizarLinha(a.id, { nf_numero: a.nf_numero, etiqueta_bloqueio: a.etiqueta_bloqueio })}
+                          onAlterado={(a) => atualizarLinha(a.id, {
+                            transportadora: a.transportadora, nf_numero: a.nf_numero,
+                            ...(a.etiqueta_bloqueio !== undefined ? { etiqueta_bloqueio: a.etiqueta_bloqueio } : {}),
+                          })}
+                        />
+                      )}
                     </div>
                     </div>
 

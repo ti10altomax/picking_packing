@@ -4,6 +4,9 @@ import { DocBadges } from '@/components/ui/DocBadges'
 import { ChipStatusCarta, ModalCarta, IconeCaminhao, resumoMudancas, rotuloDocumento } from '@/components/cce/TrocarTransportadora'
 import { cartaCorrecaoApi, type CceCarta, type CceConfig, type CceDocumento, type CceModo, type CceTexto } from '@/lib/api'
 import { useAuthStore } from '@/stores/authStore'
+import { useCcePermissao } from '@/lib/useCcePermissao'
+
+const PERFIL_LABEL: Record<string, string> = { supervisor_vendas: 'Sup. Vendas', supervisor_patio: 'Sup. Pátio', admin: 'Admin' }
 
 /**
  * Gestão → Cartas de correção (ponto 6 da diretoria, 2026-10-22).
@@ -32,6 +35,7 @@ function fmt(iso: string) {
 export default function CartasCorrecaoPage() {
   const { user } = useAuthStore()
   const admin = user?.perfil === 'admin'
+  const podeCce = useCcePermissao()   // null = carregando; false = perfil fora de Configuracao.cce_perfis
 
   const [busca, setBusca] = useState('')
   const [docs, setDocs] = useState<CceDocumento[]>([])
@@ -121,6 +125,15 @@ export default function CartasCorrecaoPage() {
     }
   }
 
+  if (podeCce === false) {
+    return (
+      <div className="p-4">
+        <h1 className="text-2xl font-semibold text-ink flex items-center gap-2 mb-2"><IconeCaminhao /> Cartas de correção</h1>
+        <p className="text-sm text-ink-muted">Seu perfil não está liberado para corrigir NF. Quem pode é definido pelo admin no Django Admin → Configurações (carta de correção: perfis).</p>
+      </div>
+    )
+  }
+
   return (
     <div className="p-4">
       <div className="flex items-center justify-between mb-4">
@@ -139,6 +152,10 @@ export default function CartasCorrecaoPage() {
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <span>Modo: <strong>{MODO_LABEL[config.modo]}</strong></span>
             <span>Texto: <strong>{config.texto === 'livre' ? 'livre' : 'montado pelo sistema'}</strong></span>
+            {/* Só leitura de propósito: quem pode corrigir muda no Django Admin (cce_perfis), nunca aqui */}
+            <span title="Definido pelo admin no Django Admin → Configurações">
+              Quem pode: <strong>{config.perfis.map((p) => PERFIL_LABEL[p] ?? p).join(', ')}</strong>
+            </span>
             {config.dry_run && (
               <span className="text-xs px-2 py-0.5 rounded-full font-semibold bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-300">
                 simulação (dry-run) — não chama o Senior

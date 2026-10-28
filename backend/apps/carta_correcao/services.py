@@ -36,7 +36,9 @@ from .models import CartaCorrecao
 
 logger = logging.getLogger(__name__)
 
+# Perfis que PODEM entrar em `Configuracao.cce_perfis`; admin sempre pode (ver perfis_cce()).
 PERFIS_CCE = ('supervisor_vendas', 'supervisor_patio', 'admin')
+PERFIS_CCE_CONFIGURAVEIS = ('supervisor_vendas', 'supervisor_patio')
 LIMITE_TEXTO = 999          # String(999) na porta de envio; a SEFAZ aceita até 1000 em xCorrecao
 LIMITE_VOLUMES = 999
 MODOS = ('desligado', 'gravar', 'gravar_e_transmitir')
@@ -72,12 +74,26 @@ def texto_modo_atual() -> str:
     return valor if valor in TEXTOS else 'montado'
 
 
+def perfis_cce() -> tuple[str, ...]:
+    """Quem pode corrigir NF: `Configuracao.cce_perfis` (lista separada por vírgula, só
+    supervisor_vendas/supervisor_patio contam; o resto é ignorado) + admin sempre.
+    Editável só no Django Admin (2026-10-28) — ver comentário em Configuracao.DEFAULTS."""
+    valor = Configuracao.obter(Configuracao.Chave.CCE_PERFIS)
+    escolhidos = [p.strip() for p in valor.split(',') if p.strip() in PERFIS_CCE_CONFIGURAVEIS]
+    return tuple(dict.fromkeys([*escolhidos, 'admin']))
+
+
+def pode_corrigir(user) -> bool:
+    return getattr(user, 'perfil', None) in perfis_cce()
+
+
 def configuracao() -> dict:
     from django.conf import settings
     return {
         'modo': modo_atual(),
         'tipger': tipger_atual(),
         'texto': texto_modo_atual(),
+        'perfis': list(perfis_cce()),   # só leitura no painel; muda no Django Admin
         'dry_run': senior.dry_run(),
         'wsdl_carta_configurado': bool(getattr(settings, 'SENIOR_WSDL_CARTA_CORRECAO', '')),
         'wsdl_documento_configurado': bool(getattr(settings, 'SENIOR_WSDL_DOCUMENTO_FISCAL', '')),

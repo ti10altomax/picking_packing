@@ -1,8 +1,12 @@
 # Status de implementação — Sistema de separação interna
 
-> Snapshot em **2026-10-27**. Objetivo: amanhã (e nas próximas semanas) você consegue retomar o trabalho sem precisar reler tudo.
+> Snapshot em **2026-10-28**. Objetivo: amanhã (e nas próximas semanas) você consegue retomar o trabalho sem precisar reler tudo.
 
 ---
+
+## 2026-10-28 — Quem pode fazer carta de correção (configurável, só Django Admin)
+
+**Gatilho.** O usuário perguntou como ver quem pode corrigir NF — estava amarrado no código (`PERFIS_CCE` em `services.py`: Sup. Vendas, Sup. Pátio e admin). Pediu que virasse configuração **editável só no Django Admin**, de propósito: se estivesse em Gestão → Cartas de correção, o próprio Sup. Pátio poderia se liberar. **Feito:** chave `Configuracao.cce_perfis` (migration **`core.0013`**), lista separada por vírgula entre `supervisor_vendas` e `supervisor_patio` (default os dois = comportamento de antes; vazio = só admin; valores desconhecidos são ignorados); **admin sempre pode**. `services.perfis_cce()` lê a chave a cada chamada e `_exige()` de todos os endpoints da CC-e usa isso (403 fora da lista). `PUT /api/carta-correcao/config/` **não** aceita `perfis`; `GET` devolve a lista só para mostrar ("Quem pode: …" na página de Cartas). Novo `GET /api/carta-correcao/permissao/` (qualquer logado → `{pode, perfis}`) alimenta o hook `lib/useCcePermissao.ts`: esconde o item Gestão → Cartas de correção, o botão **Corrigir NF** em Conferidos e troca a página de Cartas por um aviso quando o perfil não está liberado. Mobile não tem CC-e, nada a fazer. Deploy: `core.0013` + restart.
 
 ## 2026-10-27 — Texto da carta de correção: montado × livre (configurável)
 

@@ -21,6 +21,9 @@ class ConfiguracaoAdmin(ModelAdmin):
     - fechamento_sobra: supervisor_patio | conferente
     - cce_modo: desligado | gravar | gravar_e_transmitir (também em Gestão → Cartas de correção)
     - cce_tipger: 1 (gerar XML) | 2 (WS eDocs)
+    - cce_texto: montado | livre (também em Gestão → Cartas de correção)
+    - cce_perfis: supervisor_vendas,supervisor_patio (separar por vírgula; vazio = só admin;
+      admin sempre pode). SÓ aqui, de propósito — não vai para Gestão → Cartas de correção.
     """
     list_display = ('chave', 'valor', 'atualizado_em')
     readonly_fields = ('atualizado_em',)
