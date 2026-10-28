@@ -275,6 +275,10 @@ export default function AdminPage() {
         <Link href="/admin/agents" className="underline underline-offset-2 hover:text-ink transition-colors">
           agentes USB
         </Link>
+        {' · '}
+        <Link href="/admin/app" className="underline underline-offset-2 hover:text-ink transition-colors">
+          app do coletor (APK)
+        </Link>
       </p>
 
       {/* Módulos congelados — rebaixados a links discretos */}

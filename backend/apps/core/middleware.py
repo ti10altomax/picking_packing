@@ -33,6 +33,12 @@ class LogRequisicaoMiddleware:
 
         duracao_ms = int((time.perf_counter() - inicio) * 1000)
         status = response.status_code
+        # Inventário do app do coletor (2026-10-28): o APK manda X-App-Versao /
+        # X-App-Dispositivo em toda requisição; guarda quem está em qual versão.
+        versao_app = request.META.get('HTTP_X_APP_VERSAO')
+        if versao_app:
+            from apps.app_mobile.services import registrar_dispositivo
+            registrar_dispositivo(getattr(request, 'user', None), versao_app, request.META.get('HTTP_X_APP_DISPOSITIVO', ''))
         # request.user é resolvido pela autenticação do DRF (JWT), não pela
         # sessão — a view já populou `request._request.user` quando autenticou.
         user = getattr(request, 'user', None)

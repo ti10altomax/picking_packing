@@ -35,6 +35,10 @@ oracle_host: 192.168.1.101
 oracle_port: "1521"
 oracle_schema: ERP_PROD
 
+# --- App do coletor (2026-10-28) ---
+# URL do backend como o coletor enxerga (= EXPO_PUBLIC_API_URL do APK). Vira o link de download em Admin → App.
+separa_url_publica: "http://192.168.1.199:8003"
+
 # --- Senior SOAP ---
 senior_wsdl_embalagem: "http://192.168.1.210:8080/g5-senior-services/sapiens_Synccom_senior_g5_co_mcm_ven_embalagempfa?wsdl"
 # Carta de correção (2026-10-22). dry_run "True" = monta tudo e NÃO chama o Senior; "False" só depois do teste com o fiscal.

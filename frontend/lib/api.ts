@@ -515,6 +515,41 @@ export type SaudeSistema = {
   retencao_dias: number
 }
 
+// App do coletor — distribuição do APK pelo Separa (apps/app_mobile, 2026-10-28)
+export type VersaoApp = {
+  id: number
+  versao: string
+  version_code: number
+  tamanho_bytes: number
+  sha256: string
+  notas: string
+  obrigatoria: boolean
+  criado_em: string
+  criado_por: string | null
+  nome_arquivo: string
+  caminho: string  // /apk/separa-X.Y.Z.apk
+  url: string      // absoluta (SEPARA_URL_PUBLICA do backend; em prod http://IP:8003/…)
+  pagina: string   // http://IP:8003/apk/ — o que se digita no navegador do coletor
+}
+
+export type DispositivoApp = {
+  id: number
+  usuario: string
+  perfil: string
+  dispositivo: string
+  versao: string
+  ultimo_acesso_em: string
+  desatualizado: boolean
+}
+
+export const appApi = {
+  listar: () =>
+    api.get('/api/app/versoes/').then((r) => r.data as { atual: VersaoApp | null; versoes: VersaoApp[]; dispositivos: DispositivoApp[] }),
+  publicar: (form: FormData) =>
+    api.post('/api/app/versoes/', form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data as VersaoApp),
+  apagar: (id: number) => api.delete(`/api/app/versoes/${id}/`),
+}
+
 export const saudeApi = {
   completa: () => api.get('/api/saude/').then((r) => r.data as SaudeSistema),
 }

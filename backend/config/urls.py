@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.urls import path, include
 from rest_framework_simplejwt.views import TokenRefreshView
 from apps.core.views import SeparaTokenView, metrics_protegido
+from apps.app_mobile.urls import urlpatterns_apk
 
 urlpatterns = [
     # /admin é do frontend (tela admin do Separa).
@@ -20,4 +21,9 @@ urlpatterns = [
     path('api/', include('apps.impressao.urls')),
     path('api/', include('apps.carta_correcao.urls')),
     path('api/', include('apps.etiquetas.urls')),
+    path('api/', include('apps.app_mobile.urls')),
 ]
+
+# /apk/ e /apk/separa-X.Y.Z.apk — página e download do app do coletor (fora do /api/,
+# URL curta para digitar no navegador do aparelho; o Caddy também manda pro backend)
+urlpatterns += urlpatterns_apk

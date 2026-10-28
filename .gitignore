@@ -26,3 +26,6 @@ docs_pessoais/
 
 # TypeScript build info (gerado)
 *.tsbuildinfo
+
+# APK publicado pelo Admin → App do coletor (dev); em prod é o volume media_data
+backend/media/

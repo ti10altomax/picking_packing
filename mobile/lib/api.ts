@@ -1,6 +1,7 @@
 import axios from 'axios'
 import * as SecureStore from 'expo-secure-store'
 import Constants from 'expo-constants'
+import { DISPOSITIVO, VERSAO_APP } from './versao'
 
 // URL do backend — vem do .env via EXPO_PUBLIC_API_URL
 export const API_URL =
@@ -10,7 +11,13 @@ export const API_URL =
 
 export const api = axios.create({
   baseURL: API_URL,
-  headers: { 'Content-Type': 'application/json' },
+  headers: {
+    'Content-Type': 'application/json',
+    // Inventário do app (2026-10-28): o backend guarda quem está em qual versão
+    // (Admin → App do coletor) a partir destes dois cabeçalhos.
+    'X-App-Versao': VERSAO_APP,
+    'X-App-Dispositivo': DISPOSITIVO,
+  },
 })
 
 // Anexa token JWT em toda request
@@ -52,6 +59,23 @@ api.interceptors.response.use(
 export const authApi = {
   login: (username: string, password: string) =>
     axios.post(`${API_URL}/api/auth/token/`, { username, password }).then((r) => r.data),
+}
+
+// Versão publicada do APK (apps/app_mobile) — sem login, porque é checada já na tela de login
+export type VersaoApp = {
+  versao: string | null
+  version_code: number
+  tamanho_bytes: number
+  notas: string
+  obrigatoria: boolean
+  caminho: string  // /apk/separa-X.Y.Z.apk — o app monta com a própria API_URL
+  url: string      // absoluta pelo backend (SEPARA_URL_PUBLICA); fallback
+  pagina: string   // página com o botão Baixar
+}
+
+export const appApi = {
+  versao: () =>
+    axios.get(`${API_URL}/api/app/versao/`, { timeout: 8000 }).then((r) => r.data as VersaoApp),
 }
 
 export const conferenciaApi = {

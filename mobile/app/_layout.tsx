@@ -9,6 +9,7 @@ import { DialogProvider } from '@/components/Dialog'
 import { useThemeStore } from '@/stores/themeStore'
 import { temaLight, temaDark } from '@/lib/temas'
 import { instalarRelatorGlobal } from '@/lib/erros'
+import { AvisoAtualizacao } from '@/components/AvisoAtualizacao'
 
 // Tela de erro de qualquer rota (observabilidade, 2026-10-08) — relata ao backend
 export { ErroBoundary as ErrorBoundary } from '@/components/ErroBoundary'
@@ -44,6 +45,8 @@ export default function RootLayout() {
                 animation: 'fade',
               }}
             />
+            {/* Versão nova do APK publicada em Admin → App do coletor: faixa no rodapé ou bloqueio */}
+            <AvisoAtualizacao />
           </DialogProvider>
         </SafeAreaProvider>
       </View>

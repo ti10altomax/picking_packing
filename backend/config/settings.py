@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     'apps.senior',
     'apps.impressao',
     'apps.carta_correcao',
+    'apps.app_mobile',
     'apps.vtex',
     'apps.etiquetas',
 ]
@@ -198,6 +199,10 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# APK do app do coletor (apps/app_mobile, 2026-10-28): backend/media/ em dev (gitignored),
+# volume `media_data` em produção. Servido pela própria view /apk/, não por MEDIA_URL.
+MEDIA_ROOT = BASE_DIR / 'media'
 # WhiteNoise: comprime e adiciona hash ao nome do arquivo (cache eterno seguro)
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
@@ -375,6 +380,12 @@ SENIOR_WSDL_DOCUMENTO_FISCAL = config('SENIOR_WSDL_DOCUMENTO_FISCAL', default=''
 # True = monta o payload, grava o rastro como 'simulada' e NÃO chama o Senior.
 # Padrão ligado de propósito: produção precisa desligar explicitamente no .env.
 SENIOR_WS_DRY_RUN = config('SENIOR_WS_DRY_RUN', default=True, cast=bool)
+
+# URL do backend como o COLETOR enxerga (apps/app_mobile, 2026-10-28): monta o link
+# de download do APK (http://IP:8003/apk/). Vazio = usa o host da própria requisição —
+# errado quando o pedido chega pelo proxy do web (viria o host do Next/Caddy).
+# Produção: http://192.168.1.199:8003 (a mesma EXPO_PUBLIC_API_URL embutida no APK).
+SEPARA_URL_PUBLICA = config('SEPARA_URL_PUBLICA', default='').rstrip('/')
 
 # VTEX API
 VTEX_ACCOUNT_NAME = config('VTEX_ACCOUNT_NAME', default='')

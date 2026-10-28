@@ -1,8 +1,7 @@
 import axios from 'axios'
-import Constants from 'expo-constants'
-import { Platform } from 'react-native'
 import * as SecureStore from 'expo-secure-store'
 import { API_URL } from './api'
+import { DISPOSITIVO, VERSAO_APP } from './versao'
 
 /**
  * Relato de erros do coletor para o backend (observabilidade, 2026-10-08).
@@ -23,8 +22,7 @@ type Relato = {
 const recentes = new Map<string, number>()
 const JANELA_DEDUP_MS = 60_000
 
-export const VERSAO_APP = Constants.expoConfig?.version ?? '?'
-const DISPOSITIVO = `${Platform.OS} ${Platform.Version} · ${Constants.deviceName ?? 'aparelho'}`.slice(0, 200)
+export { VERSAO_APP }   // quem importava daqui continua funcionando
 
 export async function reportarErro(r: Relato): Promise<void> {
   try {

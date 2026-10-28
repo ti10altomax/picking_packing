@@ -69,6 +69,9 @@ services:
     # A pasta é zerada a cada subida (contadores de processo morto sumiriam errado).
     environment:
       - PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus
+    # APK do app do coletor publicado em Admin → App (apps/app_mobile) — sobrevive ao rebuild
+    volumes:
+      - media_data:/app/media
     command:
       - sh
       - -c
@@ -161,3 +164,4 @@ services:
 volumes:
   caddy_data:
   caddy_config:
+  media_data:
