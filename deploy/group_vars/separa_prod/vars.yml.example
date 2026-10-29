@@ -38,6 +38,9 @@ oracle_schema: ERP_PROD
 # --- App do coletor (2026-10-28) ---
 # URL do backend como o coletor enxerga (= EXPO_PUBLIC_API_URL do APK). Vira o link de download em Admin → App.
 separa_url_publica: "http://192.168.1.199:8003"
+# URL do web como o coletor enxerga: o "?" do app abre API_URL/ajuda e o backend redireciona para cá.
+# HTTP na :3003 porque o cert mkcert da :443 não é confiado no Android (o navegador mostraria aviso).
+separa_web_url: "http://192.168.1.199:3003"
 
 # --- Senior SOAP ---
 senior_wsdl_embalagem: "http://192.168.1.210:8080/g5-senior-services/sapiens_Synccom_senior_g5_co_mcm_ven_embalagempfa?wsdl"

@@ -13,7 +13,8 @@ Admin:
 """
 import logging
 
-from django.http import FileResponse, Http404, HttpResponse
+from django.conf import settings
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_GET
 from rest_framework import status as http_status
@@ -94,6 +95,19 @@ def baixar_apk(request, nome):
                             content_type='application/vnd.android.package-archive')
     resposta['Content-Length'] = v.tamanho_bytes or v.arquivo.size
     return resposta
+
+
+@require_GET
+def ajuda_redirect(request):
+    """O "?" do app abre `API_URL/ajuda?perfil=…#chave` (o APK só conhece a URL da API).
+    Em produção a :8003 é o Django direto, então redireciona para o web — query vai
+    junto e o navegador mantém o `#chave` sozinho (Location sem fragmento)."""
+    base = settings.SEPARA_WEB_URL
+    if not base:
+        origens = getattr(settings, 'CORS_ALLOWED_ORIGINS', None) or ['https://localhost:3000']
+        base = origens[0].rstrip('/')
+    query = request.META.get('QUERY_STRING', '')
+    return HttpResponseRedirect(f'{base}/ajuda{"?" + query if query else ""}')
 
 
 def _mb(n: int) -> str:

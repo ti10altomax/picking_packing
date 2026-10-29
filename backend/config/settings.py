@@ -386,6 +386,11 @@ SENIOR_WS_DRY_RUN = config('SENIOR_WS_DRY_RUN', default=True, cast=bool)
 # errado quando o pedido chega pelo proxy do web (viria o host do Next/Caddy).
 # Produção: http://192.168.1.199:8003 (a mesma EXPO_PUBLIC_API_URL embutida no APK).
 SEPARA_URL_PUBLICA = config('SEPARA_URL_PUBLICA', default='').rstrip('/')
+# URL do WEB (Next.js) como o COLETOR enxerga (manual embutido, 2026-10-29): o "?" do
+# app abre `API_URL/ajuda…` e o backend redireciona para cá. Em produção a :8003 é o
+# Django direto, não passa pelo Caddy — por isso o web precisa de URL própria.
+# Vazio = primeira origem do CORS_ALLOWED_ORIGINS (dev: https://localhost:3000).
+SEPARA_WEB_URL = config('SEPARA_WEB_URL', default='').rstrip('/')
 
 # VTEX API
 VTEX_ACCOUNT_NAME = config('VTEX_ACCOUNT_NAME', default='')

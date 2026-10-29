@@ -10,6 +10,10 @@ import { ThemeToggle } from '@/components/ThemeToggle'
  * O "?" abre `/ajuda#chave` no navegador do aparelho — o manual é um só,
  * mantido no web; o app não duplica texto. Rotas iguais às do web, exceto a
  * sequência (/supervisor/sequencia/[id] aqui, /supervisor/patio/[id] lá).
+ *
+ * A URL aberta é `API_URL/ajuda` de propósito: o app só conhece a API, e em
+ * produção a :8003 é o Django direto. O backend redireciona para o web
+ * (`SEPARA_WEB_URL`, view `ajuda_redirect`), levando a query e o #chave.
  */
 function chaveAjuda(pathname: string): string {
   const p = pathname.replace(/\/+$/, '')
