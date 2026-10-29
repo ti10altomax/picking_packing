@@ -24,6 +24,8 @@ Sistema interno para **separação de pedidos no galpão da Altomax**. Não é m
 
 > **Distribuição do APK (2026-10-28)** — app `apps/app_mobile`. O admin publica o APK em **Admin → App do coletor** (`/admin/app`; `VersaoApp`, validação de zip/AndroidManifest, versão X.Y.Z crescente); o backend serve a página **`/apk/`** (botão Baixar, sem login, para abrir no navegador do aparelho na primeira instalação) e o arquivo `/apk/separa-X.Y.Z.apk`; `GET /api/app/versao/` (sem login) alimenta o aviso no app (`components/AvisoAtualizacao.tsx`: faixa "Atualizar" ou bloqueio se obrigatória; abre a URL no navegador e o Android instala por cima). Inventário: o app manda `X-App-Versao`/`X-App-Dispositivo` em toda requisição → `DispositivoApp` (quem está em qual versão, badge "desatualizado" na mesma tela). Arquivo em `MEDIA_ROOT` (volume `media_data` em prod); Caddy roteia `/apk/*` pro backend; `SEPARA_URL_PUBLICA` (`.env`, prod `http://192.168.1.199:8003`) é o host do link de download. Instalação silenciosa não existe sem EMM (StageNow da Zebra, fora do Separa).
 
+> **Manual do usuário embutido (2026-10-29)** — botão **"?"** no cabeçalho de toda tela (web: `components/Ajuda.tsx` nos três layouts; coletor: `Header.tsx` abre o manual no navegador) e página pública **`/ajuda`** (sem login, índice por perfil, `#chave`, imprimível). Conteúdo em **`frontend/content/ajuda/<chave>.ts`** (`AjudaTela`: resumo, capturas, passos, elementos, situações, dicas, relacionadas), capturas em `public/manual/`, guia de estilo em `content/ajuda/README.md`. **Tela nova = arquivo novo em `content/ajuda` + registro em `index.ts`**; `npm run ajuda:checar` aponta rotas sem ajuda. Capturas com dados fictícios (documentos 9801xx em dev).
+
 Atores principais: **Supervisor de Vendas**, **Supervisor de Pátio**, **Conferente** e **Admin**.
 
 ### Fluxo geral
@@ -274,9 +276,12 @@ separa/
 │   │   ├── etiquetas/      # CONGELADO — mas Impressora/PrintAgent/PrintJob e printer.py são reaproveitados pela impressao
 │   │   └── vtex/           # CONGELADO — VTEX API
 ├── frontend/
+│   ├── content/ajuda/      # manual embutido: um AjudaTela por tela + README (guia de estilo) (2026-10-29)
+│   ├── public/manual/      # capturas das telas usadas no manual
 │   ├── app/
 │   │   ├── (conferente)/   # conferencia/ (atual) + pedidos/ (LEGADO congelado)
 │   │   ├── (impressao)/    # etiquetas/[id] — etiqueta 10x15 pelo navegador (sem header)
+│   │   ├── (publico)/      # ajuda/ — manual do usuário (sem login) (2026-10-29)
 │   │   ├── (supervisor)/   # telas de Sup. Vendas, Sup. Pátio, conferidos, não conformes, etiquetas, agora, cartas (CC-e)
 │   │   ├── (admin)/
 │   │   │   └── admin/

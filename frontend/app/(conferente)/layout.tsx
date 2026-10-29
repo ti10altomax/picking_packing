@@ -7,6 +7,7 @@ import { useExitGuard } from '@/lib/useExitGuard'
 import { FullscreenOnFirstTap, FullscreenToggle } from '@/components/FullscreenLayer'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { Marca } from '@/components/Marca'
+import { AjudaBotao } from '@/components/Ajuda'
 
 export default function ConferenteLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -34,6 +35,7 @@ export default function ConferenteLayout({ children }: { children: React.ReactNo
       <header className="bg-surface-card border-b border-surface-border px-4 h-14 flex items-center justify-between sticky top-0 z-10 shadow-sm dark:shadow-none">
         <Marca href={destinoPorPerfil(user?.perfil)} />
         <div className="flex items-center gap-2">
+          <AjudaBotao />
           <ThemeToggle />
           <FullscreenToggle />
           <span className="text-sm text-ink-muted">{user?.username}</span>

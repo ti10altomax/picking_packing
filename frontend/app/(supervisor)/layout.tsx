@@ -9,6 +9,7 @@ import { useCcePermissao } from '@/lib/useCcePermissao'
 import { FullscreenOnFirstTap, FullscreenToggle } from '@/components/FullscreenLayer'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { Marca } from '@/components/Marca'
+import { AjudaBotao } from '@/components/Ajuda'
 
 const PERFIS_PERMITIDOS = ['supervisor_vendas', 'supervisor_patio', 'admin']
 
@@ -123,6 +124,7 @@ export default function SupervisorLayout({ children }: { children: React.ReactNo
           </nav>
         </div>
         <div className="flex items-center gap-2">
+          <AjudaBotao />
           <ThemeToggle />
           <FullscreenToggle />
           <span className="text-sm text-ink-muted">{user?.username}</span>

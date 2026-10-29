@@ -7,6 +7,7 @@ import { useExitGuard } from '@/lib/useExitGuard'
 import { FullscreenOnFirstTap, FullscreenToggle } from '@/components/FullscreenLayer'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { Marca } from '@/components/Marca'
+import { AjudaBotao } from '@/components/Ajuda'
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -37,6 +38,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <span className="text-xs bg-surface-elev text-ink-muted px-2 py-0.5 rounded">Admin</span>
         </div>
         <div className="flex items-center gap-2">
+          <AjudaBotao />
           <ThemeToggle />
           <FullscreenToggle />
           <span className="text-sm text-ink-muted">{user?.username}</span>
