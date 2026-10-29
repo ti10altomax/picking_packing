@@ -89,7 +89,7 @@ export default function AjudaPage() {
         </nav>
 
         {/* Conteúdo */}
-        <main className="flex-1 min-w-0 px-4 sm:px-8 py-6 max-w-4xl">
+        <main className="flex-1 min-w-0 px-4 sm:px-8 py-6 max-w-6xl">
           <div className="mb-10">
             <h1 className="text-3xl sm:text-4xl text-ink">Manual do usuário</h1>
             <p className="mt-2 text-ink-muted">

@@ -8,8 +8,11 @@ Cada tela do Separa tem um arquivo `content/ajuda/<chave>.ts` exportando um `Aju
   abre essa página no navegador do aparelho (`?perfil=…#chave`).
 
 `npm run ajuda:checar` lista rotas sem ajuda e arquivos ainda em rascunho.
-Capturas ficam em `public/manual/<chave>.png` (web desktop 1180×640; conferente e login em
-360×640, que é a largura do coletor — marcar `mobile: true`).
+Capturas ficam em `public/manual/<chave>.png` (web desktop 1180×640 capturado em ~1,25× =
+1475×800; conferente e login direto do coletor, 720×1184 — marcar `mobile: true`). Na página
+`/ajuda` cada captura de desktop ocupa a largura toda da coluna e as do coletor ficam lado a
+lado com ~340 px; qualquer uma amplia ao clicar. No painel lateral elas encolhem para a largura
+do painel. Por isso, capture sempre no tamanho cheio — nunca reduza a imagem para "caber".
 
 ## Para quem é
 

@@ -3,7 +3,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
 import { createPortal } from 'react-dom'
 import { ajudaPorRota } from '@/content/ajuda'
-import { PERFIL_LABEL, type AjudaTela } from '@/content/ajuda/tipos'
+import { PERFIL_LABEL, type AjudaTela, type Captura } from '@/content/ajuda/tipos'
 
 /**
  * Botão "?" do cabeçalho (manual embutido, 2026-10-29).
@@ -59,7 +59,7 @@ function AjudaPainel({ tela, onFechar }: { tela: AjudaTela; onFechar: () => void
   return createPortal(
     <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true" aria-labelledby="ajuda-titulo">
       <div className="absolute inset-0 bg-black/40" onClick={onFechar} />
-      <aside className="relative h-full w-full sm:w-[440px] md:w-[520px] bg-surface-card border-l border-surface-border shadow-2xl flex flex-col">
+      <aside className="relative h-full w-full sm:w-[440px] md:w-[520px] xl:w-[600px] bg-surface-card border-l border-surface-border shadow-2xl flex flex-col">
         <header className="flex items-start justify-between gap-3 px-5 py-4 border-b border-surface-border">
           <div className="min-w-0">
             <p className="text-xs uppercase tracking-wide text-ink-subtle">Ajuda{tela.menu ? ` · ${tela.menu}` : ''}</p>
@@ -96,6 +96,7 @@ function AjudaPainel({ tela, onFechar }: { tela: AjudaTela; onFechar: () => void
  * `compacto` esconde perfis e capturas grandes (no painel a tela já está atrás).
  */
 export function AjudaConteudo({ tela, compacto = false }: { tela: AjudaTela; compacto?: boolean }) {
+  const [ampliada, setAmpliada] = useState<Captura | null>(null)
   return (
     <div className="space-y-6 text-[15px] leading-relaxed text-ink">
       {!compacto && (
@@ -108,21 +109,31 @@ export function AjudaConteudo({ tela, compacto = false }: { tela: AjudaTela; com
       <p>{tela.resumo}</p>
 
       {tela.capturas && tela.capturas.length > 0 && (
-        <div className={compacto ? 'space-y-3' : 'grid gap-4 sm:grid-cols-2'}>
+        /* Capturas de desktop ocupam a largura toda (uma por linha); as do coletor
+           ficam lado a lado na largura natural do aparelho. Clique amplia. */
+        <div className="flex flex-wrap gap-4">
           {tela.capturas.map((c) => (
-            <figure key={c.src} className={c.mobile ? 'max-w-[300px]' : ''}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={c.src}
-                alt={c.legenda || tela.titulo}
-                loading="lazy"
-                className="rounded-xl border border-surface-border shadow-sm w-full"
-              />
+            <figure key={c.src} className={c.mobile ? 'w-[min(100%,340px)]' : 'w-full'}>
+              <button
+                type="button"
+                onClick={() => setAmpliada(c)}
+                title="Clique para ampliar"
+                className="block w-full cursor-zoom-in rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ink"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={c.src}
+                  alt={c.legenda || tela.titulo}
+                  loading="lazy"
+                  className="rounded-xl border border-surface-border shadow-sm w-full"
+                />
+              </button>
               {c.legenda && <figcaption className="mt-1.5 text-sm text-ink-muted">{c.legenda}</figcaption>}
             </figure>
           ))}
         </div>
       )}
+      {ampliada && <CapturaAmpliada captura={ampliada} alt={tela.titulo} onFechar={() => setAmpliada(null)} />}
 
       {tela.passos && tela.passos.length > 0 && (
         <Secao titulo="Passo a passo">
@@ -166,6 +177,43 @@ export function AjudaConteudo({ tela, compacto = false }: { tela: AjudaTela; com
         </Secao>
       )}
     </div>
+  )
+}
+
+/** Captura em tamanho grande por cima de tudo (Esc ou clique fecha). */
+function CapturaAmpliada({ captura, alt, onFechar }: { captura: Captura; alt: string; onFechar: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onFechar() }
+    document.addEventListener('keydown', onKey)
+    const overflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = overflow
+    }
+  }, [onFechar])
+
+  if (typeof document === 'undefined') return null
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-black/85 p-3 sm:p-6 cursor-zoom-out print:hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-label={captura.legenda || alt}
+      onClick={onFechar}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={captura.src}
+        alt={captura.legenda || alt}
+        className="max-w-full max-h-[calc(100vh-5rem)] rounded-lg shadow-2xl object-contain"
+      />
+      <p className="mt-3 text-sm text-white/80 text-center max-w-3xl">
+        {captura.legenda}{captura.legenda ? ' · ' : ''}Esc fecha
+      </p>
+    </div>,
+    document.body,
   )
 }
 
