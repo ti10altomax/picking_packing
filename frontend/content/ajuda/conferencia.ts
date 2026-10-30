@@ -43,7 +43,7 @@ export const conferencia: AjudaTela = {
     {
       nome: 'Barra "Bipe a nota para pegar…"',
       descricao:
-        'Fica sempre pronta para o leitor do coletor. Aceita a chave do DANFE ou o número da NF ou do pedido. Abre o documento se ele já é seu e pega se ainda não tem conferente.',
+        'Fica sempre pronta para o leitor do coletor. Aceita a chave do DANFE ou o número da NF ou do pedido. Pela chave do DANFE também acha o pedido que já foi faturado. Abre o documento se ele já é seu e pega se ainda não tem conferente.',
     },
     {
       nome: 'Disponíveis na sequência N',
@@ -64,6 +64,15 @@ export const conferencia: AjudaTela = {
       quando: 'Mais de um documento com esse número — qual é?',
       oQueFazer:
         'Escolha na lista o que tem o número, a série e o cliente certos. Toque em Cancelar para voltar.',
+    },
+    {
+      quando: 'A barra mostra "a NF saiu do pedido…, que não está no Separa".',
+      oQueFazer:
+        'A nota existe no Senior, mas o pedido dela não foi enviado para separação. Fale com o Sup. Vendas.',
+    },
+    {
+      quando: 'A barra mostra "não consegui consultar a NF no Senior".',
+      oQueFazer: 'O Senior não respondeu. Bipe de novo em alguns segundos ou digite o número do pedido.',
     },
     {
       quando: 'Dois conferentes bipam a mesma nota. A barra mostra "já está com" e o nome do outro.',

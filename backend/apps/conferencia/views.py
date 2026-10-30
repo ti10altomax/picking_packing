@@ -15,6 +15,7 @@ from apps.pedidos.models import (
     DivergenciaBarra, ErroSeparacao, Pedido, PedidoItem, PedidoLog,
     Separador, Sequencia, Volume, VolumeItem,
 )
+from apps.pedidos.nf_vinculo import aplicar_vinculo, pedidos_da_nf
 
 logger = logging.getLogger(__name__)
 
@@ -170,20 +171,59 @@ def _interpretar_codigo(codigo: str):
     return str(int(digitos)), None, False
 
 
+def _serie_confere(codsnf: str, serie: str) -> bool:
+    # codsnf do Senior pode ser alfanumérico ('NFE'); a série da chave só é
+    # comparada quando a nossa é numérica — senão não filtra por ela.
+    return not codsnf.strip().isdigit() or int(codsnf) == int(serie)
+
+
 def _candidatos_por_codigo(numero, serie, veio_de_chave):
-    """Documentos locais que casam com o código lido. Pelo DANFE é sempre NF (e a série
-    confere); por número solto vale NF ou pedido — ambiguidade volta para o usuário."""
-    qs = Pedido.objects.filter(numero_externo=numero).select_related('conferente', 'sequencia')
+    """Documentos locais que casam com o código lido. Pelo DANFE vale a NF importada
+    como documento e o pedido já faturado com essa NF (`Pedido.nf_*`, E140IPV), com a
+    série conferida; por número solto vale NF ou pedido pelo `numero_externo` —
+    ambiguidade volta para o usuário."""
+    qs = Pedido.objects.select_related('conferente', 'sequencia')
     if veio_de_chave:
-        qs = qs.filter(tipo=Pedido.Tipo.NOTA_FISCAL)
-    cands = list(qs.order_by('-criado_em'))
-    if serie is not None:
-        # codsnf do Senior pode ser alfanumérico ('NFE'); a série da chave só é
-        # comparada quando a nossa é numérica — senão não filtra por ela.
-        cands = [p for p in cands if not p.codsnf.strip().isdigit() or int(p.codsnf) == int(serie)]
+        qs = qs.filter(
+            models.Q(tipo=Pedido.Tipo.NOTA_FISCAL, numero_externo=numero)
+            | models.Q(tipo=Pedido.Tipo.PEDIDO, nf_numero=numero)
+        )
+        cands = [
+            p for p in qs.order_by('-criado_em')
+            if _serie_confere(p.codsnf if p.tipo == Pedido.Tipo.NOTA_FISCAL else p.nf_codsnf, serie)
+        ]
+    else:
+        cands = list(qs.filter(numero_externo=numero).order_by('-criado_em'))
     # escopo antigo congelado não entra
     cands = [p for p in cands if p.status not in ('faturado', 'aguardando_etiquetar', 'concluido')]
     return cands
+
+
+def _vincular_nf_da_chave(numero, serie) -> str:
+    """Chave sem documento local: a NF pode ser de um pedido faturado há pouco, que o beat
+    `vincular_nfs_pedidos` ainda não ligou. Consulta a E140IPV na hora e vincula os pedidos
+    do Separa à nota. Devolve um aviso para o 404 quando não deu ('' se vinculou ou nada a dizer)."""
+    try:
+        rows = [r for r in pedidos_da_nf(numero) if _serie_confere(str(r.get('codsnf') or ''), serie)]
+    except Exception:
+        logger.exception('pegar: falha ao consultar a NF no Senior', extra={'nf': numero})
+        return f'não consegui consultar a NF {numero} no Senior — tente de novo'
+    if not rows:
+        return ''
+    fora = []
+    for r in rows:
+        numped = str(int(r['numped']))
+        filped = str(int(r['filped'])) if r.get('filped') is not None else ''
+        achados = list(Pedido.objects.filter(tipo=Pedido.Tipo.PEDIDO, numero_externo=numped)
+                       .filter(models.Q(codfil=filped) | models.Q(codfil='')))
+        if not achados:
+            fora.append(numped)
+        for p in achados:
+            aplicar_vinculo(p, r)
+            logger.info('pegar: NF vinculada ao pedido na bipagem', extra={'pedido': p.id, 'nf': numero})
+    if fora:
+        return f"a NF {numero} saiu do pedido {', '.join(sorted(set(fora)))}, que não está no Separa"
+    return ''
 
 
 def _resolver_apontamento(request):
@@ -1501,7 +1541,7 @@ def transferir_conferencia(request, pk):
 def _opcao(p):
     return {
         'id': p.id, 'tipo': p.tipo, 'numero_externo': p.numero_externo, 'codsnf': p.codsnf,
-        'cliente': p.cliente, 'status': p.status, 'status_label': p.get_status_display(),
+        'nf_numero': p.nf_numero, 'cliente': p.cliente, 'status': p.status, 'status_label': p.get_status_display(),
         'conferente': p.conferente.username if p.conferente else None,
         'sequencia': {'id': p.sequencia.id, 'numero': p.sequencia.numero} if p.sequencia else None,
     }
@@ -1526,6 +1566,7 @@ def pegar_documento(request):
 
     codigo = str(request.data.get('codigo') or '').strip()
     pedido_id = request.data.get('pedido_id')
+    aviso = ''
     if pedido_id:
         cands = list(Pedido.objects.filter(pk=pedido_id).select_related('conferente', 'sequencia'))
     else:
@@ -1533,10 +1574,13 @@ def pegar_documento(request):
         if not numero:
             return Response({'erro': 'código vazio'}, status=http_status.HTTP_400_BAD_REQUEST)
         cands = _candidatos_por_codigo(numero, serie, veio_de_chave)
+        if not cands and veio_de_chave:
+            aviso = _vincular_nf_da_chave(numero, serie)
+            cands = _candidatos_por_codigo(numero, serie, veio_de_chave)
 
     if not cands:
         return Response(
-            {'resultado': 'nao_encontrado', 'erro': 'documento não encontrado no Separa'},
+            {'resultado': 'nao_encontrado', 'erro': aviso or 'documento não encontrado no Separa'},
             status=http_status.HTTP_404_NOT_FOUND,
         )
     if len(cands) > 1:
