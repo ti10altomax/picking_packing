@@ -28,8 +28,8 @@ export const conferenciaPedido: AjudaTela = {
     'Em "Quem separou este pedido?", toque no nome do separador. Sem essa escolha o botão fica cinza.',
     'Toque em Iniciar conferência.',
     'Toque em + Volume, escolha caixa, fardo ou outro, confira o identificador e toque em Criar.',
-    'Bipe o código do produto na barra "Bipe o código…", ou toque no item na lista.',
-    'Informe a quantidade que está pondo neste volume e toque em Confirmar.',
+    'Bipe o produto na barra "Bipe o código…". Cada leitura soma 1 unidade no volume ativo, sem abrir nada.',
+    'Para pôr várias unidades de uma vez (caixa fechada), toque em Qtd antes de bipar, ou toque no item na lista. Informe a quantidade e toque em Confirmar.',
     'Repita até todos os itens ficarem com ✓. Abra outro volume com + Volume sempre que precisar.',
     'Quando o botão ficar verde, toque em Concluir ✓ e confirme.',
   ],
@@ -63,6 +63,11 @@ export const conferenciaPedido: AjudaTela = {
         'Ao lado de cada lançamento do volume. Remove o lançamento e a quantidade volta para a fila. Um volume vazio tem o botão Apagar volume.',
     },
     {
+      nome: 'Qtd',
+      descricao:
+        'Na barra de bipagem. Toque antes de bipar e a próxima leitura abre a tela de quantidade. A barra fica amarela enquanto estiver armado. Depois dessa leitura volta sozinho para 1 em 1. Toque de novo para cancelar.',
+    },
+    {
       nome: 'Ícone da câmera',
       descricao: 'Na barra de bipagem. Lê o código pela câmera quando o leitor não funcionar.',
     },
@@ -89,8 +94,16 @@ export const conferenciaPedido: AjudaTela = {
       oQueFazer: 'Toque em + Volume e crie o volume. Depois bipe de novo.',
     },
     {
-      quando: 'A barra mostra "Código não corresponde a nenhum item pendente".',
+      quando: 'Aviso verde "+1" com o SKU e "N de M".',
+      oQueFazer: 'A leitura entrou: 1 unidade no volume ativo. Siga bipando.',
+    },
+    {
+      quando: 'Aparece "Este código não é de nenhum item pendente" ou "Este item já está completo".',
       oQueFazer: 'O produto não está neste pedido ou o item já está completo. Confira o produto na mão.',
+    },
+    {
+      quando: 'Bipou uma unidade a mais por engano.',
+      oQueFazer: 'Abra o volume e toque na lixeira ao lado do lançamento de 1×.',
     },
     {
       quando: 'Vermelho: "Código não corresponde ao item escolhido".',
@@ -142,7 +155,7 @@ export const conferenciaPedido: AjudaTela = {
     },
   ],
   dicas: [
-    'Bipe o produto antes de tocar no item. A quantidade já abre pronta para digitar.',
+    'Peça a peça, só bipe. Caixa fechada com muitas unidades: toque em Qtd e bipe uma vez.',
     'Apague só volumes vazios. Com itens, remova os lançamentos antes.',
   ],
   relacionadas: ['conferencia', 'login'],

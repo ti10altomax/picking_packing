@@ -151,8 +151,8 @@ Toda transição grava em `PedidoLog` (quem, quando, ação, payload).
    - Tipo: caixa / fardo / outro (string livre por enquanto, mapeamento Senior TBD).
    - Identificador opcional (texto livre).
 5. **Bipar item**
-   - Conferente toca em um item da lista do pedido.
-   - Informa **quantidade** que está colocando no volume atual.
+   - **Desde 2026-11-05 (pedido do Sup. Pátio): bipar na barra registra 1 unidade direto** (sem modal; leituras em fila, toast verde "+1 SKU"). O botão **Qtd** da barra arma só a próxima leitura para abrir o modal de quantidade (barra âmbar; desarma sozinho). Tocar no item da lista continua abrindo o modal.
+   - No modal: informa **quantidade** que está colocando no volume atual.
    - Bipa o código de barras → sistema valida:
      - Match (EAN/SKU bate com o item escolhido) → soma a qtd ao item, feedback verde + som curto.
      - Mismatch → feedback vermelho, não soma, log.

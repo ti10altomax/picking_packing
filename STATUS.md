@@ -6,6 +6,25 @@
 
 ---
 
+## 2026-11-05 (fim da tarde) — Bipagem de 1 em 1 + botão "Qtd" na barra
+
+**Gatilho.** A Sup. Pátio quer bipar peça a peça; abrir o modal para confirmar quantidade 1 atrasava. O modal tinha que continuar existindo para caixa fechada, sem poluir a tela do coletor. O usuário sugeriu dois toques no campo. Descartei porque não aparece na tela, briga com a seleção de texto do Android e dispara sem querer com uma mão. Ele escolheu o botão na barra. **Feito (web `conferencia/[id]/page.tsx` e mobile `conferencia/[id].tsx`):**
+- Leitura sem nada armado → `conferenciaApi.bipar` com `qtd: 1` direto, sem mudança no backend.
+- Leituras seguidas vão numa fila (`filaBip`, promise encadeada), e cada uma procura o item no pedido mais novo (`pedidoRef`, atualizado com o `qtd_separada` da resposta). Assim duas bipadas rápidas do último item pendente não passam pela checagem local.
+- Acerto: a barra pisca verde, bipe no web e vibração curta no mobile, e um toast verde "+1 SKU" (descrição · N de M, "item completo") com `chave: 'leitor'`.
+- Os lançamentos do volume chegam por uma recarga 700 ms depois da última leitura.
+- Excesso vira o toast "Este item já está completo"; outros erros viram toast vermelho. Cancelado no Senior segue o fluxo de sempre.
+- Botão **Qtd** dentro da barra, antes da câmera, arma só a próxima leitura: barra âmbar e uma linha "Próxima leitura abre a quantidade". Bipar abre o modal de sempre já com o código e desarma sozinho. No web, `onMouseDown` preventDefault para o foco não sair da barra.
+- Tocar no item da lista continua abrindo o modal.
+
+Manual (`conferencia-pedido.ts`) e CLAUDE.md (Fluxo 3, passo 5) atualizados.
+
+**Conferido no Chrome** (dev, doc fictício 980108): duas leituras seguidas foram para 8 de 18, com dois lançamentos 1× no volume. Com Qtd armado, abriu o modal e a barra voltou ao normal. Desfiz as duas bipagens no banco de dev depois. `tsc` limpo no web (container) e no mobile.
+
+**Efeito colateral visível:** peça a peça gera um lançamento 1× por leitura na lista do volume. Se incomodar, agrupar por item na exibição.
+
+**Deploy:** só front + APK novo.
+
 ## 2026-11-05 (tarde) — "Onde está" na busca + toast + mensagem do leitor legível
 
 **Gatilho.** Procurando em Vendas ou Conferidos o pedido 185396 (em conferência em produção), nada aparecia e nada explicava. E as mensagens "muito comuns" — a do leitor ia no **placeholder** do campo (uma linha, mono, cortada, 3 s) e não dava para ler no coletor; o usuário pediu um toast. **Feito:** `GET /api/pedidos/localizar/?q=<número>` (só dígitos; casa `numero_externo`, `nf_numero` e `pedidos_origem`; até 5; sem o escopo congelado) devolve status, frase ("em conferência com joao (sequência 12)"), `via` (NF do pedido / pedido de origem) e `lista` → `components/pedidos/OndeEsta.tsx` (web) e `components/OndeEsta.tsx` (mobile) no lugar do "nenhum resultado" de Vendas, Pátio e Conferidos quando há busca, com chip na paleta de status e botão **Ver** (rota da lista ou da sequência). **Toast**: `components/Toast.tsx` no web (`ToastProvider` no `app/layout.tsx`, dentro do `DialogProvider`; `useToast().ok/erro/aviso/info(titulo, {detalhe, codigo, duracao, chave})`; cor sólida, 17 px negrito, quebra linha, "lido: <código>" em mono, barra de tempo, pausa no hover, `chave` substitui o anterior, `onMouseDown` preventDefault para não tirar o foco da barra; animação em `globals.css`) e no mobile (mesma API, `Animated` do RN, topo + safe area, toque fecha; `ToastProvider` no `_layout`). Leitor: lista do conferente e tela de conferência (web e mobile) mandam a mensagem para o toast (`chave: 'leitor'`) e a barra só pisca vermelho 1,2 s; placeholder fixo. Mensagem dentro do modal de bipar virou bloco sólido em 16 px (web e mobile). Web: `setMensagem({tipo, texto})` + bloco verde/vermelho em Vendas, Pátio, sequência, Não conformes, Separadores e Cancelados → toast (script); Vendas mostra conflitos num toast âmbar com a lista. Mobile: diálogos de sucesso que travavam a tela (Vendas, Pátio, atribuir na sequência, reimprimir etiqueta) → toast; avisos da etiqueta ao concluir continuam diálogo. **Conferido no Chrome** (dev): aviso "155640 não está nesta lista — Cancelado", chips "ped. 169992"/"NF 150250", toast de conflito e toast do leitor. `tsc` limpo no web (no container — no host o `npx tsc` não roda, e o "web=0" da rodada da manhã era o exit do `tail`) e no mobile. **Achado:** em dev a NF 150250 (MAZINHO CALCADOS) aponta pela E140IPV para o pedido 169992, que localmente é de JOSE VILMAR DA SILVA (importado em maio, `codfil` vazio) — conferir no Senior se o cliente do pedido mudou ou se é outro pedido. **Deploy:** sem migration nova; APK novo para o mobile.

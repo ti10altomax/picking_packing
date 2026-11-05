@@ -106,7 +106,18 @@ export default function ConferenciaDetalhe() {
   // (showSoftInputOnFocus=false). Mesma barra do web — a câmera é o ícone na ponta.
   const scanRef = useRef<TextInput>(null)
   const [scanValue, setScanValue] = useState('')
-  const [scanFlash, setScanFlash] = useState<'erro' | null>(null)
+  const [scanFlash, setScanFlash] = useState<'erro' | 'ok' | null>(null)
+
+  // Bipagem de 1 em 1 (2026-11-05, pedido do Sup. Pátio): a leitura registra 1 unidade
+  // direto. O botão "Qtd" da barra arma só a PRÓXIMA leitura para abrir o modal de
+  // quantidade (caixa fechada); depois volta sozinho para 1 em 1. Tocar no item da lista
+  // continua abrindo o modal.
+  const [qtdArmada, setQtdArmada] = useState(false)
+  // Leituras seguidas vão em fila e cada uma olha o pedido mais novo — sem isso duas
+  // bipadas rápidas do último item pendente passariam pela checagem local.
+  const pedidoRef = useRef<Pedido | null>(null)
+  const filaBip = useRef<Promise<void>>(Promise.resolve())
+  const recargaTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Apontamento "separado por" (DESIGN.md §2)
   const [liberados, setLiberados] = useState<SeparadorLiberado[]>([])
@@ -126,6 +137,7 @@ export default function ConferenciaDetalhe() {
   }, [pedidoId])
 
   useEffect(() => { carregar() }, [carregar])
+  useEffect(() => { pedidoRef.current = pedido }, [pedido])
 
   useEffect(() => {
     const t = setInterval(() => setSegundos((s) => s + 1), 1000)
@@ -369,34 +381,98 @@ export default function ConferenciaDetalhe() {
       falhaScan('Crie um volume antes de bipar', 'Toque em "Novo volume" e bipe de novo.', cod)
       return
     }
-    const item = pedido.itens.find(
-      (i) =>
-        i.status === 'ok' &&
-        i.qtd_separada < i.qtd_pedida &&
-        (i.ean === cod || i.sku === cod),
-    )
+    if (!qtdArmada) {
+      registrarUm(cod, volumeAtivo.id)
+      return
+    }
+    const item = itemPendente(pedido, cod)
+    setQtdArmada(false)
     if (item) {
       setScanFlash(null)
       setCodigoInicial(cod)
       setItemSelecionado(item)
     } else {
-      falhaScan(
-        'Este código não é de nenhum item pendente',
-        'O produto não é deste documento ou o item já está completo.',
-        cod,
-      )
+      erroItemNaoPendente(cod)
     }
+  }
+
+  function itemPendente(p: Pedido, cod: string) {
+    return p.itens.find(
+      (i) =>
+        i.status === 'ok' &&
+        i.qtd_separada < i.qtd_pedida &&
+        (i.ean === cod || i.sku === cod),
+    )
+  }
+
+  function erroItemNaoPendente(cod: string) {
+    falhaScan(
+      'Este código não é de nenhum item pendente',
+      'O produto não é deste documento ou o item já está completo.',
+      cod,
+    )
+  }
+
+  // Leitura sem "Qtd" armado: 1 unidade no volume ativo, sem modal
+  function registrarUm(cod: string, volumeId: number) {
+    filaBip.current = filaBip.current.then(async () => {
+      const p = pedidoRef.current
+      if (!p) return
+      const item = itemPendente(p, cod)
+      if (!item) {
+        erroItemNaoPendente(cod)
+        return
+      }
+      try {
+        const r = await conferenciaApi.bipar(pedidoId, {
+          item_id: item.id, qtd: 1, codigo: cod, volume_id: volumeId,
+        })
+        const atual = pedidoRef.current ?? p
+        const novo = {
+          ...atual,
+          itens: atual.itens.map((i) => (i.id === item.id ? { ...i, qtd_separada: r.qtd_separada } : i)),
+        }
+        pedidoRef.current = novo
+        setPedido(novo)
+        piscar('ok', 500)
+        Vibration.vibrate(40)
+        toast.ok(`+1 ${item.sku}`, {
+          detalhe: `${item.descricao ? `${item.descricao} · ` : ''}${r.qtd_separada} de ${r.qtd_pedida}${
+            r.qtd_separada >= r.qtd_pedida ? ' — item completo' : ''
+          }`,
+          chave: 'leitor',
+          duracao: 2500,
+        })
+        // os lançamentos do volume (com id para a lixeira) vêm do servidor; uma recarga
+        // depois da rajada de leituras basta
+        if (recargaTimer.current) clearTimeout(recargaTimer.current)
+        recargaTimer.current = setTimeout(() => carregar(true), 700)
+      } catch (err: unknown) {
+        if (await tratarCancelado(err)) return
+        const e = err as { response?: { status?: number; data?: { resultado?: string; erro?: string } } }
+        if (e?.response?.status === 409 && e.response.data?.resultado === 'excesso') {
+          falhaScan('Este item já está completo', `${item.sku}: o pedido tem ${item.qtd_pedida}.`, cod)
+        } else {
+          falhaScan('A leitura não foi registrada', e?.response?.data?.erro ?? 'Bipe de novo.', cod)
+        }
+        await carregar(true)
+      }
+    }).catch(() => {})
+  }
+
+  const scanFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  function piscar(tipo: 'erro' | 'ok', ms: number) {
+    setScanFlash(tipo)
+    if (scanFlashTimer.current) clearTimeout(scanFlashTimer.current)
+    scanFlashTimer.current = setTimeout(() => setScanFlash(null), ms)
   }
 
   // Barra pisca vermelho + vibra; a mensagem vai para o toast (grande, quebra linha).
   // Até 2026-11-05 ela aparecia no placeholder do campo e não dava para ler no coletor.
-  const scanFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   function falhaScan(titulo: string, detalhe: string, codigo: string) {
-    setScanFlash('erro')
+    piscar('erro', 1200)
     Vibration.vibrate([0, 100, 50, 100])
     toast.erro(titulo, { detalhe, codigo, chave: 'leitor' })
-    if (scanFlashTimer.current) clearTimeout(scanFlashTimer.current)
-    scanFlashTimer.current = setTimeout(() => setScanFlash(null), 1200)
   }
 
   // Enter do leitor (ou submit) — consome o que foi digitado na barra
@@ -541,12 +617,18 @@ export default function ConferenciaDetalhe() {
         </Pressable>
       </View>
 
-      {/* Barra do scanner — leitor de hardware digita aqui; ícone abre a câmera */}
+      {/* Barra do scanner — leitor de hardware digita aqui; bipou, registra 1; "Qtd" arma
+          a próxima leitura para abrir o modal de quantidade; ícone abre a câmera */}
       {volumeAtivo && pedido.status === 'conferindo' ? (
+        <>
         <View
           className={`mx-4 mt-3 rounded-xl border-2 h-14 flex-row items-center pl-3 pr-1 ${
             scanFlash === 'erro'
               ? 'border-red-500 bg-red-500/15'
+              : scanFlash === 'ok'
+              ? 'border-emerald-500 bg-zinc-900'
+              : qtdArmada
+              ? 'border-amber-400 bg-zinc-900'
               : 'border-zinc-700 bg-zinc-900'
           }`}
         >
@@ -575,6 +657,17 @@ export default function ConferenciaDetalhe() {
             }`}
           />
           <Pressable
+            onPress={() => setQtdArmada((v) => !v)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: qtdArmada }}
+            accessibilityLabel="Digitar a quantidade na próxima leitura"
+            className={`h-11 px-3 ml-1 items-center justify-center rounded-lg ${
+              qtdArmada ? 'bg-amber-400' : 'border border-zinc-700 active:bg-zinc-800'
+            }`}
+          >
+            <Text className={`text-sm font-bold ${qtdArmada ? 'text-zinc-950' : 'text-zinc-300'}`}>Qtd</Text>
+          </Pressable>
+          <Pressable
             onPress={() => setCameraGlobalAberta(true)}
             className="w-12 h-12 items-center justify-center rounded-lg active:bg-zinc-800"
             accessibilityLabel="Bipar com a câmera"
@@ -582,6 +675,12 @@ export default function ConferenciaDetalhe() {
             <Text className={`text-xl ${scanFlash === 'erro' ? 'text-red-400' : 'text-emerald-400'}`}>📷</Text>
           </Pressable>
         </View>
+        {qtdArmada ? (
+          <Text className="mx-4 mt-1.5 text-sm font-semibold text-amber-400">
+            Próxima leitura abre a quantidade · toque em Qtd para cancelar
+          </Text>
+        ) : null}
+        </>
       ) : null}
 
       {/* Lista de volumes (acordeão) */}

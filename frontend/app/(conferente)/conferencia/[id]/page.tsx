@@ -122,6 +122,18 @@ export default function ConferenciaPedidoPage() {
   const [scanFlash, setScanFlash] = useState<FlashTipo>(null)
   const [cameraAberta, setCameraAberta] = useState(false)
 
+  // Bipagem de 1 em 1 (2026-11-05, pedido do Sup. Pátio): a leitura registra 1 unidade
+  // direto. O botão "Qtd" da barra arma só a PRÓXIMA leitura para abrir o modal de
+  // quantidade (caixa fechada); depois volta sozinho para 1 em 1. Tocar no item da lista
+  // continua abrindo o modal.
+  const [qtdArmada, setQtdArmada] = useState(false)
+  // Leituras seguidas vão em fila e cada uma olha o pedido mais novo — sem isso duas
+  // bipadas rápidas do último item pendente passariam pela checagem local.
+  const pedidoRef = useRef<Pedido | null>(null)
+  const filaBip = useRef<Promise<void>>(Promise.resolve())
+  const recargaTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   // Apontamento "separado por" (DESIGN.md §2)
   const [liberados, setLiberados] = useState<SeparadorLiberado[]>([])
   const [apontamento, setApontamento] = useState<number | 'nao_identificado' | null>(null)
@@ -144,6 +156,7 @@ export default function ConferenciaPedidoPage() {
   }, [pedidoId])
 
   useEffect(() => { carregar() }, [carregar])
+  useEffect(() => { pedidoRef.current = pedido }, [pedido])
 
   useEffect(() => {
     const t = setInterval(() => setSegundos((s) => s + 1), 1000)
@@ -387,30 +400,95 @@ export default function ConferenciaPedidoPage() {
       return
     }
 
-    const item = pedido.itens.find(
-      (i) => i.status === 'ok'
-        && i.qtd_separada < i.qtd_pedida
-        && (i.ean === cod || i.sku === cod),
-    )
+    if (!qtdArmada) {
+      registrarUm(cod, volumeAtivo.id)
+      return
+    }
+    const item = itemPendente(pedido, cod)
+    setQtdArmada(false)
     if (item) {
       setCodigoInicial(cod)
       setItemSelecionado(item)
     } else {
-      erroScan(
-        'Este código não é de nenhum item pendente',
-        'O produto não é deste documento ou o item já está completo.',
-        cod,
-      )
+      erroItemNaoPendente(cod)
     }
+  }
+
+  function itemPendente(p: Pedido, cod: string) {
+    return p.itens.find(
+      (i) => i.status === 'ok'
+        && i.qtd_separada < i.qtd_pedida
+        && (i.ean === cod || i.sku === cod),
+    )
+  }
+
+  function erroItemNaoPendente(cod: string) {
+    erroScan(
+      'Este código não é de nenhum item pendente',
+      'O produto não é deste documento ou o item já está completo.',
+      cod,
+    )
+  }
+
+  // Leitura sem "Qtd" armado: 1 unidade no volume ativo, sem modal
+  function registrarUm(cod: string, volumeId: number) {
+    filaBip.current = filaBip.current.then(async () => {
+      const p = pedidoRef.current
+      if (!p) return
+      const item = itemPendente(p, cod)
+      if (!item) {
+        erroItemNaoPendente(cod)
+        return
+      }
+      try {
+        const r = await conferenciaApi.bipar(pedidoId, {
+          item_id: item.id, qtd: 1, codigo: cod, volume_id: volumeId,
+        })
+        const atual = pedidoRef.current ?? p
+        const novo = {
+          ...atual,
+          itens: atual.itens.map((i) => (i.id === item.id ? { ...i, qtd_separada: r.qtd_separada } : i)),
+        }
+        pedidoRef.current = novo
+        setPedido(novo)
+        piscar('ok', 500)
+        playBeep(880, 120)
+        toast.ok(`+1 ${item.sku}`, {
+          detalhe: `${item.descricao ? `${item.descricao} · ` : ''}${r.qtd_separada} de ${r.qtd_pedida}${
+            r.qtd_separada >= r.qtd_pedida ? ' — item completo' : ''
+          }`,
+          chave: 'leitor',
+          duracao: 2500,
+        })
+        // os lançamentos do volume (com id para a lixeira) vêm do servidor; uma recarga
+        // depois da rajada de leituras basta
+        if (recargaTimer.current) clearTimeout(recargaTimer.current)
+        recargaTimer.current = setTimeout(() => carregar(true), 700)
+      } catch (err: unknown) {
+        if (await tratarCancelado(err)) return
+        const e = err as { response?: { status?: number; data?: { resultado?: string; erro?: string } } }
+        if (e?.response?.status === 409 && e.response.data?.resultado === 'excesso') {
+          erroScan('Este item já está completo', `${item.sku}: o pedido tem ${item.qtd_pedida}.`, cod)
+        } else {
+          erroScan('A leitura não foi registrada', e?.response?.data?.erro ?? 'Bipe de novo.', cod)
+        }
+        await carregar(true)
+      }
+    }).catch(() => {})
+  }
+
+  function piscar(tipo: FlashTipo, ms: number) {
+    setScanFlash(tipo)
+    if (flashTimer.current) clearTimeout(flashTimer.current)
+    flashTimer.current = setTimeout(() => setScanFlash(null), ms)
   }
 
   // Mensagem do leitor vai para o toast (grande, quebra linha); a barra só pisca vermelho.
   // Até 2026-11-05 ela aparecia no placeholder do campo e não dava para ler no coletor.
   function erroScan(titulo: string, detalhe: string, codigo: string) {
-    setScanFlash('erro')
+    piscar('erro', 1200)
     playBeep(200, 300, 'sawtooth')
     toast.erro(titulo, { detalhe, codigo, chave: 'leitor' })
-    setTimeout(() => setScanFlash(null), 1200)
   }
 
   const handleScan = () => {
@@ -576,13 +654,17 @@ export default function ConferenciaPedidoPage() {
         />
       )}
 
-      {/* Scanner principal — bipa, abre modal já com código + foco na qtd */}
+      {/* Scanner principal — bipou, registra 1; com "Qtd" armado abre o modal de quantidade */}
       {volumeAtivo && (
         <div className="bg-surface-card px-4 py-3 border-b border-surface-border sticky top-14 z-10">
           <div
-            className={`flex items-center gap-2 rounded-xl border-2 px-3 h-14 transition-all ${
+            className={`flex items-center gap-2 rounded-xl border-2 pl-3 pr-1 h-14 transition-all ${
               scanFlash === 'erro'
                 ? 'border-red-500 bg-red-50 dark:bg-red-500/10'
+                : scanFlash === 'ok'
+                ? 'border-emerald-500 bg-zinc-900'
+                : qtdArmada
+                ? 'border-amber-400 bg-zinc-900'
                 : 'border-zinc-900 bg-zinc-900 shadow-[0_0_24px_rgb(0_0_0/0.15)] dark:border-zinc-700 dark:shadow-[0_0_24px_rgb(59_130_246/0.15)]'
             }`}
           >
@@ -606,6 +688,23 @@ export default function ConferenciaPedidoPage() {
               }`}
             />
             <button
+              // mouseDown sem default: o toque não tira o foco da barra (o leitor continua nela)
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => setQtdArmada((v) => !v)}
+              aria-pressed={qtdArmada}
+              aria-label="Digitar a quantidade na próxima leitura"
+              title="Próxima leitura abre a quantidade"
+              className={`shrink-0 h-10 px-3 rounded-lg text-sm font-bold transition-colors ${
+                qtdArmada
+                  ? 'bg-amber-400 text-zinc-950'
+                  : scanFlash === 'erro'
+                  ? 'text-red-500 hover:bg-red-100 dark:hover:bg-red-500/20'
+                  : 'text-zinc-300 border border-zinc-700 hover:bg-zinc-800'
+              }`}
+            >
+              Qtd
+            </button>
+            <button
               onClick={() => setCameraAberta(true)}
               className={`shrink-0 w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${
                 scanFlash === 'erro'
@@ -621,6 +720,11 @@ export default function ConferenciaPedidoPage() {
               </svg>
             </button>
           </div>
+          {qtdArmada && (
+            <p className="mt-1.5 text-sm font-semibold text-amber-700 dark:text-amber-400">
+              Próxima leitura abre a quantidade · toque em Qtd para cancelar
+            </p>
+          )}
         </div>
       )}
 
