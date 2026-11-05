@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { separadoresApi, SeparadorCadastro } from '@/lib/api'
 import { useDialog } from '@/components/Dialog'
+import { useToast } from '@/components/Toast'
 
 const TIPO_LABEL: Record<string, string> = { extra: 'Extra', funcionario: 'Funcionário' }
 
@@ -11,7 +12,7 @@ export default function SeparadoresPage() {
   const [carregando, setCarregando] = useState(true)
   const [busca, setBusca] = useState('')
   const [agindo, setAgindo] = useState<number | null>(null)
-  const [mensagem, setMensagem] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null)
+  const toast = useToast()
 
   // Cadastro rápido
   const [novoNome, setNovoNome] = useState('')
@@ -45,16 +46,15 @@ export default function SeparadoresPage() {
     const nome = novoNome.trim()
     if (!nome) return
     setCadastrando(true)
-    setMensagem(null)
     try {
       await separadoresApi.criar({ nome, apelido: novoApelido.trim(), tipo: novoTipo })
       setNovoNome('')
       setNovoApelido('')
       setNovoTipo('extra')
-      setMensagem({ tipo: 'ok', texto: `${nome} cadastrado` })
+      toast.ok(`${nome} cadastrado`)
       await carregar()
     } catch {
-      setMensagem({ tipo: 'erro', texto: 'Erro ao cadastrar separador' })
+      toast.erro('Erro ao cadastrar separador')
     } finally {
       setCadastrando(false)
     }
@@ -62,7 +62,6 @@ export default function SeparadoresPage() {
 
   async function alternarLiberacao(s: SeparadorCadastro) {
     setAgindo(s.id)
-    setMensagem(null)
     try {
       if (s.liberado_hoje) await separadoresApi.desliberar([s.id])
       else await separadoresApi.liberar([s.id])
@@ -70,7 +69,7 @@ export default function SeparadoresPage() {
         prev.map((x) => (x.id === s.id ? { ...x, liberado_hoje: !s.liberado_hoje } : x))
       )
     } catch {
-      setMensagem({ tipo: 'erro', texto: 'Erro ao atualizar liberação' })
+      toast.erro('Erro ao atualizar liberação')
     } finally {
       setAgindo(null)
     }
@@ -88,12 +87,11 @@ export default function SeparadoresPage() {
       if (!ok) return
     }
     setAgindo(s.id)
-    setMensagem(null)
     try {
       const atualizado = await separadoresApi.atualizar(s.id, { ativo: !s.ativo })
       setLista((prev) => prev.map((x) => (x.id === s.id ? atualizado : x)))
     } catch {
-      setMensagem({ tipo: 'erro', texto: 'Erro ao atualizar separador' })
+      toast.erro('Erro ao atualizar separador')
     } finally {
       setAgindo(null)
     }
@@ -114,18 +112,6 @@ export default function SeparadoresPage() {
           Atualizar
         </button>
       </div>
-
-      {mensagem && (
-        <div
-          className={`mb-3 p-3 rounded-lg text-sm ${
-            mensagem.tipo === 'ok'
-              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30'
-              : 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300 border border-red-200 dark:border-red-500/30'
-          }`}
-        >
-          {mensagem.texto}
-        </div>
-      )}
 
       {/* Cadastro rápido */}
       <form

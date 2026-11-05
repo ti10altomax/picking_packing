@@ -3,6 +3,7 @@ import { DocBadges } from '@/components/ui/DocBadges'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { conferenciaApi } from '@/lib/api'
+import { useToast } from '@/components/Toast'
 
 type PedidoLista = {
   id: number
@@ -48,6 +49,7 @@ function tempoDesde(iso: string | null): string {
 
 export default function ConferenciaListaPage() {
   const router = useRouter()
+  const toast = useToast()
   const [pedidos, setPedidos] = useState<PedidoLista[]>([])
   const [sequencia, setSequencia] = useState<{ id: number; numero: number } | null>(null)
   const [aguardando, setAguardando] = useState<{ id: number; numero: number } | null>(null)
@@ -60,7 +62,6 @@ export default function ConferenciaListaPage() {
   // Barra de bipagem da nota — mesma barra da tela do pedido: recebe o leitor do coletor
   const scanRef = useRef<HTMLInputElement>(null)
   const [scanValue, setScanValue] = useState('')
-  const [scanMsg, setScanMsg] = useState('')
   const [scanFlash, setScanFlash] = useState<'erro' | null>(null)
   const [pegando, setPegando] = useState(false)
   const [opcoes, setOpcoes] = useState<Opcao[] | null>(null)
@@ -81,11 +82,13 @@ export default function ConferenciaListaPage() {
     }
   }, [])
 
-  function erroScan(msg: string) {
+  // A mensagem vai para o toast (grande, quebra linha); a barra só pisca vermelho.
+  // Até 2026-11-05 ela aparecia no placeholder do campo e não dava para ler no coletor.
+  function erroScan(msg: string, codigo?: string) {
     setScanFlash('erro')
-    setScanMsg(msg)
     setScanValue('')
-    setTimeout(() => { setScanFlash(null); setScanMsg('') }, 3000)
+    toast.erro(msg, { codigo, chave: 'leitor' })
+    setTimeout(() => setScanFlash(null), 1200)
   }
 
   const pegar = useCallback(async (body: { codigo?: string; pedido_id?: number }) => {
@@ -102,12 +105,12 @@ export default function ConferenciaListaPage() {
         setOpcoes(data.opcoes)
         setScanValue('')
       } else {
-        erroScan(data?.erro || 'Erro ao buscar o documento')
+        erroScan(data?.erro || 'Erro ao buscar o documento', body.codigo)
       }
     } finally {
       setPegando(false)
     }
-  }, [pegando, router])
+  }, [pegando, router, toast])
 
   function handleScan() {
     const cod = scanValue.trim()
@@ -172,7 +175,7 @@ export default function ConferenciaListaPage() {
             ref={scanRef}
             type="text"
             inputMode="none"
-            placeholder={scanMsg || 'Bipe a nota para pegar…'}
+            placeholder="Bipe a nota para pegar…"
             value={scanValue}
             onChange={(e) => setScanValue(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') handleScan() }}

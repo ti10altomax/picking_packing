@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
+import { useToast } from '@/components/Toast'
 import {
   View,
   Text,
@@ -14,6 +15,7 @@ import { SupervisorNav } from '@/components/SupervisorNav'
 import { useDialog } from '@/components/Dialog'
 import { supervisorApi } from '@/lib/api'
 import { DocBadges } from '@/components/DocBadges'
+import { OndeEsta } from '@/components/OndeEsta'
 import { CabecalhoLista } from '@/components/CabecalhoLista'
 
 type Pedido = {
@@ -34,6 +36,7 @@ type Paginado = { count: number; next: string | null; results: Pedido[] }
 export default function SupervisorVendas() {
   const insets = useSafeAreaInsets()
   const dialog = useDialog()
+  const toast = useToast()
   const [pedidos, setPedidos] = useState<Pedido[]>([])
   const [count, setCount] = useState(0)
   const [proximaPagina, setProximaPagina] = useState<number | null>(null)
@@ -106,13 +109,17 @@ export default function SupervisorVendas() {
       setSelecionados(new Set())
       // conflitos = pedido × NF dele (faturamento parcial): o servidor barra conferir os dois
       const conflitos: { numero: string; motivo: string }[] = res.conflitos ?? []
-      await dialog.alert({
-        variant: conflitos.length ? 'warning' : 'success',
-        title: 'Pedidos enviados',
-        message: `${res.selecionados.length} pedido(s) enviado(s) para conferência${
-          res.ignorados.length ? ` · ${res.ignorados.length} ignorado(s)` : ''
-        }.${conflitos.map((c) => `\n${c.numero}: ${c.motivo}`).join('')}`,
-      })
+      if (res.selecionados.length) {
+        toast.ok(`${res.selecionados.length} documento(s) enviado(s) para conferência`)
+      }
+      if (conflitos.length) {
+        toast.aviso(`${conflitos.length} documento(s) não foram enviados`, {
+          detalhe: conflitos.map((c) => `${c.numero}: ${c.motivo}`).join('\n'),
+          duracao: 10000,
+        })
+      } else if (!res.selecionados.length) {
+        toast.info('Nenhum documento enviado', { detalhe: 'Eles já tinham saído da lista de pendentes.' })
+      }
       await carregar(buscaAtivaRef.current, 1, false)
     } catch {
       await dialog.alert({
@@ -186,7 +193,14 @@ export default function SupervisorVendas() {
             <CabecalhoLista carregando={carregando} exibidos={pedidos.length} total={count} />
           }
           ListEmptyComponent={
-            <Text className="text-ink-subtle text-center py-12">Nenhum documento pendente com esses filtros.</Text>
+            buscaAtivaRef.current ? (
+              <View className="py-4">
+                <Text className="text-ink-subtle text-center">Nada encontrado para “{buscaAtivaRef.current}” nesta lista.</Text>
+                <OndeEsta busca={buscaAtivaRef.current} lista="vendas" />
+              </View>
+            ) : (
+              <Text className="text-ink-subtle text-center py-12">Nenhum documento pendente com esses filtros.</Text>
+            )
           }
           ListFooterComponent={
             proximaPagina ? (

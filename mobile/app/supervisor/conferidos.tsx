@@ -12,6 +12,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Header } from '@/components/Header'
 import { SupervisorNav } from '@/components/SupervisorNav'
 import { DocBadges } from '@/components/DocBadges'
+import { OndeEsta } from '@/components/OndeEsta'
 import { CabecalhoLista } from '@/components/CabecalhoLista'
 import { EscolherImpressora } from '@/components/EscolherImpressora'
 import { supervisorApi, pedidosApi, rotuloBloqueio, type BloqueioEtiqueta } from '@/lib/api'
@@ -174,7 +175,14 @@ export default function Conferidos() {
             <CabecalhoLista carregando={carregando} exibidos={pedidos.length} total={count} />
           }
           ListEmptyComponent={
-            <Text className="text-ink-subtle text-center py-12">Nenhum pedido conferido.</Text>
+            buscaAtivaRef.current ? (
+              <View className="py-4">
+                <Text className="text-ink-subtle text-center">Nada encontrado para “{buscaAtivaRef.current}” nesta lista.</Text>
+                <OndeEsta busca={buscaAtivaRef.current} lista="conferidos" />
+              </View>
+            ) : (
+              <Text className="text-ink-subtle text-center py-12">Nenhum pedido conferido.</Text>
+            )
           }
           ListFooterComponent={
             proximaPagina ? (

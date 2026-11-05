@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
+import { useToast } from '@/components/Toast'
 import { View, Text, Pressable, Modal, ActivityIndicator } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as SecureStore from 'expo-secure-store'
 import { impressaoApi, type ImpressoraEtiqueta } from '@/lib/api'
-import { useDialog } from '@/components/Dialog'
 
 // Última impressora escolhida neste aparelho — conveniência local
 const CHAVE_ULTIMA = 'etiqueta_impressora'
@@ -22,7 +22,7 @@ export function EscolherImpressora({
   onImpresso?: () => void
 }) {
   const insets = useSafeAreaInsets()
-  const dialog = useDialog()
+  const toast = useToast()
   const [lista, setLista] = useState<ImpressoraEtiqueta[] | null>(null)
   const [escolhida, setEscolhida] = useState<number | null>(null)
   const [enviando, setEnviando] = useState(false)
@@ -56,11 +56,7 @@ export function EscolherImpressora({
       await SecureStore.setItemAsync(CHAVE_ULTIMA, String(escolhida)).catch(() => {})
       onClose()
       onImpresso?.()
-      await dialog.alert({
-        variant: 'success',
-        title: 'Etiquetas enviadas',
-        message: `${r.impressao.qtd_etiquetas} etiqueta(s) → ${r.impressao.impressora}`,
-      })
+      toast.ok('Etiquetas enviadas', { detalhe: `${r.impressao.qtd_etiquetas} etiqueta(s) → ${r.impressao.impressora}` })
     } catch (e: unknown) {
       const d = (e as { response?: { data?: { erro?: string } } })?.response?.data
       setErro(d?.erro ?? 'Falha ao imprimir')

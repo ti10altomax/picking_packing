@@ -11,6 +11,40 @@ from .nf_vinculo import conflito_conferencia_dupla
 from .serializers import PedidoSerializer, PedidoListSerializer
 
 
+def _localizacao(p: Pedido, numero: str) -> dict:
+    """Uma linha do `localizar`: em que etapa o documento está, em palavras, e em que lista
+    ele aparece (`lista` — web e mobile traduzem para a rota)."""
+    S = Pedido.Status
+    conferente = p.conferente.username if p.conferente else ''
+    seq = f'sequência {p.sequencia.numero}' if p.sequencia else ''
+    quando = timezone.localtime(p.conferido_em).strftime('%d/%m %H:%M') if p.conferido_em else ''
+    lista, descricao = {
+        S.PENDENTE: ('vendas', 'ainda não foi enviado para conferência'),
+        S.SELECIONADO: ('sequencia' if seq else 'patio',
+                        f'na {seq}, sem conferente' if seq else 'na fila do Sup. Pátio, sem sequência'),
+        S.ATRIBUIDO: ('sequencia', f'atribuído a {conferente or "—"}' + (f' na {seq}' if seq else '')),
+        S.CONFERINDO: ('sequencia', f'em conferência com {conferente or "—"}' + (f' ({seq})' if seq else '')),
+        S.AGUARDANDO_FECHAMENTO: ('fechamentos', 'conferido com sobra, esperando o Sup. Pátio fechar'),
+        S.CONFERIDO: ('conferidos', f'conferido{" em " + quando if quando else ""}{" por " + conferente if conferente else ""}'),
+        S.NAO_CONFORME: ('nao_conformes', f'marcado como não conforme{" por " + conferente if conferente else ""}'),
+        S.CANCELADO: ('cancelados', (p.get_cancelado_origem_display() if p.cancelado_origem else 'cancelado').lower()),
+    }.get(p.status, ('', p.get_status_display()))
+    # como o número bateu: o próprio documento, a NF do pedido faturado ou o pedido de origem da NF
+    if p.numero_externo == numero:
+        via = ''
+    elif p.nf_numero == numero:
+        via = f'NF {numero} é do pedido {p.numero_externo}'
+    else:
+        via = f'NF {p.numero_externo}, que saiu do pedido {numero}'
+    return {
+        'id': p.id, 'tipo': p.tipo, 'numero_externo': p.numero_externo,
+        'status': p.status, 'status_label': p.get_status_display(),
+        'descricao': descricao, 'via': via, 'lista': lista,
+        'sequencia': p.sequencia_id, 'sequencia_numero': p.sequencia.numero if p.sequencia else None,
+        'conferente': conferente or None,
+    }
+
+
 class PedidoViewSet(viewsets.ModelViewSet):
     serializer_class = PedidoSerializer
     http_method_names = ['get', 'patch', 'post']
@@ -193,6 +227,27 @@ class PedidoViewSet(viewsets.ModelViewSet):
             acao='endereco_atribuido', payload={'endereco': endereco},
         )
         return Response({'endereco': pedido.endereco_fisico})
+
+    # ------------------------------------------------------------------
+    # Onde está o documento (2026-11-05): a busca de cada lista só olha um status, e
+    # procurar em Vendas um pedido que já está em conferência voltava "nada". As telas
+    # chamam isto quando a busca vem vazia e dizem em que etapa ele está.
+    # ------------------------------------------------------------------
+    @action(detail=False, methods=['get'])
+    def localizar(self, request):
+        q = request.query_params.get('q', '').strip()
+        if not q.isdigit():
+            return Response([])
+        numero = str(int(q))
+        docs = (
+            Pedido.objects.filter(
+                Q(numero_externo=numero) | Q(nf_numero=numero) | Q(pedidos_origem__contains=[numero]),
+            )
+            .exclude(status__in=('faturado', 'aguardando_etiquetar', 'concluido'))  # escopo antigo congelado
+            .select_related('conferente', 'sequencia')
+            .order_by('-criado_em')[:5]
+        )
+        return Response([_localizacao(p, numero) for p in docs])
 
     # ------------------------------------------------------------------
     # Sup. Vendas — seleção em lote (Pendente → Selecionado)

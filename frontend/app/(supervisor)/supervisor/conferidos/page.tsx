@@ -1,5 +1,6 @@
 'use client'
 import { DocBadges } from '@/components/ui/DocBadges'
+import { OndeEsta } from '@/components/pedidos/OndeEsta'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { supervisorApi, pedidosApi, type Paginado } from '@/lib/api'
 import { ImprimirEtiqueta } from '@/components/etiquetas/ImprimirEtiqueta'
@@ -147,7 +148,14 @@ export default function ConferidosPage() {
       {carregando ? (
         <p className="text-ink-muted">Carregando…</p>
       ) : pedidos.length === 0 ? (
-        <p className="text-ink-subtle text-center py-12">Nenhum pedido conferido.</p>
+        buscaAtiva ? (
+          <div className="py-6 space-y-4">
+            <p className="text-ink-subtle text-center">Nada encontrado para “{buscaAtiva}” nesta lista.</p>
+            <OndeEsta busca={buscaAtiva} lista="conferidos" />
+          </div>
+        ) : (
+          <p className="text-ink-subtle text-center py-12">Nenhum pedido conferido.</p>
+        )
       ) : (
         <>
           <div className="bg-surface-card rounded-xl border border-surface-border overflow-hidden">

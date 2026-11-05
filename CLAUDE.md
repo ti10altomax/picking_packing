@@ -415,6 +415,7 @@ Variáveis em `.env`:
 - Cores de status seguem a paleta acima.
 - Toda transição grava em `PedidoLog`.
 - **Observabilidade (2026-10-08)**: task Celery nova leva `@shared_task` + `@registrar_execucao()`; logs com `logger.info(msg, extra={...})` (vira JSON em prod); não precisa de try/catch só para relatar erro no web/mobile — `error.tsx`/`ErroReporter`/`ErrorBoundary` já mandam para `/api/erros-cliente/`.
+- **Mensagens: toast, não texto solto (2026-11-05)** — aviso sem resposta é `useToast().ok/erro/aviso/info(titulo, {detalhe, codigo, chave})` (`components/Toast.tsx` no web e no mobile); confirmação continua `useDialog().confirm`. Nunca mensagem no placeholder da barra de bipagem (ilegível no coletor): leitor usa `toast.erro(msg, {codigo, chave: 'leitor'})` e a barra só pisca. Lista com busca vazia mostra `<OndeEsta>` (`GET /api/pedidos/localizar/`).
 - **Zustand só para sessão e tema** (`authStore`, `themeStore`). Dado de tela é `useState` local + re-fetch (`carregar()`) após cada mutação — sem store de dados, sem cache. O `pedidosStore` é exclusivo do fluxo legado congelado `/pedidos`; não imitar. (Decisão registrada em 2026-08-31; o padrão existe desde o primeiro commit do fluxo novo.)
 - **Mobile-first sempre**: validar a 360px antes de pensar em desktop.
 - **Tudo em Docker**: novas dependências entram via `docker-compose.yml`.

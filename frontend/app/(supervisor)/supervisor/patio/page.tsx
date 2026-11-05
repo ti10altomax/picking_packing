@@ -1,8 +1,10 @@
 'use client'
 import { DocBadges } from '@/components/ui/DocBadges'
+import { OndeEsta } from '@/components/pedidos/OndeEsta'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supervisorApi, sequenciasApi, type Paginado, type SequenciaResumo } from '@/lib/api'
+import { useToast } from '@/components/Toast'
 
 type Pedido = {
   id: number
@@ -57,7 +59,7 @@ export default function SupervisorPatioPage() {
   const [enviando, setEnviando] = useState(false)
   const [busca, setBusca] = useState('')
   const [buscaAtiva, setBuscaAtiva] = useState('')
-  const [mensagem, setMensagem] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null)
+  const toast = useToast()
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const inicializadoRef = useRef(false)
 
@@ -131,7 +133,6 @@ export default function SupervisorPatioPage() {
   async function enviarParaSequencia() {
     if (selecionados.size === 0) return
     setEnviando(true)
-    setMensagem(null)
     const ids = Array.from(selecionados)
     try {
       if (destino === 'nova') {
@@ -142,15 +143,12 @@ export default function SupervisorPatioPage() {
       }
       const res = await sequenciasApi.adicionar(destino, ids)
       setSelecionados(new Set())
-      setMensagem({
-        tipo: 'ok',
-        texto: `${res.adicionados.length} pedido(s) adicionados à sequência${
+      toast.ok(`${res.adicionados.length} pedido(s) adicionados à sequência${
           res.ignorados.length ? ` · ${res.ignorados.length} ignorado(s)` : ''
-        }`,
-      })
+        }`)
       await Promise.all([carregarSequencias(), carregar(buscaAtiva, 1, false)])
     } catch {
-      setMensagem({ tipo: 'erro', texto: 'Erro ao montar a sequência' })
+      toast.erro('Erro ao montar a sequência')
     } finally {
       setEnviando(false)
     }
@@ -218,22 +216,17 @@ export default function SupervisorPatioPage() {
         className="w-full bg-surface-card border border-surface-border text-ink placeholder:text-ink-subtle rounded-lg px-3 py-2 text-sm min-h-[44px] mb-3 focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-300"
       />
 
-      {mensagem && (
-        <div
-          className={`mb-3 p-3 rounded-lg text-sm ${
-            mensagem.tipo === 'ok'
-              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30'
-              : 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300 border border-red-200 dark:border-red-500/30'
-          }`}
-        >
-          {mensagem.texto}
-        </div>
-      )}
-
       {carregando ? (
         <p className="text-ink-muted">Carregando…</p>
       ) : pedidos.length === 0 ? (
-        <p className="text-ink-subtle text-center py-12">Nenhum pedido aguardando sequência.</p>
+        buscaAtiva ? (
+          <div className="py-6 space-y-4">
+            <p className="text-ink-subtle text-center">Nada encontrado para “{buscaAtiva}” nesta lista.</p>
+            <OndeEsta busca={buscaAtiva} lista="patio" />
+          </div>
+        ) : (
+          <p className="text-ink-subtle text-center py-12">Nenhum pedido aguardando sequência.</p>
+        )
       ) : (
         <>
           <div className="bg-surface-card rounded-xl border border-surface-border overflow-hidden">

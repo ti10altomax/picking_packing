@@ -7,6 +7,7 @@ import {
   type SequenciaResumo, type SequenciaPedido,
 } from '@/lib/api'
 import { useDialog } from '@/components/Dialog'
+import { useToast } from '@/components/Toast'
 
 type Conferente = { id: number; username: string; first_name: string; last_name: string }
 type Detalhe = SequenciaResumo & { pedidos: SequenciaPedido[] }
@@ -42,14 +43,14 @@ export default function SequenciaDetalhePage() {
   const [carregando, setCarregando] = useState(true)
   const [selecionados, setSelecionados] = useState<Set<number>>(new Set())
   const [agindo, setAgindo] = useState(false)
-  const [mensagem, setMensagem] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null)
+  const toast = useToast()
 
   const carregar = useCallback(async () => {
     try {
       const data = await sequenciasApi.detalhe(sequenciaId)
       setSeq(data)
     } catch {
-      setMensagem({ tipo: 'erro', texto: 'Erro ao carregar a sequência' })
+      toast.erro('Erro ao carregar a sequência')
     } finally {
       setCarregando(false)
     }
@@ -76,19 +77,15 @@ export default function SequenciaDetalhePage() {
   async function atribuir() {
     if (selecionados.size === 0 || !conferenteId) return
     setAgindo(true)
-    setMensagem(null)
     try {
       const res = await sequenciasApi.atribuir(sequenciaId, Array.from(selecionados), conferenteId)
       setSelecionados(new Set())
-      setMensagem({
-        tipo: 'ok',
-        texto: `${res.atribuidos.length} pedido(s) atribuído(s) a ${res.conferente}${
+      toast.ok(`${res.atribuidos.length} pedido(s) atribuído(s) a ${res.conferente}${
           res.ignorados.length ? ` · ${res.ignorados.length} ignorado(s)` : ''
-        }`,
-      })
+        }`)
       await carregar()
     } catch {
-      setMensagem({ tipo: 'erro', texto: 'Erro ao atribuir' })
+      toast.erro('Erro ao atribuir')
     } finally {
       setAgindo(false)
     }
@@ -104,14 +101,13 @@ export default function SequenciaDetalhePage() {
     })
     if (!ok) return
     setAgindo(true)
-    setMensagem(null)
     try {
       const res = await sequenciasApi.remover(sequenciaId, Array.from(selecionados))
       setSelecionados(new Set())
-      setMensagem({ tipo: 'ok', texto: `${res.removidos.length} pedido(s) removido(s)` })
+      toast.ok(`${res.removidos.length} pedido(s) removido(s)`)
       await carregar()
     } catch {
-      setMensagem({ tipo: 'erro', texto: 'Erro ao remover' })
+      toast.erro('Erro ao remover')
     } finally {
       setAgindo(false)
     }
@@ -130,7 +126,7 @@ export default function SequenciaDetalhePage() {
       router.replace('/supervisor/patio')
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { erro?: string } } })?.response?.data?.erro
-      setMensagem({ tipo: 'erro', texto: msg ?? 'Erro ao excluir a sequência' })
+      toast.erro(msg ?? 'Erro ao excluir a sequência')
     }
   }
 
@@ -138,7 +134,7 @@ export default function SequenciaDetalhePage() {
     return <p className="text-ink-muted p-6">Carregando…</p>
   }
   if (!seq) {
-    return <p className="text-red-500 p-6">{mensagem?.texto ?? 'Sequência não encontrada.'}</p>
+    return <p className="text-red-500 p-6">Sequência não encontrada.</p>
   }
 
   const st = STATUS_SEQ[seq.status] ?? STATUS_SEQ.aberta
@@ -196,18 +192,6 @@ export default function SequenciaDetalhePage() {
               return <option key={c.id} value={c.id}>{nome} ({c.username})</option>
             })}
           </select>
-        </div>
-      )}
-
-      {mensagem && (
-        <div
-          className={`mb-3 p-3 rounded-lg text-sm ${
-            mensagem.tipo === 'ok'
-              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30'
-              : 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300 border border-red-200 dark:border-red-500/30'
-          }`}
-        >
-          {mensagem.texto}
         </div>
       )}
 

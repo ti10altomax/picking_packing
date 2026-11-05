@@ -2,6 +2,8 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { supervisorApi, type Paginado } from '@/lib/api'
 import { DocBadges } from '@/components/ui/DocBadges'
+import { OndeEsta } from '@/components/pedidos/OndeEsta'
+import { useToast } from '@/components/Toast'
 
 type Pedido = {
   id: number
@@ -37,7 +39,7 @@ export default function SupervisorVendasPage() {
     tipo: '', frete: '', transportadora: '',
   })
   const primeiraCargaRef = useRef(true)
-  const [mensagem, setMensagem] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null)
+  const toast = useToast()
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const carregar = useCallback(async (search: string, page = 1, append = false) => {
@@ -101,22 +103,34 @@ export default function SupervisorVendasPage() {
   async function enviarParaConferencia() {
     if (selecionados.size === 0) return
     setEnviando(true)
-    setMensagem(null)
     try {
       const ids = Array.from(selecionados)
       const res = await supervisorApi.selecionar(ids)
       setSelecionados(new Set())
       // conflitos = pedido × NF dele (faturamento parcial): o servidor barra conferir os dois
       const conflitos: { numero: string; motivo: string }[] = res.conflitos ?? []
-      setMensagem({
-        tipo: conflitos.length && !res.selecionados.length ? 'erro' : 'ok',
-        texto: `${res.selecionados.length} pedido(s) enviado(s) para conferência${
-          res.ignorados.length ? ` · ${res.ignorados.length} ignorado(s)` : ''
-        }${conflitos.map((c) => ` · ${c.numero}: ${c.motivo}`).join('')}`,
-      })
+      if (res.selecionados.length) {
+        toast.ok(`${res.selecionados.length} documento(s) enviado(s) para conferência`, {
+          detalhe: res.ignorados.length > conflitos.length
+            ? `${res.ignorados.length - conflitos.length} já não estavam pendentes`
+            : undefined,
+        })
+      }
+      if (conflitos.length) {
+        toast.aviso(`${conflitos.length} documento(s) não foram enviados`, {
+          detalhe: (
+            <ul className="space-y-0.5">
+              {conflitos.map((c) => <li key={c.numero}><b>{c.numero}</b>: {c.motivo}</li>)}
+            </ul>
+          ),
+          duracao: 10000,
+        })
+      } else if (!res.selecionados.length) {
+        toast.info('Nenhum documento enviado', { detalhe: 'Eles já tinham saído da lista de pendentes.' })
+      }
       await carregar(buscaAtiva, 1, false)
     } catch {
-      setMensagem({ tipo: 'erro', texto: 'Erro ao enviar pedidos' })
+      toast.erro('Erro ao enviar pedidos')
     } finally {
       setEnviando(false)
     }
@@ -167,22 +181,17 @@ export default function SupervisorVendasPage() {
         />
       </div>
 
-      {mensagem && (
-        <div
-          className={`mb-3 p-3 rounded-lg text-sm ${
-            mensagem.tipo === 'ok'
-              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30'
-              : 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300 border border-red-200 dark:border-red-500/30'
-          }`}
-        >
-          {mensagem.texto}
-        </div>
-      )}
-
       {carregando ? (
         <p className="text-ink-muted">Carregando…</p>
       ) : pedidos.length === 0 ? (
-        <p className="text-ink-subtle text-center py-12">Nenhum documento pendente com esses filtros.</p>
+        buscaAtiva ? (
+          <div className="py-6 space-y-4">
+            <p className="text-ink-subtle text-center">Nada encontrado para “{buscaAtiva}” nesta lista.</p>
+            <OndeEsta busca={buscaAtiva} lista="vendas" />
+          </div>
+        ) : (
+          <p className="text-ink-subtle text-center py-12">Nenhum documento pendente com esses filtros.</p>
+        )
       ) : (
         <>
           <div className="bg-surface-card rounded-xl border border-surface-border overflow-hidden">

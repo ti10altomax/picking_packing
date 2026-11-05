@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation'
 import { conferenciaApi, separadoresApi, SeparadorLiberado, type VereditoEtiqueta } from '@/lib/api'
 import { CameraScanner } from '@/components/CameraScanner'
 import { useDialog } from '@/components/Dialog'
+import { useToast } from '@/components/Toast'
 
 // -----------------------------------------------------------------------------
 // Tipos
@@ -102,6 +103,7 @@ export default function ConferenciaPedidoPage() {
   const params = useParams()
   const pedidoId = Number(params.id)
   const dialog = useDialog()
+  const toast = useToast()
 
   const [pedido, setPedido] = useState<Pedido | null>(null)
   const [loading, setLoading] = useState(true)
@@ -118,7 +120,6 @@ export default function ConferenciaPedidoPage() {
   const scanRef = useRef<HTMLInputElement>(null)
   const [scanValue, setScanValue] = useState('')
   const [scanFlash, setScanFlash] = useState<FlashTipo>(null)
-  const [scanMsg, setScanMsg] = useState('')
   const [cameraAberta, setCameraAberta] = useState(false)
 
   // Apontamento "separado por" (DESIGN.md §2)
@@ -382,10 +383,7 @@ export default function ConferenciaPedidoPage() {
     if (!cod || !pedido) return
 
     if (!volumeAtivo) {
-      setScanFlash('erro')
-      setScanMsg('Crie um volume antes de bipar')
-      playBeep(200, 300, 'sawtooth')
-      setTimeout(() => { setScanFlash(null); setScanMsg('') }, 1500)
+      erroScan('Crie um volume antes de bipar', 'Toque em "Novo volume" e bipe de novo.', cod)
       return
     }
 
@@ -398,11 +396,21 @@ export default function ConferenciaPedidoPage() {
       setCodigoInicial(cod)
       setItemSelecionado(item)
     } else {
-      setScanFlash('erro')
-      setScanMsg('Código não corresponde a nenhum item pendente')
-      playBeep(200, 300, 'sawtooth')
-      setTimeout(() => { setScanFlash(null); setScanMsg('') }, 1500)
+      erroScan(
+        'Este código não é de nenhum item pendente',
+        'O produto não é deste documento ou o item já está completo.',
+        cod,
+      )
     }
+  }
+
+  // Mensagem do leitor vai para o toast (grande, quebra linha); a barra só pisca vermelho.
+  // Até 2026-11-05 ela aparecia no placeholder do campo e não dava para ler no coletor.
+  function erroScan(titulo: string, detalhe: string, codigo: string) {
+    setScanFlash('erro')
+    playBeep(200, 300, 'sawtooth')
+    toast.erro(titulo, { detalhe, codigo, chave: 'leitor' })
+    setTimeout(() => setScanFlash(null), 1200)
   }
 
   const handleScan = () => {
@@ -583,7 +591,7 @@ export default function ConferenciaPedidoPage() {
               ref={scanRef}
               type="text"
               inputMode="none"
-              placeholder={scanMsg || 'Bipe o código…'}
+              placeholder="Bipe o código…"
               value={scanValue}
               onChange={(e) => setScanValue(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleScan() }}
@@ -1407,11 +1415,15 @@ function ModalBipar({
         )}
 
         {mensagem && (
-          <p className={`text-xs px-1 mb-3 ${
-            flash === 'ok' ? 'text-emerald-600 dark:text-emerald-400' :
-            flash === 'excesso' ? 'text-amber-700 dark:text-amber-400' : 'text-red-600 dark:text-red-400'
+          // mesmo visual do toast: cor sólida e texto grande — a mensagem tem que ser lida no coletor
+          <p role="alert" className={`flex items-start gap-2.5 rounded-xl px-3 py-2.5 mb-3 text-base font-bold leading-snug ${
+            flash === 'ok' ? 'bg-emerald-600 text-white' :
+            flash === 'excesso' ? 'bg-amber-400 text-zinc-950' : 'bg-red-600 text-white'
           }`}>
-            {mensagem}
+            <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-black/15 text-sm font-black">
+              {flash === 'ok' ? '✓' : '!'}
+            </span>
+            <span className="min-w-0 break-words">{mensagem}</span>
           </p>
         )}
 

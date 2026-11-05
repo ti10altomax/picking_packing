@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
+import { useToast } from '@/components/Toast'
 import {
   View,
   Text,
@@ -60,6 +61,7 @@ function tempoDesde(iso: string | null): string {
 
 export default function ConferenciaLista() {
   const router = useRouter()
+  const toast = useToast()
   const [pedidos, setPedidos] = useState<Pedido[]>([])
   const [sequencia, setSequencia] = useState<{ id: number; numero: number } | null>(null)
   const [aguardando, setAguardando] = useState<{ id: number; numero: number } | null>(null)
@@ -74,7 +76,6 @@ export default function ConferenciaLista() {
   // (DataWedge em modo teclado + Enter), sem teclado virtual.
   const scanRef = useRef<TextInput>(null)
   const [scanValue, setScanValue] = useState('')
-  const [scanMsg, setScanMsg] = useState('')
   const [scanFlash, setScanFlash] = useState<'erro' | null>(null)
   const [pegando, setPegando] = useState(false)
   const [opcoes, setOpcoes] = useState<Opcao[] | null>(null)
@@ -103,12 +104,14 @@ export default function ConferenciaLista() {
     }
   }, [])
 
-  function erroScan(msg: string) {
+  // A mensagem vai para o toast (grande, quebra linha); a barra só pisca vermelho.
+  // Até 2026-11-05 ela aparecia no placeholder do campo e não dava para ler no coletor.
+  function erroScan(msg: string, codigo?: string) {
     setScanFlash('erro')
-    setScanMsg(msg)
     setScanValue('')
     Vibration.vibrate(200)
-    setTimeout(() => { setScanFlash(null); setScanMsg('') }, 3000)
+    toast.erro(msg, { codigo, chave: 'leitor' })
+    setTimeout(() => setScanFlash(null), 1200)
   }
 
   const pegar = useCallback(async (body: { codigo?: string; pedido_id?: number }) => {
@@ -125,7 +128,7 @@ export default function ConferenciaLista() {
         setOpcoes(data.opcoes)
         setScanValue('')
       } else {
-        erroScan(data?.erro || 'Erro ao buscar o documento')
+        erroScan(data?.erro || 'Erro ao buscar o documento', body.codigo)
       }
     } finally {
       setPegando(false)
@@ -212,7 +215,7 @@ export default function ConferenciaLista() {
           autoCorrect={false}
           autoComplete="off"
           importantForAutofill="no"
-          placeholder={scanMsg || (tecladoAberto ? 'Digite o número da nota…' : 'Bipe a nota para pegar…')}
+          placeholder={tecladoAberto ? 'Digite o número da nota…' : 'Bipe a nota para pegar…'}
           placeholderTextColor={scanFlash === 'erro' ? '#f87171' : '#71717a'}
           onBlur={() => { if (!opcoes && !cameraAberta && !tecladoAberto) setTimeout(() => scanRef.current?.focus(), 80) }}
           className={`flex-1 h-14 text-base font-mono tracking-wider ${scanFlash === 'erro' ? 'text-red-300' : 'text-white'}`}

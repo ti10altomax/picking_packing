@@ -288,7 +288,24 @@ export type Paginado<T> = {
   results: T[]
 }
 
+// Onde está um documento em qualquer status (2026-11-05) — as listas chamam quando a busca vem vazia
+export type Localizacao = {
+  id: number
+  tipo: string
+  numero_externo: string
+  status: string
+  status_label: string
+  descricao: string
+  via: string
+  lista: 'vendas' | 'patio' | 'sequencia' | 'fechamentos' | 'conferidos' | 'nao_conformes' | 'cancelados' | ''
+  sequencia: number | null
+  sequencia_numero: number | null
+  conferente: string | null
+}
+
 export const supervisorApi = {
+  localizar: (q: string) =>
+    api.get('/api/pedidos/localizar/', { params: { q } }).then((r) => r.data as Localizacao[]),
   listarPendentes: (params: { search?: string; page?: number; tipo?: string; frete?: string; transportadora?: 'com' | 'sem' | '' } = {}) =>
     api.get('/api/pedidos/', {
       params: { status: 'pendente', ...params },

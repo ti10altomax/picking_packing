@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
+import { useToast } from '@/components/Toast'
 import {
   View,
   Text,
@@ -85,6 +86,7 @@ export default function ConferenciaDetalhe() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const dialog = useDialog()
+  const toast = useToast()
 
   const [pedido, setPedido] = useState<Pedido | null>(null)
   const [loading, setLoading] = useState(true)
@@ -105,7 +107,6 @@ export default function ConferenciaDetalhe() {
   const scanRef = useRef<TextInput>(null)
   const [scanValue, setScanValue] = useState('')
   const [scanFlash, setScanFlash] = useState<'erro' | null>(null)
-  const [scanMsg, setScanMsg] = useState('')
 
   // Apontamento "separado por" (DESIGN.md §2)
   const [liberados, setLiberados] = useState<SeparadorLiberado[]>([])
@@ -365,7 +366,7 @@ export default function ConferenciaDetalhe() {
     setCameraGlobalAberta(false)
     if (!pedido) return
     if (!volumeAtivo) {
-      falhaScan('Crie um volume antes de bipar')
+      falhaScan('Crie um volume antes de bipar', 'Toque em "Novo volume" e bipe de novo.', cod)
       return
     }
     const item = pedido.itens.find(
@@ -376,22 +377,26 @@ export default function ConferenciaDetalhe() {
     )
     if (item) {
       setScanFlash(null)
-      setScanMsg('')
       setCodigoInicial(cod)
       setItemSelecionado(item)
     } else {
-      falhaScan(`${cod} não bate com nenhum item pendente`)
+      falhaScan(
+        'Este código não é de nenhum item pendente',
+        'O produto não é deste documento ou o item já está completo.',
+        cod,
+      )
     }
   }
 
-  // Barra fica vermelha + vibra; volta ao normal sozinha
+  // Barra pisca vermelho + vibra; a mensagem vai para o toast (grande, quebra linha).
+  // Até 2026-11-05 ela aparecia no placeholder do campo e não dava para ler no coletor.
   const scanFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  function falhaScan(msg: string) {
+  function falhaScan(titulo: string, detalhe: string, codigo: string) {
     setScanFlash('erro')
-    setScanMsg(msg)
     Vibration.vibrate([0, 100, 50, 100])
+    toast.erro(titulo, { detalhe, codigo, chave: 'leitor' })
     if (scanFlashTimer.current) clearTimeout(scanFlashTimer.current)
-    scanFlashTimer.current = setTimeout(() => { setScanFlash(null); setScanMsg('') }, 2500)
+    scanFlashTimer.current = setTimeout(() => setScanFlash(null), 1200)
   }
 
   // Enter do leitor (ou submit) — consome o que foi digitado na barra
@@ -557,7 +562,7 @@ export default function ConferenciaDetalhe() {
             autoCorrect={false}
             autoComplete="off"
             importantForAutofill="no"
-            placeholder={scanMsg || 'Bipe o código…'}
+            placeholder="Bipe o código…"
             placeholderTextColor={scanFlash === 'erro' ? '#f87171' : '#71717a'}
             onBlur={() => {
               // Toque em botão da tela não pode desarmar o leitor
@@ -1357,7 +1362,10 @@ function ModalBipar({
     }
   }
 
-  const corMsg = tipoMsg === 'erro' ? 'text-red-400' : 'text-amber-300'
+  // mesmo visual do toast: cor sólida e texto grande — a mensagem tem que ser lida no coletor
+  const corMsg = tipoMsg === 'erro'
+    ? { caixa: 'bg-red-600', texto: 'text-white' }
+    : { caixa: 'bg-amber-400', texto: 'text-zinc-950' }
 
   return (
     <Modal visible animationType="slide" transparent onRequestClose={onFechar}>
@@ -1456,7 +1464,12 @@ function ModalBipar({
           </View>
 
           {mensagem ? (
-            <Text className={`text-xs px-1 mb-3 ${corMsg}`}>{mensagem}</Text>
+            <View accessibilityRole="alert" className={`flex-row items-start rounded-xl px-3 py-2.5 mb-3 ${corMsg.caixa}`}>
+              <View className="w-6 h-6 rounded-full bg-black/15 items-center justify-center mr-2.5 mt-0.5">
+                <Text className={`text-sm font-black ${corMsg.texto}`}>!</Text>
+              </View>
+              <Text className={`flex-1 text-base font-bold leading-snug ${corMsg.texto}`}>{mensagem}</Text>
+            </View>
           ) : null}
 
           <Pressable

@@ -4,6 +4,7 @@ import { DocBadges } from '@/components/ui/DocBadges'
 import { useEffect, useState, useCallback } from 'react'
 import { supervisorApi, pedidosApi } from '@/lib/api'
 import { useDialog } from '@/components/Dialog'
+import { useToast } from '@/components/Toast'
 
 type NaoConforme = {
   id: number
@@ -43,7 +44,7 @@ export default function NaoConformesPage() {
   const [lista, setLista] = useState<NaoConforme[]>([])
   const [carregando, setCarregando] = useState(true)
   const [agindo, setAgindo] = useState<number | null>(null)
-  const [mensagem, setMensagem] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null)
+  const toast = useToast()
 
   // Acordeão
   const [expandidos, setExpandidos] = useState<Set<number>>(new Set())
@@ -96,13 +97,12 @@ export default function NaoConformesPage() {
     })
     if (!ok) return
     setAgindo(p.id)
-    setMensagem(null)
     try {
       await supervisorApi.cancelarNaoConforme(p.id)
-      setMensagem({ tipo: 'ok', texto: `Pedido ${p.numero_externo} cancelado` })
+      toast.ok(`Pedido ${p.numero_externo} cancelado`)
       await carregar()
     } catch {
-      setMensagem({ tipo: 'erro', texto: 'Erro ao cancelar' })
+      toast.erro('Erro ao cancelar')
     } finally {
       setAgindo(null)
     }
@@ -117,13 +117,12 @@ export default function NaoConformesPage() {
     })
     if (!ok) return
     setAgindo(p.id)
-    setMensagem(null)
     try {
       await supervisorApi.retornarNaoConforme(p.id)
-      setMensagem({ tipo: 'ok', texto: `Pedido ${p.numero_externo} voltou para Pendente` })
+      toast.ok(`Pedido ${p.numero_externo} voltou para Pendente`)
       await carregar()
     } catch {
-      setMensagem({ tipo: 'erro', texto: 'Erro ao retornar para fila' })
+      toast.erro('Erro ao retornar para fila')
     } finally {
       setAgindo(null)
     }
@@ -142,18 +141,6 @@ export default function NaoConformesPage() {
           Atualizar
         </button>
       </div>
-
-      {mensagem && (
-        <div
-          className={`mb-3 p-3 rounded-lg text-sm ${
-            mensagem.tipo === 'ok'
-              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30'
-              : 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300 border border-red-200 dark:border-red-500/30'
-          }`}
-        >
-          {mensagem.texto}
-        </div>
-      )}
 
       {carregando ? (
         <p className="text-ink-muted">Carregando…</p>

@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
+import { useToast } from '@/components/Toast'
 import {
   View,
   Text,
@@ -40,6 +41,7 @@ export default function SequenciaDetalhe() {
   const insets = useSafeAreaInsets()
   const router = useRouter()
   const dialog = useDialog()
+  const toast = useToast()
 
   const [seq, setSeq] = useState<Detalhe | null>(null)
   const [conferentes, setConferentes] = useState<Conferente[]>([])
@@ -94,11 +96,7 @@ export default function SequenciaDetalhe() {
     try {
       const res = await sequenciasApi.atribuir(sequenciaId, Array.from(selecionados), conferenteId)
       setSelecionados(new Set())
-      await dialog.alert({
-        variant: 'success',
-        title: 'Pedidos atribuídos',
-        message: `${res.atribuidos.length} pedido(s) atribuído(s) a ${res.conferente}.`,
-      })
+      toast.ok(`${res.atribuidos.length} pedido(s) atribuído(s) a ${res.conferente}`)
       await carregar()
     } catch {
       await dialog.alert({ variant: 'danger', title: 'Erro', message: 'Não foi possível atribuir.' })

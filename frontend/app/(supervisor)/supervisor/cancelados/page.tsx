@@ -5,6 +5,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { supervisorApi } from '@/lib/api'
 import { useAuthStore } from '@/stores/authStore'
 import { useDialog } from '@/components/Dialog'
+import { useToast } from '@/components/Toast'
 
 // Documento cancelado no Senior (sitPed=5 / sitNfv=9) ou pelo supervisor, que tinha
 // conferência em andamento ou concluída. As caixas continuam montadas: o Sup. Pátio
@@ -88,7 +89,7 @@ export default function CanceladosPage() {
 
   const [lista, setLista] = useState<Cancelado[]>([])
   const [carregando, setCarregando] = useState(true)
-  const [mensagem, setMensagem] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null)
+  const toast = useToast()
   const [transferindo, setTransferindo] = useState<Cancelado | null>(null)
 
   const carregar = useCallback(async () => {
@@ -118,18 +119,6 @@ export default function CanceladosPage() {
           Atualizar
         </button>
       </div>
-
-      {mensagem && (
-        <div
-          className={`mb-3 p-3 rounded-lg text-sm ${
-            mensagem.tipo === 'ok'
-              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30'
-              : 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300 border border-red-200 dark:border-red-500/30'
-          }`}
-        >
-          {mensagem.texto}
-        </div>
-      )}
 
       {carregando ? (
         <p className="text-ink-muted">Carregando…</p>
@@ -171,10 +160,7 @@ export default function CanceladosPage() {
           onFechar={() => setTransferindo(null)}
           onTransferido={async (destino) => {
             setTransferindo(null)
-            setMensagem({
-              tipo: 'ok',
-              texto: `Conferência de ${transferindo.numero_externo} transferida para ${nomeDoc(destino.tipo)} ${destino.numero_externo}`,
-            })
+            toast.ok(`Conferência de ${transferindo.numero_externo} transferida para ${nomeDoc(destino.tipo)} ${destino.numero_externo}`)
             await carregar()
           }}
           dialog={dialog}

@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
+import { useToast } from '@/components/Toast'
 import {
   View,
   Text,
@@ -16,6 +17,7 @@ import { Header } from '@/components/Header'
 import { SupervisorNav } from '@/components/SupervisorNav'
 import { useDialog } from '@/components/Dialog'
 import { DocBadges } from '@/components/DocBadges'
+import { OndeEsta } from '@/components/OndeEsta'
 import { CabecalhoLista } from '@/components/CabecalhoLista'
 import { supervisorApi, sequenciasApi, SequenciaResumo } from '@/lib/api'
 
@@ -63,6 +65,7 @@ export default function SupervisorPatio() {
   const insets = useSafeAreaInsets()
   const router = useRouter()
   const dialog = useDialog()
+  const toast = useToast()
   const [sequencias, setSequencias] = useState<SequenciaResumo[]>([])
   const [pedidos, setPedidos] = useState<Pedido[]>([])
   const [count, setCount] = useState(0)
@@ -143,11 +146,7 @@ export default function SupervisorPatio() {
       }
       const res = await sequenciasApi.adicionar(destino, ids)
       setSelecionados(new Set())
-      await dialog.alert({
-        variant: 'success',
-        title: 'Pedidos adicionados',
-        message: `${res.adicionados.length} pedido(s) entraram na sequência.`,
-      })
+      toast.ok(`${res.adicionados.length} pedido(s) entraram na sequência`)
       await Promise.all([carregarSequencias(), carregar(buscaAtivaRef.current, 1, false)])
     } catch {
       await dialog.alert({
@@ -250,7 +249,14 @@ export default function SupervisorPatio() {
             <CabecalhoLista carregando={carregando} exibidos={pedidos.length} total={count} />
           }
           ListEmptyComponent={
-            <Text className="text-ink-subtle text-center py-12">Nenhum pedido aguardando sequência.</Text>
+            buscaAtivaRef.current ? (
+              <View className="py-4">
+                <Text className="text-ink-subtle text-center">Nada encontrado para “{buscaAtivaRef.current}” nesta lista.</Text>
+                <OndeEsta busca={buscaAtivaRef.current} lista="patio" />
+              </View>
+            ) : (
+              <Text className="text-ink-subtle text-center py-12">Nenhum pedido aguardando sequência.</Text>
+            )
           }
           ListFooterComponent={
             proximaPagina ? (

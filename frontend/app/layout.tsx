@@ -3,6 +3,7 @@ import { Cinzel, Fraunces, Manrope, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 import { ThemeProvider } from '@/components/ThemeToggle'
 import { DialogProvider } from '@/components/Dialog'
+import { ToastProvider } from '@/components/Toast'
 import { ErroReporter } from '@/components/ErroReporter'
 
 // Tipografia do sistema (self-hosted pelo next/font — zero CDN em runtime):
@@ -69,7 +70,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider />
         <ErroReporter />
         <DialogProvider>
-          {children}
+          <ToastProvider>
+            {children}
+          </ToastProvider>
         </DialogProvider>
       </body>
     </html>

@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { DialogProvider } from '@/components/Dialog'
+import { ToastProvider } from '@/components/Toast'
 import { useThemeStore } from '@/stores/themeStore'
 import { temaLight, temaDark } from '@/lib/temas'
 import { instalarRelatorGlobal } from '@/lib/erros'
@@ -37,6 +38,7 @@ export default function RootLayout() {
       <View style={[{ flex: 1 }, tema]}>
         <SafeAreaProvider>
           <DialogProvider>
+            <ToastProvider>
             <StatusBar style={resolved === 'dark' ? 'light' : 'dark'} />
             <Stack
               screenOptions={{
@@ -47,6 +49,7 @@ export default function RootLayout() {
             />
             {/* Versão nova do APK publicada em Admin → App do coletor: faixa no rodapé ou bloqueio */}
             <AvisoAtualizacao />
+            </ToastProvider>
           </DialogProvider>
         </SafeAreaProvider>
       </View>
