@@ -24,6 +24,8 @@ type Pedido = {
   numero_externo: string
   tipo?: string
   frete?: string
+  pedidos_origem?: string[]
+  nfs_documento?: string[]
   transportadora?: string
   qtd_transportadora?: number
   cliente: string
@@ -212,7 +214,7 @@ export default function SupervisorPatio() {
         <TextInput
           value={busca}
           onChangeText={setBusca}
-          placeholder="Buscar por número ou cliente"
+          placeholder="Buscar por pedido, NF ou cliente"
           placeholderTextColor="#52525b"
           className="h-11 px-3 bg-surface-card border border-surface-border rounded-lg text-ink"
         />
@@ -299,7 +301,7 @@ export default function SupervisorPatio() {
                   <View className="flex-1">
                     <View className="flex-row items-center gap-2 flex-wrap">
                       <Text className="font-semibold text-ink">{p.numero_externo}</Text>
-                      <DocBadges tipo={p.tipo} frete={p.frete} />
+                      <DocBadges tipo={p.tipo} frete={p.frete} origem={p.pedidos_origem} nfs={p.nfs_documento} />
                       <Text className="text-xs text-ink-subtle">{p.tempo_espera}</Text>
                     </View>
                     <Text className="text-sm text-ink-muted" numberOfLines={1}>

@@ -131,7 +131,7 @@ def _transportadora(row) -> tuple[str, str]:
 
 
 def _localizar_ou_criar(tipo, numero, codfil, codsnf, cliente, criado_em, frete,
-                        codtra='', transportadora=''):
+                        codtra='', transportadora='', pedidos_origem=None):
     """Localiza o documento pela identidade Senior (tipo, codfil, codsnf, numero) ou cria.
 
     Compat: pedidos importados antes de codfil existir ficaram com codfil=''.
@@ -161,6 +161,9 @@ def _localizar_ou_criar(tipo, numero, codfil, codsnf, cliente, criado_em, frete,
             pedido.codtra = codtra
             pedido.transportadora = transportadora
             campos += ['codtra', 'transportadora']
+        if pedidos_origem and not pedido.pedidos_origem:
+            pedido.pedidos_origem = pedidos_origem
+            campos.append('pedidos_origem')
         if campos:
             pedido.save(update_fields=campos)
         return pedido, False, bool(campos)
@@ -170,6 +173,7 @@ def _localizar_ou_criar(tipo, numero, codfil, codsnf, cliente, criado_em, frete,
             tipo=tipo, numero_externo=numero, codfil=codfil, codsnf=codsnf,
             cliente=cliente, criado_em=criado_em, frete=frete,
             codtra=codtra, transportadora=transportadora,
+            pedidos_origem=pedidos_origem or [],
             status=Pedido.Status.PENDENTE,
         )
     except IntegrityError:
@@ -180,10 +184,15 @@ def _localizar_ou_criar(tipo, numero, codfil, codsnf, cliente, criado_em, frete,
 
 
 def _sincronizar_fonte(tipo, rows, col_numero, col_qtd, query_itens, params_itens):
-    """Importa as linhas de uma fonte (pedidos ou NFs) como Pendente + itens."""
-    from apps.pedidos.models import Pedido
+    """Importa as linhas de uma fonte (pedidos ou NFs) como Pendente + itens.
 
-    criados = atualizados = itens_importados = 0
+    NF que saiu de pedido (2026-11-05): se é o faturamento de um pedido que o Separa já está
+    conferindo, só vincula a nota ao pedido (`vinculadas_a_pedido`); senão vira documento
+    com `pedidos_origem` — é o caso do faturamento parcial conferido pela nota."""
+    from apps.pedidos.models import Pedido
+    from apps.pedidos.nf_vinculo import origens_da_linha
+
+    criados = atualizados = itens_importados = vinculadas = 0
     for row in rows:
         numero = str(row.get(col_numero) or '').strip()
         if not numero:
@@ -195,10 +204,15 @@ def _sincronizar_fonte(tipo, rows, col_numero, col_qtd, query_itens, params_iten
         frete = str(row.get('ciffob') or '').strip().upper()[:1]
         codtra, transportadora = _transportadora(row)
         criado_em = _make_aware(row.get('datemi'))
+        origens = origens_da_linha(row.get('pedidos_origem')) if tipo == Pedido.Tipo.NOTA_FISCAL else []
+
+        if origens and _vincular_se_faturamento(row, origens, numero, codfil, codsnf):
+            vinculadas += 1
+            continue
 
         pedido, created, updated = _localizar_ou_criar(
             tipo, numero, codfil, codsnf, cliente, criado_em, frete,
-            codtra, transportadora,
+            codtra, transportadora, [n for _, n in origens],
         )
 
         if created:
@@ -212,7 +226,51 @@ def _sincronizar_fonte(tipo, rows, col_numero, col_qtd, query_itens, params_iten
         elif updated:
             atualizados += 1
 
-    return {'criados': criados, 'atualizados': atualizados, 'itens_importados': itens_importados}
+    resultado = {'criados': criados, 'atualizados': atualizados, 'itens_importados': itens_importados}
+    if tipo == Pedido.Tipo.NOTA_FISCAL:
+        resultado['vinculadas_a_pedido'] = vinculadas
+    return resultado
+
+
+def _vincular_se_faturamento(row, origens, numero, codfil, codsnf) -> bool:
+    """NF ainda não importada que é o faturamento de pedido(s) em conferência no Separa →
+    vincula a nota a eles (e dispara a etiqueta do Conferido que esperava a NF). True = não
+    importar como documento. NF que já é documento segue o caminho normal (atualização)."""
+    from apps.pedidos.models import Pedido
+    from apps.pedidos.nf_vinculo import aplicar_vinculo, nf_e_faturamento_em_conferencia
+    from apps.impressao.services import disparar_se_pendente
+
+    if Pedido.objects.filter(tipo=Pedido.Tipo.NOTA_FISCAL, numero_externo=numero, codsnf=codsnf,
+                             codfil__in=[codfil, '']).exists():
+        return False
+    pedidos = nf_e_faturamento_em_conferencia(row, origens)
+    if not pedidos:
+        return False
+    if len(pedidos) < len(origens):
+        logger.warning('NF de vários pedidos, só parte em conferência; tratada como faturamento', extra={
+            'nf': numero, 'serie': codsnf, 'pedidos': [p.numero_externo for p in pedidos],
+            'origens': [n for _, n in origens],
+        })
+    for pedido in pedidos:
+        mudou = aplicar_vinculo(pedido, row)
+        if (mudou['nf'] or mudou['transportadora']) and pedido.status == Pedido.Status.CONFERIDO:
+            try:
+                disparar_se_pendente(pedido)
+            except Exception:
+                logger.exception(f'etiqueta de volume: falha ao disparar para {pedido}')
+    return True
+
+
+def importar_nf(numnfv, aceita=None):
+    """Traz uma NF pelo número na hora (fora da janela) — bipagem do DANFE de nota que o
+    beat ainda não importou. Mesma regra do sync. `aceita(row)` filtra filial/série.
+    Levanta se o Oracle estiver fora."""
+    from .oracle import QUERY_NF_POR_NUMERO, QUERY_ITENS_NF, fetch
+    from apps.pedidos.models import Pedido
+
+    rows = [r for r in fetch(QUERY_NF_POR_NUMERO, [int(numnfv)]) if aceita is None or aceita(r)]
+    return _sincronizar_fonte(Pedido.Tipo.NOTA_FISCAL, rows, 'numnfv', 'qtdfat', QUERY_ITENS_NF,
+                              lambda numero, codfil, codsnf: [numero, codfil, codsnf])
 
 
 @shared_task
@@ -221,7 +279,9 @@ def sincronizar_pedidos_oracle():
     """
     Importa do Senior como Pendente no Postgres, dentro da janela configurada:
       - pedidos com sitPed=1 (Aberto Total) — E120PED/E120IPD;
-      - notas fiscais de venda com sitNfv=2 e sem pedido de origem — E140NFV/E140IPV.
+      - notas fiscais de venda com sitNfv=2 — E140NFV/E140IPV. Desde 2026-11-05 inclui as
+        que saíram de pedido (faturamento parcial), menos o faturamento de pedido que o
+        Separa já está conferindo, que só é vinculado ao pedido.
     Para cada documento novo, importa os itens (+ E075DER + E075PRO).
     Roda a cada 2 minutos via Celery Beat.
     """

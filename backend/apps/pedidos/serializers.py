@@ -54,13 +54,16 @@ class PedidoListSerializer(serializers.ModelSerializer):
     sequencia_numero = serializers.IntegerField(source='sequencia.numero', read_only=True)
     tipo_label = serializers.CharField(source='get_tipo_display', read_only=True)
     frete_label = serializers.CharField(read_only=True)
+    # Só tipo=pedido: NFs que saíram dele e viraram documento (faturamento parcial,
+    # 2026-11-05) — o Sup. Vendas vê que a venda também está na lista como nota.
+    nfs_documento = serializers.SerializerMethodField()
 
     class Meta:
         model = Pedido
         fields = [
             'id', 'tipo', 'tipo_label', 'numero_externo', 'cliente', 'status', 'criado_em',
             'frete', 'frete_label', 'codtra', 'transportadora', 'qtd_transportadora',
-            'nf_codsnf', 'nf_numero',
+            'nf_codsnf', 'nf_numero', 'pedidos_origem', 'nfs_documento',
             'conferencia_iniciada_em', 'conferido_em', 'selecionado_em', 'atribuido_em',
             'conferente', 'conferente_username',
             'sequencia', 'sequencia_numero',
@@ -78,6 +81,25 @@ class PedidoListSerializer(serializers.ModelSerializer):
         if '_etiqueta_exige_nf' not in ctx:
             ctx['_etiqueta_exige_nf'] = etiqueta_exige_nf()
         return motivo_bloqueio(obj, exige_nf=ctx['_etiqueta_exige_nf'])
+
+    def get_nfs_documento(self, obj):
+        if obj.tipo != Pedido.Tipo.PEDIDO:
+            return []
+        ctx = self.context  # uma consulta para a página inteira, não uma por linha
+        if '_nfs_documento' not in ctx:
+            pagina = getattr(self.parent, 'instance', None) or [obj]
+            numeros = [p.numero_externo for p in pagina if p.tipo == Pedido.Tipo.PEDIDO]
+            mapa: dict[str, list[tuple[str, str]]] = {}
+            nfs = (Pedido.objects.filter(tipo=Pedido.Tipo.NOTA_FISCAL, pedidos_origem__has_any_keys=numeros)
+                   .exclude(status=Pedido.Status.CANCELADO)
+                   .order_by('numero_externo').values_list('codfil', 'numero_externo', 'pedidos_origem'))
+            for codfil, numero, origens in nfs:
+                for n in origens:
+                    mapa.setdefault(n, []).append((codfil, numero))
+            ctx['_nfs_documento'] = mapa
+        # numeração é por filial; pedido legado (antes de codfil existir) aceita qualquer uma
+        return [nf for codfil, nf in ctx['_nfs_documento'].get(obj.numero_externo, [])
+                if not obj.codfil or codfil == obj.codfil]
 
     def get_tempo_espera(self, obj):
         if not obj.criado_em:
@@ -110,7 +132,7 @@ class PedidoSerializer(serializers.ModelSerializer):
             'id', 'tipo', 'tipo_label', 'numero_externo', 'codfil', 'codsnf',
             'marketplace', 'marketplace_nome',
             'cliente', 'status', 'criado_em', 'frete', 'frete_label', 'codtra', 'transportadora',
-            'nf_codfil', 'nf_codsnf', 'nf_numero', 'nf_vinculada_em',
+            'nf_codfil', 'nf_codsnf', 'nf_numero', 'nf_vinculada_em', 'pedidos_origem',
             'conferencia_iniciada_em', 'conferido_em', 'faturado_em',
             'endereco_fisico', 'ordem_pilha',
             'selecionado_em', 'atribuido_em', 'conferente', 'conferente_username',

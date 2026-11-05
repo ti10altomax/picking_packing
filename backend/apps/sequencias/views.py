@@ -140,6 +140,7 @@ def detalhe_ou_excluir(request, pk):
             'id': p.id,
             'tipo': p.tipo,
             'numero_externo': p.numero_externo,
+            'pedidos_origem': p.pedidos_origem,
             'frete': p.frete,
             'transportadora': p.transportadora,
             'cliente': p.cliente,

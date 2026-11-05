@@ -244,7 +244,7 @@ export default function SequenciaDetalhePage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-ink">{p.numero_externo}</span>
-                      <DocBadges tipo={p.tipo} frete={p.frete} />
+                      <DocBadges tipo={p.tipo} frete={p.frete} origem={p.pedidos_origem} />
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cfg.cor}`}>{cfg.label}</span>
                     </div>
                     <p className="text-sm text-ink-muted truncate">{p.cliente || '—'}</p>

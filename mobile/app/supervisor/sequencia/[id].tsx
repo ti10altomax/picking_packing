@@ -223,7 +223,7 @@ export default function SequenciaDetalhe() {
                 <View className="flex-1">
                   <View className="flex-row items-center gap-2 flex-wrap">
                     <Text className="font-semibold text-ink">{p.numero_externo}</Text>
-                    <DocBadges tipo={p.tipo} frete={p.frete} />
+                    <DocBadges tipo={p.tipo} frete={p.frete} origem={p.pedidos_origem} />
                     <View className={`px-2 py-0.5 rounded-full ${cfg.cor}`}>
                       <Text className={`text-xs font-medium ${cfg.texto}`}>{cfg.label}</Text>
                     </View>

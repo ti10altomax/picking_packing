@@ -8,6 +8,8 @@ type Pedido = {
   numero_externo: string
   tipo?: string
   frete?: string
+  pedidos_origem?: string[]
+  nfs_documento?: string[]
   transportadora?: string
   cliente: string
   status: string
@@ -104,11 +106,13 @@ export default function SupervisorVendasPage() {
       const ids = Array.from(selecionados)
       const res = await supervisorApi.selecionar(ids)
       setSelecionados(new Set())
+      // conflitos = pedido × NF dele (faturamento parcial): o servidor barra conferir os dois
+      const conflitos: { numero: string; motivo: string }[] = res.conflitos ?? []
       setMensagem({
-        tipo: 'ok',
+        tipo: conflitos.length && !res.selecionados.length ? 'erro' : 'ok',
         texto: `${res.selecionados.length} pedido(s) enviado(s) para conferência${
           res.ignorados.length ? ` · ${res.ignorados.length} ignorado(s)` : ''
-        }`,
+        }${conflitos.map((c) => ` · ${c.numero}: ${c.motivo}`).join('')}`,
       })
       await carregar(buscaAtiva, 1, false)
     } catch {
@@ -138,7 +142,7 @@ export default function SupervisorVendasPage() {
       <div className="mb-3">
         <input
           type="text"
-          placeholder="Buscar por número ou cliente"
+          placeholder="Buscar por pedido, NF ou cliente"
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
           className="w-full bg-surface-card border border-surface-border text-ink placeholder:text-ink-subtle rounded-lg px-3 py-2 text-sm min-h-[44px] focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-300"
@@ -217,7 +221,7 @@ export default function SupervisorVendasPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-ink">{p.numero_externo}</span>
-                        <DocBadges tipo={p.tipo} frete={p.frete} />
+                        <DocBadges tipo={p.tipo} frete={p.frete} origem={p.pedidos_origem} nfs={p.nfs_documento} />
                         <span className="text-xs text-ink-subtle">{p.tempo_espera}</span>
                       </div>
                       <p className="text-sm text-ink-muted truncate">{p.cliente || '—'}</p>

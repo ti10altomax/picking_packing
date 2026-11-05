@@ -72,6 +72,11 @@ class Pedido(models.Model):
     nf_codsnf = models.CharField(max_length=10, blank=True)
     nf_numero = models.CharField(max_length=20, blank=True)
     nf_vinculada_em = models.DateTimeField(null=True, blank=True)
+    # Só tipo=nota_fiscal: números dos pedidos de origem (E140IPV.numped), ex. ['169011'].
+    # Vazio = NF sem pedido. Desde 2026-11-05 a NF que sai de pedido também vira documento
+    # (faturamento parcial: um pedido em várias notas, o galpão confere pela nota) — é o que
+    # deixa achar a nota pelo número do pedido e barrar conferência dupla.
+    pedidos_origem = models.JSONField(default=list, blank=True)
     marketplace = models.ForeignKey(Marketplace, on_delete=models.PROTECT, null=True, blank=True)
     cliente = models.CharField(max_length=255, blank=True)
     status = models.CharField(max_length=30, choices=Status.choices, default=Status.PENDENTE)

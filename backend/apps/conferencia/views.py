@@ -15,7 +15,6 @@ from apps.pedidos.models import (
     DivergenciaBarra, ErroSeparacao, Pedido, PedidoItem, PedidoLog,
     Separador, Sequencia, Volume, VolumeItem,
 )
-from apps.pedidos.nf_vinculo import aplicar_vinculo, pedidos_da_nf
 
 logger = logging.getLogger(__name__)
 
@@ -200,29 +199,17 @@ def _candidatos_por_codigo(numero, serie, veio_de_chave):
 
 
 def _vincular_nf_da_chave(numero, serie) -> str:
-    """Chave sem documento local: a NF pode ser de um pedido faturado há pouco, que o beat
-    `vincular_nfs_pedidos` ainda não ligou. Consulta a E140IPV na hora e vincula os pedidos
-    do Separa à nota. Devolve um aviso para o 404 quando não deu ('' se vinculou ou nada a dizer)."""
+    """Chave sem documento local: NF emitida há pouco que o sync ainda não trouxe. Traz na
+    hora pela mesma regra do sync (`importar_nf`): faturamento de pedido em conferência →
+    vincula a nota ao pedido; senão vira documento (faturamento parcial, 2026-11-05).
+    Devolve um aviso para o 404 quando não deu ('' se trouxe ou nada a dizer)."""
+    from apps.senior.tasks import importar_nf  # lazy: tasks importa models de vários apps
+
     try:
-        rows = [r for r in pedidos_da_nf(numero) if _serie_confere(str(r.get('codsnf') or ''), serie)]
+        importar_nf(numero, aceita=lambda r: _serie_confere(str(r.get('codsnf') or ''), serie))
     except Exception:
         logger.exception('pegar: falha ao consultar a NF no Senior', extra={'nf': numero})
         return f'não consegui consultar a NF {numero} no Senior — tente de novo'
-    if not rows:
-        return ''
-    fora = []
-    for r in rows:
-        numped = str(int(r['numped']))
-        filped = str(int(r['filped'])) if r.get('filped') is not None else ''
-        achados = list(Pedido.objects.filter(tipo=Pedido.Tipo.PEDIDO, numero_externo=numped)
-                       .filter(models.Q(codfil=filped) | models.Q(codfil='')))
-        if not achados:
-            fora.append(numped)
-        for p in achados:
-            aplicar_vinculo(p, r)
-            logger.info('pegar: NF vinculada ao pedido na bipagem', extra={'pedido': p.id, 'nf': numero})
-    if fora:
-        return f"a NF {numero} saiu do pedido {', '.join(sorted(set(fora)))}, que não está no Separa"
     return ''
 
 
@@ -292,6 +279,7 @@ def _serializar_pedido(p: Pedido, com_volumes: bool = False) -> dict:
         'id': p.id,
         'tipo': p.tipo,
         'numero_externo': p.numero_externo,
+        'pedidos_origem': p.pedidos_origem,
         'frete': p.frete,
         'frete_label': p.frete_label,
         'transportadora': p.transportadora,

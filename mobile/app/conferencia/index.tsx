@@ -21,6 +21,7 @@ type Pedido = {
   numero_externo: string
   tipo?: string
   frete?: string
+  pedidos_origem?: string[]
   cliente: string
   status: 'atribuido' | 'conferindo' | 'conferido' | 'nao_conforme'
   qtd_itens: number
@@ -313,7 +314,7 @@ export default function ConferenciaLista() {
                   >
                     <View className="flex-row items-center gap-2 flex-wrap">
                       <Text className="font-semibold text-ink">{p.numero_externo}</Text>
-                      <DocBadges tipo={p.tipo} frete={p.frete} />
+                      <DocBadges tipo={p.tipo} frete={p.frete} origem={p.pedidos_origem} />
                       <Text className="text-xs text-ink-subtle">{p.qtd_itens} {p.qtd_itens === 1 ? 'item' : 'itens'}</Text>
                     </View>
                     <Text className="text-sm text-ink-muted" numberOfLines={1}>{p.cliente || '—'}</Text>
@@ -332,7 +333,7 @@ export default function ConferenciaLista() {
                 <View className="flex-1">
                   <View className="flex-row items-center gap-2 flex-wrap">
                     <Text className="font-bold text-ink">{p.numero_externo}</Text>
-                    <DocBadges tipo={p.tipo} frete={p.frete} />
+                    <DocBadges tipo={p.tipo} frete={p.frete} origem={p.pedidos_origem} />
                     <View
                       className={`px-2 py-0.5 rounded-full ${
                         p.status === 'conferindo'

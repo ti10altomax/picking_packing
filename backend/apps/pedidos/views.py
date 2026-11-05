@@ -7,6 +7,7 @@ from django.db.models import Case, Count, IntegerField, OuterRef, Q, Subquery, V
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from .models import DivergenciaBarra, Pedido, PedidoItem, PedidoLog
+from .nf_vinculo import conflito_conferencia_dupla
 from .serializers import PedidoSerializer, PedidoListSerializer
 
 
@@ -71,7 +72,12 @@ class PedidoViewSet(viewsets.ModelViewSet):
         if marketplace:
             qs = qs.filter(marketplace__slug=marketplace)
         if search:
-            qs = qs.filter(Q(numero_externo__icontains=search) | Q(cliente__icontains=search))
+            # NF também pelo número: a do pedido faturado (`nf_numero`) e, pelo número do
+            # pedido, as notas que saíram dele (`pedidos_origem`, faturamento parcial).
+            filtro = Q(numero_externo__icontains=search) | Q(cliente__icontains=search) | Q(nf_numero__icontains=search)
+            if search.isdigit():
+                filtro |= Q(pedidos_origem__contains=[str(int(search))])
+            qs = qs.filter(filtro)
 
         if self.request.query_params.get('ordem') == 'transportadora':
             # Ponto 3 da diretoria (2026-10-05): a fila do Pátio sai ordenada pela
@@ -205,6 +211,21 @@ class PedidoViewSet(viewsets.ModelViewSet):
 
         agora = timezone.now()
         qs = Pedido.objects.filter(pk__in=ids, status=Pedido.Status.PENDENTE)
+        # Faturamento parcial (2026-11-05): o pedido e a NF que saiu dele não vão os dois
+        # para a conferência — seria conferir a mesma mercadoria duas vezes.
+        conflitos = []
+        docs = list(qs)
+        pedidos_no_lote = {d.numero_externo for d in docs if d.tipo == Pedido.Tipo.PEDIDO}
+        juntos = {n for d in docs if d.tipo == Pedido.Tipo.NOTA_FISCAL for n in d.pedidos_origem or []} & pedidos_no_lote
+        for doc in docs:
+            junto = (doc.numero_externo in juntos if doc.tipo == Pedido.Tipo.PEDIDO
+                     else bool(juntos & set(doc.pedidos_origem or [])))
+            motivo = ('pedido e NF dele marcados juntos — escolha um dos dois' if junto
+                      else conflito_conferencia_dupla(doc))
+            if motivo:
+                conflitos.append({'id': doc.id, 'numero': doc.numero_externo, 'tipo': doc.tipo, 'motivo': motivo})
+        if conflitos:
+            qs = qs.exclude(pk__in=[c['id'] for c in conflitos])
         atualizados = list(qs.values_list('id', flat=True))
         qs.update(
             status=Pedido.Status.SELECIONADO,
@@ -218,7 +239,7 @@ class PedidoViewSet(viewsets.ModelViewSet):
             )
 
         ignorados = [i for i in ids if i not in atualizados]
-        return Response({'selecionados': atualizados, 'ignorados': ignorados})
+        return Response({'selecionados': atualizados, 'ignorados': ignorados, 'conflitos': conflitos})
 
     # ------------------------------------------------------------------
     # Sup. Pátio — DESATIVADO na Fase 3: atribuição agora é por sequência

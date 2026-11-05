@@ -12,6 +12,12 @@ a carta de correção. De carona, a NF é a palavra final sobre transportadora e
 pedido sem `codtra`/`frete` ganha o da nota (a transportadora costuma só aparecer no
 faturamento).
 
+Faturamento parcial (2026-11-05): um pedido pode sair em várias notas (168 pedidos com 2+
+NFs em 30 dias) e o galpão, na maioria das vezes, confere pela nota. Por isso a NF que sai
+de pedido agora também vira documento — a não ser que seja o faturamento de um pedido que
+o Separa já está conferindo (Selecionado em diante e ainda sem nota): aí ela só é vinculada,
+como antes. `conflito_conferencia_dupla` barra mandar para separação o pedido e a nota dele.
+
 Leitura só — nada é escrito no Oracle.
 """
 import logging
@@ -80,6 +86,84 @@ def _mesma_filial(pedido: Pedido, row: dict) -> bool:
     return not pedido.codfil or not filped or pedido.codfil == filped
 
 
+# Pedido que o Separa já está conferindo (ou conferiu): a NF que sair dele sem estar vinculada
+# ainda é o faturamento dessa conferência — não vira documento novo.
+STATUS_EM_CONFERENCIA = (
+    Pedido.Status.SELECIONADO,
+    Pedido.Status.ATRIBUIDO,
+    Pedido.Status.CONFERINDO,
+    Pedido.Status.AGUARDANDO_FECHAMENTO,
+    Pedido.Status.NAO_CONFORME,
+    Pedido.Status.CONFERIDO,
+)
+
+
+def origens_da_linha(valor) -> list[tuple[str, str]]:
+    """'1:169011,1:169012' (LISTAGG da QUERY_NF_PENDENTES) → [('1', '169011'), ('1', '169012')]."""
+    origens = []
+    for parte in _s(valor).split(','):
+        filped, _, numped = parte.strip().rpartition(':')
+        numped = _s(_int(numped))
+        if numped:
+            origens.append((_s(_int(filped)), numped))
+    return origens
+
+
+def _pedidos_das_origens(origens):
+    qs = Pedido.objects.filter(tipo=Pedido.Tipo.PEDIDO, numero_externo__in=[n for _, n in origens])
+    filiais = {n: f for f, n in origens}
+    return [p for p in qs if not p.codfil or not filiais.get(p.numero_externo) or p.codfil == filiais[p.numero_externo]]
+
+
+def nf_e_faturamento_em_conferencia(row: dict, origens) -> list[Pedido]:
+    """A NF (linha da QUERY_NF_PENDENTES) é o faturamento de um pedido que o Separa já está
+    conferindo? Devolve esses pedidos (vazio = a NF vira documento). Pedido sem nota ou já
+    vinculado a ela conta; pedido vinculado a outra nota não — esta é o saldo."""
+    numnfv = _s(_int(row.get('numnfv')))
+    codsnf = _s(row.get('codsnf'))
+    return [
+        p for p in _pedidos_das_origens(origens)
+        if p.status in STATUS_EM_CONFERENCIA
+        and (not p.nf_numero or (p.nf_numero, p.nf_codsnf) == (numnfv, codsnf))
+    ]
+
+
+def _nfs_que_sao_documento(rows) -> set[tuple[str, str]]:
+    """(numnfv, codsnf) das linhas que já existem como documento tipo NF no Separa —
+    essas são conferidas por si; não são o faturamento de ninguém."""
+    numeros = {_s(_int(r.get('numnfv'))) for r in rows} - {''}
+    if not numeros:
+        return set()
+    return set(
+        Pedido.objects.filter(tipo=Pedido.Tipo.NOTA_FISCAL, numero_externo__in=numeros)
+        .values_list('numero_externo', 'codsnf')
+    )
+
+
+def conflito_conferencia_dupla(doc: Pedido) -> str:
+    """Motivo para NÃO mandar `doc` para separação, ou ''. Barra conferir duas vezes a mesma
+    mercadoria: o pedido e a nota que saiu dele (faturamento parcial, 2026-11-05)."""
+    livres = (Pedido.Status.PENDENTE, Pedido.Status.CANCELADO)
+    if doc.tipo == Pedido.Tipo.PEDIDO:
+        nfs = (Pedido.objects.filter(tipo=Pedido.Tipo.NOTA_FISCAL, pedidos_origem__contains=[doc.numero_externo])
+               .exclude(status__in=livres))
+        if doc.codfil:  # numeração é por filial; o pedido sai faturado na própria filial
+            nfs = nfs.filter(codfil__in=[doc.codfil, ''])
+        nf = nfs.first()
+        if nf:
+            return f'a NF {nf.numero_externo} desse pedido já está na conferência ({nf.get_status_display()})'
+        return ''
+    origens = [(doc.codfil, n) for n in doc.pedidos_origem or []]
+    for p in _pedidos_das_origens(origens):
+        if p.status in livres:
+            continue
+        if p.status != Pedido.Status.CONFERIDO:
+            return f'o pedido {p.numero_externo} dessa NF já está na conferência ({p.get_status_display()})'
+        if not p.nf_numero or p.nf_numero == doc.numero_externo:
+            return f'o pedido {p.numero_externo} já foi conferido e esta NF é o faturamento dele'
+    return ''
+
+
 def vincular_em_lote(pedidos) -> dict:
     """Pedidos (tipo=pedido) ainda sem NF → consulta E140IPV em blocos e vincula.
 
@@ -106,10 +190,16 @@ def vincular_em_lote(pedidos) -> dict:
         if rows is None:
             resultado['falha_oracle'] = True
             return resultado
+        # NF que já é documento é conferida por si (saldo de faturamento parcial); entre as
+        # demais, a primeira emitida é o faturamento — com várias, a seguinte não sobrescreve.
+        documentos = _nfs_que_sao_documento(rows)
+        rows = sorted(rows, key=lambda r: (r.get('datemi') is None, r.get('datemi') or 0, _int(r.get('numnfv')) or 0))
         for row in rows:
+            if (_s(_int(row.get('numnfv'))), _s(row.get('codsnf'))) in documentos:
+                continue
             numped = _s(_int(row.get('numped')))
             for pedido in por_numero.get(numped, []):
-                if not _mesma_filial(pedido, row):
+                if not _mesma_filial(pedido, row) or pedido.nf_numero:
                     continue
                 mudou = aplicar_vinculo(pedido, row)
                 resultado['vinculados'] += int(mudou['nf'])
@@ -128,6 +218,8 @@ def descobrir_nf(pedido: Pedido) -> dict | None:
         return None
     rows = [r for r in fetch(QUERY_NFS_DOS_PEDIDOS.format(placeholders=':1'), [int(pedido.numero_externo)])
             if _mesma_filial(pedido, r)]
+    documentos = _nfs_que_sao_documento(rows)
+    rows = [r for r in rows if (_s(_int(r.get('numnfv'))), _s(r.get('codsnf'))) not in documentos]
     if not rows:
         return None
     if len(rows) > 1:

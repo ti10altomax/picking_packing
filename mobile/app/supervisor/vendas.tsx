@@ -21,6 +21,8 @@ type Pedido = {
   numero_externo: string
   tipo?: string
   frete?: string
+  pedidos_origem?: string[]
+  nfs_documento?: string[]
   transportadora?: string
   cliente: string
   qtd_itens: number
@@ -102,12 +104,14 @@ export default function SupervisorVendas() {
       const ids = Array.from(selecionados)
       const res = await supervisorApi.selecionar(ids)
       setSelecionados(new Set())
+      // conflitos = pedido × NF dele (faturamento parcial): o servidor barra conferir os dois
+      const conflitos: { numero: string; motivo: string }[] = res.conflitos ?? []
       await dialog.alert({
-        variant: 'success',
+        variant: conflitos.length ? 'warning' : 'success',
         title: 'Pedidos enviados',
         message: `${res.selecionados.length} pedido(s) enviado(s) para conferência${
           res.ignorados.length ? ` · ${res.ignorados.length} ignorado(s)` : ''
-        }.`,
+        }.${conflitos.map((c) => `\n${c.numero}: ${c.motivo}`).join('')}`,
       })
       await carregar(buscaAtivaRef.current, 1, false)
     } catch {
@@ -133,7 +137,7 @@ export default function SupervisorVendas() {
         <TextInput
           value={busca}
           onChangeText={setBusca}
-          placeholder="Buscar por número ou cliente"
+          placeholder="Buscar por pedido, NF ou cliente"
           placeholderTextColor="#52525b"
           className="h-11 px-3 bg-surface-card border border-surface-border rounded-lg text-ink"
         />
@@ -217,7 +221,7 @@ export default function SupervisorVendas() {
                   <View className="flex-1">
                     <View className="flex-row items-center gap-2 flex-wrap">
                       <Text className="font-semibold text-ink">{p.numero_externo}</Text>
-                      <DocBadges tipo={p.tipo} frete={p.frete} />
+                      <DocBadges tipo={p.tipo} frete={p.frete} origem={p.pedidos_origem} nfs={p.nfs_documento} />
                       <Text className="text-xs text-ink-subtle">{p.tempo_espera}</Text>
                     </View>
                     <Text className="text-sm text-ink-muted" numberOfLines={1}>

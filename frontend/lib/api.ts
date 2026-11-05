@@ -216,6 +216,7 @@ export type SequenciaPedido = {
   id: number
   tipo?: string
   frete?: string
+  pedidos_origem?: string[]
   transportadora?: string
   numero_externo: string
   cliente: string

@@ -21,6 +21,8 @@ type Pedido = {
   numero_externo: string
   tipo?: string
   frete?: string
+  pedidos_origem?: string[]
+  nfs_documento?: string[]
   cliente: string
   conferido_em: string | null
   conferente_username: string | null
@@ -140,7 +142,7 @@ export default function Conferidos() {
         <TextInput
           value={busca}
           onChangeText={setBusca}
-          placeholder="Buscar por número ou cliente"
+          placeholder="Buscar por pedido, NF ou cliente"
           placeholderTextColor="#52525b"
           className="h-11 px-3 bg-surface-card border border-surface-border rounded-lg text-ink"
         />
@@ -201,7 +203,7 @@ export default function Conferidos() {
                     <View className="flex-1">
                       <View className="flex-row items-center gap-2 flex-wrap">
                         <Text className="font-bold text-ink">{p.numero_externo}</Text>
-                        <DocBadges tipo={p.tipo} frete={p.frete} />
+                        <DocBadges tipo={p.tipo} frete={p.frete} origem={p.pedidos_origem} nfs={p.nfs_documento} />
                         <View className="bg-emerald-500/15 px-2 py-0.5 rounded-full">
                           <Text className="text-xs text-emerald-300 font-medium">Conferido</Text>
                         </View>

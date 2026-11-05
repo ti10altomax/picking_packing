@@ -195,11 +195,14 @@ QUERY_PEDIDOS_DA_NF = f"""
       AND NVL(ipv.numped, 0) > 0
 """
 
-# Notas fiscais de venda fechadas (sitNfv=2) SEM pedido de origem — as que vieram
-# de pedido já passaram (ou vão passar) pela conferência como pedido. A origem é
-# detectada pelos itens (E140IPV.numped). Numeração é por filial + série → ambos
-# entram na identidade local. :1 = janela em dias.
-QUERY_NF_PENDENTES = f"""
+# Notas fiscais de venda fechadas (sitNfv=2). Até 2026-11-05 só entravam as SEM pedido de
+# origem; agora entram também as que saíram de pedido, porque o galpão confere pela nota e
+# um pedido pode ser faturado em várias notas (faturamento parcial — 168 pedidos com 2+ NFs
+# em 30 dias). `pedidos_origem` = "filped:numped,..." (E140IPV); a decisão "é o faturamento
+# de um pedido que o Separa já está conferindo → só vincula" fica no Python
+# (apps.pedidos.nf_vinculo.nf_e_faturamento_em_conferencia). Numeração é por filial + série
+# → ambos entram na identidade local.
+_SELECT_NF = f"""
     SELECT
         nfv.codfil,
         nfv.codsnf,
@@ -209,7 +212,15 @@ QUERY_NF_PENDENTES = f"""
         nfv.ciffob,
         nfv.codtra,
         tra.nomtra,
-        cli.nomcli
+        cli.nomcli,
+        (SELECT LISTAGG(DISTINCT ipv.filped || ':' || ipv.numped, ',')
+                WITHIN GROUP (ORDER BY ipv.filped || ':' || ipv.numped)
+           FROM E140IPV ipv
+          WHERE ipv.codemp = nfv.codemp
+            AND ipv.codfil = nfv.codfil
+            AND ipv.codsnf = nfv.codsnf
+            AND ipv.numnfv = nfv.numnfv
+            AND NVL(ipv.numped, 0) > 0) AS pedidos_origem
     FROM E140NFV nfv
     LEFT JOIN E085CLI cli
         ON cli.codcli = nfv.codcli
@@ -217,17 +228,18 @@ QUERY_NF_PENDENTES = f"""
         ON tra.codtra = nfv.codtra
     WHERE nfv.codemp = {SENIOR_CODEMP}
       AND nfv.sitnfv = 2
+"""
+
+# :1 = janela em dias.
+QUERY_NF_PENDENTES = _SELECT_NF + """
       AND nfv.datemi >= TRUNC(SYSDATE) - :1
-      AND NOT EXISTS (
-          SELECT 1
-          FROM E140IPV ipv
-          WHERE ipv.codemp = nfv.codemp
-            AND ipv.codfil = nfv.codfil
-            AND ipv.codsnf = nfv.codsnf
-            AND ipv.numnfv = nfv.numnfv
-            AND NVL(ipv.numped, 0) > 0
-      )
     ORDER BY nfv.datemi DESC
+"""
+
+# Uma NF pelo número, fora da janela — bipagem da chave do DANFE de nota que o beat ainda
+# não trouxe. :1 = numnfv (filial/série conferidas no Python).
+QUERY_NF_POR_NUMERO = _SELECT_NF + """
+      AND nfv.numnfv = :1
 """
 
 # Itens da NF — mesma estrutura dos itens do pedido; a quantidade é qtdfat.

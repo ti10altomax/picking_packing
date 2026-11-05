@@ -16,7 +16,7 @@ export const supervisorVendas: AjudaTela = {
   ],
   passos: [
     'Abra Vendas. A lista já vem atualizada: o sistema busca no Senior sozinho, a cada poucos minutos, só os documentos dos últimos dias.',
-    'Procure um documento pelo número ou pelo nome do cliente no campo "Buscar por número ou cliente".',
+    'Procure um documento pelo número do pedido, pelo número da NF ou pelo nome do cliente no campo "Buscar por pedido, NF ou cliente". O número do pedido também acha as notas que saíram dele.',
     'Use os filtros para reduzir a lista: Pedidos ou Notas fiscais, Entrega, Retira ou Sem frete, Com transportadora ou Sem transportadora.',
     'Marque a caixa de cada documento que vai para o galpão. A caixa do cabeçalho marca todos os documentos que estão na tela.',
     'Confira a barra de baixo: ela mostra quantos documentos você marcou. Para desfazer, toque em "Limpar".',
@@ -27,11 +27,21 @@ export const supervisorVendas: AjudaTela = {
     {
       nome: 'Pedidos / Notas fiscais',
       descricao:
-        'Filtra pelo tipo do documento. Nota fiscal é uma venda já faturada que não veio de pedido. "Todos" mostra os dois.',
+        'Filtra pelo tipo do documento. Nota fiscal é uma venda já faturada: pode ter vindo de um pedido ou não. "Todos" mostra os dois.',
     },
     {
       nome: 'Badge NF',
       descricao: 'Aparece ao lado do número quando o documento é uma nota fiscal. Pedido não tem badge de tipo.',
+    },
+    {
+      nome: 'ped. 169992',
+      descricao:
+        'Ao lado do badge NF: o pedido de onde a nota saiu. Um pedido pode ser faturado em várias notas, e cada nota é conferida com os itens dela.',
+    },
+    {
+      nome: 'NF 150250 (âmbar)',
+      descricao:
+        'Ao lado de um pedido: a nota que já saiu dele e também está na lista. Envie a nota, não o pedido — o sistema não deixa conferir os dois.',
     },
     {
       nome: 'Entrega / Retira / Sem frete',
@@ -65,6 +75,11 @@ export const supervisorVendas: AjudaTela = {
       quando: 'Mensagem verde "N pedido(s) enviado(s) para conferência · M ignorado(s)".',
       oQueFazer:
         'Os ignorados já tinham sido enviados por outra pessoa ou não estão mais pendentes. Não precisa fazer nada; a lista já foi recarregada.',
+    },
+    {
+      quando: 'Na mensagem aparece "a NF … desse pedido já está na conferência" ou "o pedido … dessa NF já está na conferência".',
+      oQueFazer:
+        'É a mesma venda: o pedido e a nota que saiu dele. Só um dos dois vai para o galpão. Na dúvida, mande a nota, que tem os itens que estão saindo agora.',
     },
     {
       quando: 'Mensagem vermelha "Erro ao enviar pedidos".',
