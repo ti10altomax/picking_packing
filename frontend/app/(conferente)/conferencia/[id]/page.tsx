@@ -1,6 +1,6 @@
 'use client'
 import { DocBadges } from '@/components/ui/DocBadges'
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, type ReactNode } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { conferenciaApi, separadoresApi, SeparadorLiberado, type VereditoEtiqueta } from '@/lib/api'
 import { CameraScanner } from '@/components/CameraScanner'
@@ -32,6 +32,7 @@ type Volume = {
   id: number
   tipo: 'caixa' | 'fardo' | 'outro'
   identificador: string
+  op?: string
   criado_em: string
   fechado_em: string | null
   itens: VolumeItem[]
@@ -55,6 +56,21 @@ type Pedido = {
 }
 
 type FlashTipo = 'ok' | 'erro' | 'divergente' | 'excesso' | null
+
+type DivergenciaFardo = {
+  codpro: string
+  tam: string
+  qtd: number
+  restante: number
+  motivo: 'excede' | 'fora_do_documento'
+}
+
+function textoDivergencia(d: DivergenciaFardo) {
+  return `${d.codpro} ${d.tam}: ${d.qtd} no fardo — ${
+    d.motivo === 'excede' ? `faltam só ${d.restante}` : 'não é deste documento'
+  }`
+}
+
 
 const MOTIVOS = [
   { valor: 'divergencia_qtd', label: 'Divergência de quantidade' },
@@ -370,7 +386,13 @@ export default function ConferenciaPedidoPage() {
   }
 
   const aoRemoverVolume = async (volumeId: number) => {
-    const ok = await dialog.confirm({
+    const fardo = pedido?.volumes.find((v) => v.id === volumeId)?.op
+    const ok = await dialog.confirm(fardo ? {
+      title: `Desfazer o fardo OP ${fardo}?`,
+      message: 'O volume do fardo sai e as quantidades voltam para a fila. O fardo pode ser lido de novo.',
+      variant: 'danger',
+      confirmText: 'Desfazer',
+    } : {
       title: 'Apagar volume?',
       message: 'O volume será apagado. Só permitido se estiver vazio.',
       variant: 'danger',
@@ -394,6 +416,12 @@ export default function ConferenciaPedidoPage() {
   // Processa um código (vindo do input manual OU da câmera)
   const processarCodigo = (cod: string) => {
     if (!cod || !pedido) return
+
+    if (/^\d{7}$/.test(cod)) {
+      setQtdArmada(false)
+      lerFardo(cod)
+      return
+    }
 
     if (!volumeAtivo) {
       erroScan('Crie um volume antes de bipar', 'Toque em "Novo volume" e bipe de novo.', cod)
@@ -428,6 +456,37 @@ export default function ConferenciaPedidoPage() {
       'O produto não é deste documento ou o item já está completo.',
       cod,
     )
+  }
+
+  // Fardo fechado da fábrica (2026-11-05): a etiqueta traz a OP do Sisplan (7 dígitos).
+  // O backend compara o fardo inteiro com o que falta; bateu, cria um volume "OP N" já
+  // fechado. Não bateu, não lança nada. Não precisa de volume aberto.
+  function lerFardo(op: string) {
+    filaBip.current = filaBip.current.then(async () => {
+      try {
+        const r = await conferenciaApi.fardo(pedidoId, op)
+        piscar('ok', 700)
+        playBeep(880, 120); setTimeout(() => playBeep(1320, 120), 140)
+        toast.ok(`Fardo OP ${op} conferido`, {
+          detalhe: `${r.itens.length} item(ns) · ${r.pecas} peças — volume fechado`,
+          chave: 'leitor',
+        })
+        await carregar(true)
+      } catch (err: unknown) {
+        if (await tratarCancelado(err)) return
+        const e = err as { response?: { data?: { resultado?: string; erro?: string; divergencias?: DivergenciaFardo[] } } }
+        const d = e?.response?.data
+        if (d?.resultado === 'fardo_divergente') {
+          erroScan('Fardo não confere — nada foi lançado', <ul className="list-disc pl-4">{(d.divergencias ?? []).map((x, i) => <li key={i}>{textoDivergencia(x)}</li>)}</ul>, op, 12000)
+        } else if (d?.resultado === 'op_ja_lida') {
+          erroScan('Este fardo já foi lido', d.erro ?? '', op)
+        } else if (d?.resultado === 'op_nao_encontrada') {
+          erroScan('OP não encontrada', 'Confira a etiqueta do fardo ou confira peça a peça.', op)
+        } else {
+          erroScan('Não foi possível ler o fardo', d?.erro ?? 'Tente de novo.', op)
+        }
+      }
+    }).catch(() => {})
   }
 
   // Leitura sem "Qtd" armado: 1 unidade no volume ativo, sem modal
@@ -485,10 +544,10 @@ export default function ConferenciaPedidoPage() {
 
   // Mensagem do leitor vai para o toast (grande, quebra linha); a barra só pisca vermelho.
   // Até 2026-11-05 ela aparecia no placeholder do campo e não dava para ler no coletor.
-  function erroScan(titulo: string, detalhe: string, codigo: string) {
+  function erroScan(titulo: string, detalhe: ReactNode, codigo: string, duracao?: number) {
     piscar('erro', 1200)
     playBeep(200, 300, 'sawtooth')
-    toast.erro(titulo, { detalhe, codigo, chave: 'leitor' })
+    toast.erro(titulo, { detalhe, codigo, chave: 'leitor', duracao })
   }
 
   const handleScan = () => {
@@ -631,7 +690,7 @@ export default function ConferenciaPedidoPage() {
               </p>
             </>
           ) : (
-            <p className="text-sm text-ink-muted">Nenhum volume aberto — abra um para começar</p>
+            <p className="text-sm text-ink-muted">Nenhum volume aberto — abra um, ou bipe a OP do fardo</p>
           )}
         </div>
         <button
@@ -654,8 +713,9 @@ export default function ConferenciaPedidoPage() {
         />
       )}
 
-      {/* Scanner principal — bipou, registra 1; com "Qtd" armado abre o modal de quantidade */}
-      {volumeAtivo && (
+      {/* Scanner principal — bipou, registra 1; com "Qtd" armado abre o modal de quantidade;
+          OP de fardo (7 dígitos) lança o fardo inteiro — por isso aparece mesmo sem volume aberto */}
+      {pedido.status === 'conferindo' && (
         <div className="bg-surface-card px-4 py-3 border-b border-surface-border sticky top-14 z-10">
           <div
             className={`flex items-center gap-2 rounded-xl border-2 pl-3 pr-1 h-14 transition-all ${
@@ -1000,7 +1060,7 @@ function ListaVolumes({
                           {item ? (item.descricao || item.sku) : `item #${vi.pedido_item_id}`}
                         </span>
                         <span className="font-bold text-ink">{vi.qtd}×</span>
-                        {permiteEdicao && (
+                        {permiteEdicao && !v.fechado_em && (
                           <button
                             onClick={() => onRemoverItem(v.id, vi.id)}
                             title="Remover lançamento"
@@ -1012,6 +1072,14 @@ function ListaVolumes({
                       </div>
                     )
                   })}
+                  {permiteEdicao && v.op && (
+                    <button
+                      onClick={() => onRemoverVolume(v.id)}
+                      className="mt-1 w-full px-3 h-9 rounded-md bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-500/15 dark:hover:bg-red-500/25 dark:text-red-300 text-xs font-semibold"
+                    >
+                      Desfazer fardo
+                    </button>
+                  )}
                 </div>
               )}
             </div>

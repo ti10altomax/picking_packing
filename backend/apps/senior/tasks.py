@@ -74,6 +74,21 @@ def _janela_dias() -> int:
         return 3
 
 
+def codigo_barras(*valores) -> str:
+    """Primeiro código de barras de verdade da lista (CODBAR → CODGTN → CODBAR do
+    tamanho base). Vazio, só zeros ou None não contam; NUMBER do Oracle vira dígitos."""
+    for v in valores:
+        if v is None:
+            continue
+        if isinstance(v, (int, float)) or type(v).__name__ == 'Decimal':
+            s = str(int(v))
+        else:
+            s = str(v).strip()
+        if s and s.strip('0'):
+            return s
+    return ''
+
+
 def _importar_itens(pedido, query, params, col_qtd):
     """Busca os itens no Oracle (E120IPD ou E140IPV + E075DER/PRO) e popula PedidoItem."""
     from .oracle import SENIOR_CODEMP
@@ -95,7 +110,7 @@ def _importar_itens(pedido, query, params, col_qtd):
         if qtd <= 0:
             continue
 
-        ean = str(r.get('codbar') or '').strip()
+        ean = codigo_barras(r.get('codbar'), r.get('codgtn'), r.get('codbar_base'))
         descricao = str(r.get('despro') or '').strip() or f'{codpro}-{codder}'
         # SKU = produto-derivação (ex.: 1234-GG). Até 2026-10-26 levava '-{codemp}' no fim;
         # a empresa fica só no campo `codemp` (migration pedidos.0016 limpou os antigos).

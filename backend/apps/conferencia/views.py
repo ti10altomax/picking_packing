@@ -15,6 +15,7 @@ from apps.pedidos.models import (
     DivergenciaBarra, ErroSeparacao, Pedido, PedidoItem, PedidoLog,
     Separador, Sequencia, Volume, VolumeItem,
 )
+from .fardo import FardoErro, desfazer_fardo, ler_fardo
 
 logger = logging.getLogger(__name__)
 
@@ -255,6 +256,7 @@ def _serializar_volume(v: Volume) -> dict:
         'id': v.id,
         'tipo': v.tipo,
         'identificador': v.identificador,
+        'op': v.op,
         'criado_em': v.criado_em,
         'fechado_em': v.fechado_em,
         'itens': [
@@ -650,6 +652,39 @@ def bipar(request, pk):
 
 
 # ---------------------------------------------------------------------------
+# Fardo fechado da fábrica — bipou a OP (7 dígitos), lança o fardo inteiro
+# ---------------------------------------------------------------------------
+
+@api_view(['POST'])
+def fardo(request, pk):
+    err = _exige_conferente(request)
+    if err:
+        return err
+
+    pedido = get_object_or_404(Pedido, pk=pk)
+    err = _guard_pedido(request, pedido)
+    if err:
+        return err
+    if pedido.status != Pedido.Status.CONFERINDO:
+        return Response(
+            {'erro': f'pedido em status "{pedido.status}" não permite lançar fardo — inicie a conferência primeiro'},
+            status=http_status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        volume, lancados = ler_fardo(pedido, request.data.get('op'), request.user)
+    except FardoErro as e:
+        return Response({'resultado': e.resultado, 'erro': e.mensagem, **e.dados}, status=e.status)
+
+    return Response({
+        'resultado': 'ok',
+        'volume': _serializar_volume(volume),
+        'itens': lancados,
+        'pecas': sum(x['qtd'] for x in lancados),
+    }, status=http_status.HTTP_201_CREATED)
+
+
+# ---------------------------------------------------------------------------
 # Remover lançamento de item dentro de um volume (corrige erro de bipagem)
 # ---------------------------------------------------------------------------
 
@@ -738,6 +773,10 @@ def remover_volume(request, pk, volume_id):
     volume = pedido.volumes.filter(pk=volume_id).first()
     if not volume:
         return Response({'erro': 'volume não pertence ao pedido'}, status=http_status.HTTP_404_NOT_FOUND)
+    if volume.op:
+        # fardo da fábrica: sai inteiro, devolvendo as quantidades (desfazer a leitura)
+        desfazer_fardo(pedido, volume, request.user)
+        return Response({'ok': True})
     if volume.fechado_em:
         return Response({'erro': 'volume já fechado'}, status=http_status.HTTP_400_BAD_REQUEST)
     if volume.itens.exists():

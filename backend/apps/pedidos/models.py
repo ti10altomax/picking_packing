@@ -231,6 +231,9 @@ class Volume(models.Model):
         on_delete=models.SET_NULL, related_name='volumes_criados',
     )
     fechado_em = models.DateTimeField(null=True, blank=True)
+    # Fardo fechado da fábrica lido pela OP do Sisplan (2026-11-05): o volume nasce
+    # fechado com os itens da OP. Uma OP só entra uma vez (fora de documento cancelado).
+    op = models.CharField(max_length=20, blank=True, db_index=True)
 
     class Meta:
         ordering = ['criado_em']

@@ -30,6 +30,7 @@ export const conferenciaPedido: AjudaTela = {
     'Toque em + Volume, escolha caixa, fardo ou outro, confira o identificador e toque em Criar.',
     'Bipe o produto na barra "Bipe o código…". Cada leitura soma 1 unidade no volume ativo, sem abrir nada.',
     'Para pôr várias unidades de uma vez (caixa fechada), toque em Qtd antes de bipar, ou toque no item na lista. Informe a quantidade e toque em Confirmar.',
+    'Fardo fechado da fábrica: bipe a etiqueta da OP (7 dígitos). Se o fardo bate com o que falta, o sistema cria o volume "OP N" já fechado com todos os itens. Não precisa abrir volume antes.',
     'Repita até todos os itens ficarem com ✓. Abra outro volume com + Volume sempre que precisar.',
     'Quando o botão ficar verde, toque em Concluir ✓ e confirme.',
   ],
@@ -68,6 +69,11 @@ export const conferenciaPedido: AjudaTela = {
         'Na barra de bipagem. Toque antes de bipar e a próxima leitura abre a tela de quantidade. A barra fica amarela enquanto estiver armado. Depois dessa leitura volta sozinho para 1 em 1. Toque de novo para cancelar.',
     },
     {
+      nome: 'Volume "OP N" (fardo)',
+      descricao:
+        'Criado sozinho ao bipar a OP de um fardo fechado. Já vem fechado, sem lixeira nos lançamentos. Para corrigir, abra o volume e toque em Desfazer fardo: as quantidades voltam e o fardo pode ser lido de novo.',
+    },
+    {
       nome: 'Ícone da câmera',
       descricao: 'Na barra de bipagem. Lê o código pela câmera quando o leitor não funcionar.',
     },
@@ -100,6 +106,19 @@ export const conferenciaPedido: AjudaTela = {
     {
       quando: 'Aparece "Este código não é de nenhum item pendente" ou "Este item já está completo".',
       oQueFazer: 'O produto não está neste pedido ou o item já está completo. Confira o produto na mão.',
+    },
+    {
+      quando: 'Vermelho: "Fardo não confere — nada foi lançado", com a lista do que diverge.',
+      oQueFazer:
+        'O fardo tem produto que não é deste documento ou mais peças do que falta. Nada entrou. Separe o fardo e avise o Sup. Pátio, ou confira peça a peça.',
+    },
+    {
+      quando: 'Aparece "Este fardo já foi lido".',
+      oQueFazer: 'Essa OP já entrou neste ou em outro documento (o aviso diz qual). Cada fardo só entra uma vez.',
+    },
+    {
+      quando: 'Aparece "OP não encontrada".',
+      oQueFazer: 'A fábrica ainda não publicou essa OP. Confira a etiqueta ou confira peça a peça.',
     },
     {
       quando: 'Bipou uma unidade a mais por engano.',

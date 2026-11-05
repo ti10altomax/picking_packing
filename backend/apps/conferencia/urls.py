@@ -13,6 +13,7 @@ urlpatterns = [
     path('conferencia/pedidos/<int:pk>/volumes/<int:volume_id>/itens/<int:volume_item_id>/',
          views.remover_volume_item, name='conferencia_remover_volume_item'),
     path('conferencia/pedidos/<int:pk>/bipar/', views.bipar, name='conferencia_bipar'),
+    path('conferencia/pedidos/<int:pk>/fardo/', views.fardo, name='conferencia_fardo'),
     path('conferencia/pedidos/<int:pk>/concluir/', views.concluir, name='conferencia_concluir'),
     path('conferencia/pedidos/<int:pk>/nao_conforme/', views.marcar_nao_conforme, name='conferencia_nao_conforme'),
     path('conferencia/pedidos/<int:pk>/liberar_divergencia/', views.liberar_divergencia, name='conferencia_liberar_divergencia'),

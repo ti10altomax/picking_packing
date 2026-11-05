@@ -6,6 +6,50 @@
 
 ---
 
+## 2026-11-05 (noite) — Fardo fechado da fábrica pela OP + código de barras efetivo dos itens
+
+**Gatilho.** Pedido do usuário: o fardo fechado chega com a etiqueta da OP do Sisplan (7 dígitos, sem acesso ao Sisplan). A TI publicou a view `REPORTS.USU_OP_PRODUTOS` (OP, CODPRO, CODBAR, TAM, QTD). Bipar a OP deve conferir o fardo com o documento e lançar tudo se bater.
+
+**Decisões do usuário:**
+- Uma OP é um fardo.
+- Se não bate, bloqueia.
+- O fardo vira um volume próprio, que o sistema cria e já fecha.
+- O casamento é pelo código de barras: CODBAR → CODGTN → CODBAR do G para G1, G2 etc.
+
+**Feito:**
+- `apps/conferencia/fardo.py` (`ler_fardo`, `desfazer_fardo`) e `POST /api/conferencia/pedidos/<id>/fardo/`.
+- `Volume.op` (migration **`pedidos.0018`**).
+- `QUERY_OP_PRODUTOS` lê `REPORTS.USU_OP_PRODUTOS` com o schema explícito, porque o pool troca o `current_schema`.
+- **Casamento:** o CODBAR da OP contra o `ean` do item; sem código, produto + tamanho base (`G1` → `G`).
+- **Distribuição:** itens com o mesmo código (G1 e G2 no mesmo pedido) recebem em ordem de SKU, até o restante.
+- **Bloqueios:**
+  - Produto fora do documento ou mais do que falta: `409 fardo_divergente` com a lista, nada lançado, log `fardo_op_divergente` gravado fora da transação.
+  - OP já usada em volume de documento não cancelado: `op_ja_lida`.
+  - Outros: `op_nao_encontrada` (404) e `oracle_indisponivel` (503).
+- O volume nasce fechado, sem lixeira nos lançamentos. "Desfazer fardo" (no `DELETE` do volume, quando tem `op`) devolve as quantidades (log `fardo_op_desfeito`).
+- **Web e mobile:**
+  - 7 dígitos na barra vira leitura de fardo, na mesma fila do 1 em 1, e ignora o Qtd armado.
+  - Toast verde "Fardo OP N conferido" (itens · peças) ou vermelho com a lista das divergências (12 s).
+  - A barra aparece com a conferência iniciada mesmo sem volume aberto.
+  - Diálogo de "Desfazer fardo".
+- Manual e CLAUDE.md atualizados.
+
+**Achado importante — itens sem código de barras:** o sync gravava só `E075DER.CODBAR`, e derivações como G1, G2 e G60 têm CODBAR = 0. Esses itens entravam com `ean` vazio, e bipar o produto não achava o item.
+- Agora `QUERY_ITENS_PEDIDO`/`QUERY_ITENS_NF` trazem `codgtn` e o `codbar` do tamanho base (join `derb` com `REGEXP_REPLACE(codder, '[0-9]+$', '')`), e `tasks.codigo_barras` escolhe o primeiro não zero.
+- Comando **`manage.py preencher_ean_itens`** (`--todos` inclui concluídos) corrige o que já está no banco. Em dev: **20.085 itens sem código em documentos em andamento, 19.634 preenchidos**.
+
+**Testado:**
+- View e query nova no Oracle real (leitura).
+- 7 cenários de `ler_fardo` no shell com rollback: bate com G dividido 100/140, mesma OP de novo, OP em outro documento, desfazer, excede + fora do documento, OP inexistente, OP inválida.
+- **Chrome:** num documento temporário com os itens da OP 1286519, lançou 720 peças num volume "OP 1286519" fechado; a 2ª leitura foi bloqueada; o desfazer voltou a zero; com M1 = 100 e sem GG1, apareceu o toast com as duas divergências. O documento temporário foi apagado.
+- `tsc` limpo no web (container) e no mobile.
+
+**Deploy:**
+- Migration `pedidos.0018`.
+- Rodar **`python manage.py preencher_ean_itens`** em produção logo depois.
+- APK novo.
+- Confirmar que o usuário Oracle de produção enxerga `REPORTS.USU_OP_PRODUTOS` (em dev enxerga).
+
 ## 2026-11-05 (fim da tarde) — Bipagem de 1 em 1 + botão "Qtd" na barra
 
 **Gatilho.** A Sup. Pátio quer bipar peça a peça; abrir o modal para confirmar quantidade 1 atrasava. O modal tinha que continuar existindo para caixa fechada, sem poluir a tela do coletor. O usuário sugeriu dois toques no campo. Descartei porque não aparece na tela, briga com a seleção de texto do Android e dispara sem querer com uma mão. Ele escolheu o botão na barra. **Feito (web `conferencia/[id]/page.tsx` e mobile `conferencia/[id].tsx`):**

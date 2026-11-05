@@ -56,6 +56,8 @@ Atores principais: **Supervisor de Vendas**, **Supervisor de Pátio**, **Confere
 | Pedido | Unidade de venda originada no Senior; contém 1..N itens. Desde 2026-09 a tabela também guarda **notas fiscais** (`tipo='nota_fiscal'`) |
 | Nota fiscal | NF de venda fechada (E140NFV); passa pelo mesmo fluxo de conferência que o pedido. Até 2026-11-05 só as sem pedido de origem; agora também as que saíram de pedido (`pedidos_origem`), menos o faturamento de pedido já em conferência |
 | Volume | Embalagem física (caixa, fardo etc.) que agrupa parte dos itens separados de um pedido |
+| OP (fardo) | Ordem de produção do Sisplan (fábrica), 7 dígitos, na etiqueta do fardo fechado; uma OP = um fardo. Itens na view `REPORTS.USU_OP_PRODUTOS` |
+| Código de barras do item | `PedidoItem.ean` = CODBAR da derivação → CODGTN → CODBAR do tamanho base (G1/G2/G60 → G). Até 2026-11-05 era só o CODBAR, e derivações como G1 (CODBAR 0) entravam sem código |
 | Conferente | Usuário do sistema que confere por bipagem e monta volumes (era chamado de "separador" até o rename de 2026-08) |
 | Separador | Trabalhador físico que separa a mercadoria no estoque — em geral extras; terá cadastro próprio sem login (Fase 2, ver `DESIGN.md`) |
 | Conferência por bipagem | Conferente escolhe item, informa qtd e bipa o código de barras; sistema verifica se bate com o item esperado |
@@ -152,6 +154,7 @@ Toda transição grava em `PedidoLog` (quem, quando, ação, payload).
    - Identificador opcional (texto livre).
 5. **Bipar item**
    - **Desde 2026-11-05 (pedido do Sup. Pátio): bipar na barra registra 1 unidade direto** (sem modal; leituras em fila, toast verde "+1 SKU"). O botão **Qtd** da barra arma só a próxima leitura para abrir o modal de quantidade (barra âmbar; desarma sozinho). Tocar no item da lista continua abrindo o modal.
+   - **Fardo fechado da fábrica (2026-11-05)**: bipar a **OP do Sisplan (7 dígitos)** consulta a view `REPORTS.USU_OP_PRODUTOS` (OP, CODPRO, CODBAR, TAM, QTD; uma OP = um fardo) e compara o fardo inteiro com o que falta (CODBAR da OP × `PedidoItem.ean`; sem código, produto + tamanho base). Bateu → volume `fardo` "OP N" **já fechado** com os lançamentos (`Volume.op`, migration `pedidos.0018`); não bateu → bloqueia sem lançar nada e lista o que diverge; OP já lida (fora de documento Cancelado) → bloqueia. Mesmo código em G1 e G2 → enche o primeiro e passa ao próximo. "Desfazer fardo" apaga o volume e devolve as quantidades. `POST /api/conferencia/pedidos/<id>/fardo/`, regra em `apps/conferencia/fardo.py`. A barra de bipagem aparece mesmo sem volume aberto.
    - No modal: informa **quantidade** que está colocando no volume atual.
    - Bipa o código de barras → sistema valida:
      - Match (EAN/SKU bate com o item escolhido) → soma a qtd ao item, feedback verde + som curto.

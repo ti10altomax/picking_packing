@@ -101,6 +101,9 @@ QUERY_PEDIDOS_PENDENTES = f"""
 
 # Itens do pedido — JOIN com E075DER (codbar por derivação) e E075PRO (despro)
 # CODEMP=1 filtrado em todas as tabelas para evitar contaminação multi-empresa
+# Código de barras do item (2026-11-05): derivações como G1/G2/G60 têm CODBAR = 0 e
+# entravam sem código. Ordem: CODBAR da derivação → CODGTN → CODBAR do tamanho base
+# (derb: G1/G2/G60 → G, GG1 → GG). A escolha é feita em `tasks.codigo_barras`.
 # :1 = numped · :2 = codfil
 QUERY_ITENS_PEDIDO = f"""
     SELECT
@@ -109,12 +112,18 @@ QUERY_ITENS_PEDIDO = f"""
         ipd.codder,
         ipd.qtdabe,
         der.codbar,
+        der.codgtn,
+        derb.codbar AS codbar_base,
         pro.despro
     FROM E120IPD ipd
     LEFT JOIN E075DER der
         ON der.codemp = {SENIOR_CODEMP}
        AND der.codpro = ipd.codpro
        AND der.codder = ipd.codder
+    LEFT JOIN E075DER derb
+        ON derb.codemp = {SENIOR_CODEMP}
+       AND derb.codpro = ipd.codpro
+       AND derb.codder = REGEXP_REPLACE(ipd.codder, '[0-9]+$', '')
     LEFT JOIN E075PRO pro
         ON pro.codemp = {SENIOR_CODEMP}
        AND pro.codpro = ipd.codpro
@@ -251,12 +260,18 @@ QUERY_ITENS_NF = f"""
         ipv.codder,
         ipv.qtdfat,
         der.codbar,
+        der.codgtn,
+        derb.codbar AS codbar_base,
         pro.despro
     FROM E140IPV ipv
     LEFT JOIN E075DER der
         ON der.codemp = {SENIOR_CODEMP}
        AND der.codpro = ipv.codpro
        AND der.codder = ipv.codder
+    LEFT JOIN E075DER derb
+        ON derb.codemp = {SENIOR_CODEMP}
+       AND derb.codpro = ipv.codpro
+       AND derb.codder = REGEXP_REPLACE(ipv.codder, '[0-9]+$', '')
     LEFT JOIN E075PRO pro
         ON pro.codemp = {SENIOR_CODEMP}
        AND pro.codpro = ipv.codpro
@@ -264,4 +279,23 @@ QUERY_ITENS_NF = f"""
       AND ipv.numnfv = :1
       AND ipv.codfil = :2
       AND ipv.codsnf = :3
+"""
+
+
+# Códigos de barras das derivações de um lote de produtos — `preencher_ean_itens`
+# (itens importados antes de 2026-11-05 ficaram sem código). Os :n vêm do chamador.
+QUERY_DERIVACOES = f"""
+    SELECT der.codpro, der.codder, der.codbar, der.codgtn
+    FROM E075DER der
+    WHERE der.codemp = {SENIOR_CODEMP}
+      AND der.codpro IN ({{marcadores}})
+"""
+
+# Fardo fechado da fábrica (2026-11-05): a etiqueta do fardo traz a OP do Sisplan
+# (7 dígitos) e a view da TI lista o que vai dentro. Uma OP = um fardo.
+# Fica no schema REPORTS (o pool troca o current_schema para o do Senior).
+QUERY_OP_PRODUTOS = """
+    SELECT op, codpro, codbar, tam, qtd
+    FROM REPORTS.USU_OP_PRODUTOS
+    WHERE op = :1
 """
