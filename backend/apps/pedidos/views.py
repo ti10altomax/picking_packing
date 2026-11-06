@@ -80,7 +80,7 @@ class PedidoViewSet(viewsets.ModelViewSet):
                 etiqueta_volume_em=Subquery(etiqueta_volume_em),
             )
         else:
-            qs = Pedido.objects.select_related('marketplace', 'conferente', 'separado_por', 'sequencia').prefetch_related('itens')
+            qs = Pedido.objects.select_related('marketplace', 'conferente', 'separado_por', 'sequencia').prefetch_related('itens', 'volumes__itens')
 
         status_filter = self.request.query_params.get('status')
         marketplace = self.request.query_params.get('marketplace')

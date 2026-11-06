@@ -1,13 +1,29 @@
 from rest_framework import serializers
 from django.utils import timezone
 from django.utils.timesince import timesince
-from .models import DivergenciaBarra, Pedido, PedidoItem
+from .models import DivergenciaBarra, Pedido, PedidoItem, Volume, VolumeItem
 
 
 class PedidoItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = PedidoItem
         fields = ['id', 'sku', 'descricao', 'ean', 'qtd_pedida', 'qtd_separada', 'status']
+
+
+class VolumeItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VolumeItem
+        fields = ['id', 'pedido_item_id', 'qtd', 'criado_em']
+
+
+class VolumeSerializer(serializers.ModelSerializer):
+    """Mesmo formato do detalhe da conferência (`conferencia.views._serializar_volume`):
+    o supervisor vê, em Conferidos, o que foi em cada volume (2026-11-06)."""
+    itens = VolumeItemSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Volume
+        fields = ['id', 'tipo', 'identificador', 'op', 'criado_em', 'fechado_em', 'itens']
 
 
 def _nome_separado_por(obj):
@@ -113,6 +129,7 @@ class PedidoListSerializer(serializers.ModelSerializer):
 
 class PedidoSerializer(serializers.ModelSerializer):
     itens = PedidoItemSerializer(many=True, read_only=True)
+    volumes = VolumeSerializer(many=True, read_only=True)
     marketplace_nome = serializers.CharField(source='marketplace.nome', read_only=True)
     conferente_username = serializers.CharField(source='conferente.username', read_only=True)
     separado_por_nome = serializers.SerializerMethodField()
@@ -140,7 +157,7 @@ class PedidoSerializer(serializers.ModelSerializer):
             'separado_por', 'separado_por_nome', 'separador_nao_identificado',
             'percent_conferido', 'qtd_itens', 'qtd_divergencias',
             'tempo_espera', 'duracao_conferencia', 'etiqueta_volume_em',
-            'itens',
+            'itens', 'volumes',
         ]
 
     def get_separado_por_nome(self, obj):

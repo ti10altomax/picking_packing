@@ -15,6 +15,7 @@ import { DocBadges } from '@/components/DocBadges'
 import { OndeEsta } from '@/components/OndeEsta'
 import { CabecalhoLista } from '@/components/CabecalhoLista'
 import { EscolherImpressora } from '@/components/EscolherImpressora'
+import { ItensPorVolume, type ItemDoc, type VolumeDoc } from '@/components/ItensPorVolume'
 import { supervisorApi, pedidosApi, rotuloBloqueio, type BloqueioEtiqueta } from '@/lib/api'
 
 type Pedido = {
@@ -36,15 +37,8 @@ type Pedido = {
   etiqueta_bloqueio?: BloqueioEtiqueta | null
 }
 
-type Item = {
-  id: number
-  sku: string
-  descricao: string
-  ean: string
-  qtd_pedida: number
-  qtd_separada: number
-  status: 'ok' | 'cancelado' | 'falta'
-}
+// Detalhe carregado ao abrir a linha: itens + volumes (itens por volume desde 2026-11-06)
+type Detalhe = { itens: ItemDoc[]; volumes: VolumeDoc[] }
 
 type Paginado = { count: number; next: string | null; results: Pedido[] }
 
@@ -75,7 +69,7 @@ export default function Conferidos() {
 
   // Acordeão
   const [expandidos, setExpandidos] = useState<Set<number>>(new Set())
-  const [itensCache, setItensCache] = useState<Record<number, Item[]>>({})
+  const [itensCache, setItensCache] = useState<Record<number, Detalhe>>({})
   const [carregandoItens, setCarregandoItens] = useState<Set<number>>(new Set())
   // Etiqueta de volume: pedido cujo seletor de impressora está aberto
   const [pedidoImprimir, setPedidoImprimir] = useState<number | null>(null)
@@ -120,9 +114,9 @@ export default function Conferidos() {
       setCarregandoItens((prev) => new Set(prev).add(id))
       try {
         const data = await pedidosApi.buscar(id)
-        setItensCache((prev) => ({ ...prev, [id]: data.itens ?? [] }))
+        setItensCache((prev) => ({ ...prev, [id]: { itens: data.itens ?? [], volumes: data.volumes ?? [] } }))
       } catch {
-        setItensCache((prev) => ({ ...prev, [id]: [] }))
+        setItensCache((prev) => ({ ...prev, [id]: { itens: [], volumes: [] } }))
       } finally {
         setCarregandoItens((prev) => {
           const next = new Set(prev)
@@ -199,7 +193,7 @@ export default function Conferidos() {
           }
           renderItem={({ item: p }) => {
             const aberto = expandidos.has(p.id)
-            const itens = itensCache[p.id]
+            const detalhe = itensCache[p.id]
             const carregandoEsse = carregandoItens.has(p.id)
             return (
               <View className="bg-surface-card border border-surface-border rounded-xl overflow-hidden">
@@ -267,45 +261,11 @@ export default function Conferidos() {
                 </View>
 
                 {aberto ? (
-                  <View className="bg-emerald-500/10 border-t border-emerald-500/30 border-l-4 border-l-emerald-500 pl-6 pr-4 py-3 gap-1.5">
-                    {carregandoEsse && !itens ? (
+                  <View className="bg-emerald-500/10 border-t border-emerald-500/30 border-l-4 border-l-emerald-500 pl-6 pr-4 py-3">
+                    {carregandoEsse && !detalhe ? (
                       <Text className="text-xs text-ink-subtle italic">Carregando itens…</Text>
-                    ) : !itens || itens.length === 0 ? (
-                      <Text className="text-xs text-ink-subtle italic">Sem itens.</Text>
                     ) : (
-                      itens.map((it) => {
-                        const completo = it.status !== 'ok' || it.qtd_separada >= it.qtd_pedida
-                        return (
-                          <View
-                            key={it.id}
-                            className={`p-2 rounded-lg ${
-                              it.status === 'cancelado' ? 'bg-surface-elev/60 opacity-60' :
-                              it.status === 'falta' ? 'bg-orange-500/10' :
-                              'bg-surface-card border border-emerald-500/20'
-                            }`}
-                          >
-                            <View className="flex-row items-start gap-3">
-                              <View className="flex-1">
-                                <Text className="text-sm text-ink font-medium" numberOfLines={2}>
-                                  {it.descricao || it.sku}
-                                </Text>
-                                <Text className="text-xs text-ink-subtle">
-                                  {it.sku}{it.ean ? ` · ${it.ean}` : ''}
-                                </Text>
-                              </View>
-                              {it.status === 'ok' ? (
-                                <Text className={`text-sm font-bold ${
-                                  completo ? 'text-emerald-400' : 'text-ink'
-                                }`}>
-                                  {it.qtd_separada}/{it.qtd_pedida}
-                                </Text>
-                              ) : (
-                                <Text className="text-xs text-ink-muted">{it.status}</Text>
-                              )}
-                            </View>
-                          </View>
-                        )
-                      })
+                      <ItensPorVolume itens={detalhe?.itens ?? []} volumes={detalhe?.volumes ?? []} />
                     )}
                   </View>
                 ) : null}

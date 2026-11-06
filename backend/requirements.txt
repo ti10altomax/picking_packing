@@ -5,6 +5,10 @@ django-cors-headers>=4.3
 channels>=4.1
 channels-redis>=4.2
 celery>=5.4
+# kombu 5.6 importa `packaging` no transporte Redis sem declarar a dependência em todas
+# as versões — worker e beat de produção caíram em 2026-11-05 com ModuleNotFoundError.
+kombu>=5.6.2
+packaging>=24.0
 django-celery-beat>=2.6
 redis>=5.0
 psycopg2-binary>=2.9

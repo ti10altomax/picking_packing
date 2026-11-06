@@ -8,6 +8,7 @@ import type { BloqueioEtiqueta } from '@/lib/api'
 import { HistoricoBotao } from '@/components/pedidos/HistoricoPedido'
 import { TrocarTransportadora } from '@/components/cce/TrocarTransportadora'
 import { useCcePermissao } from '@/lib/useCcePermissao'
+import { ItensPorVolume, type ItemDoc, type VolumeDoc } from '@/components/pedidos/ItensPorVolume'
 
 type Pedido = {
   id: number
@@ -30,15 +31,8 @@ type Pedido = {
   etiqueta_bloqueio?: BloqueioEtiqueta | null
 }
 
-type Item = {
-  id: number
-  sku: string
-  descricao: string
-  ean: string
-  qtd_pedida: number
-  qtd_separada: number
-  status: 'ok' | 'cancelado' | 'falta'
-}
+// Detalhe carregado ao abrir a linha: itens + volumes (itens por volume desde 2026-11-06)
+type Detalhe = { itens: ItemDoc[]; volumes: VolumeDoc[] }
 
 export default function ConferidosPage() {
   const [pedidos, setPedidos] = useState<Pedido[]>([])
@@ -53,7 +47,7 @@ export default function ConferidosPage() {
 
   // Acordeão: quais estão abertos + cache + estado de loading por pedido
   const [expandidos, setExpandidos] = useState<Set<number>>(new Set())
-  const [itensCache, setItensCache] = useState<Record<number, Item[]>>({})
+  const [itensCache, setItensCache] = useState<Record<number, Detalhe>>({})
   const [carregandoItens, setCarregandoItens] = useState<Set<number>>(new Set())
 
   const carregar = useCallback(async (search: string, page = 1, append = false) => {
@@ -110,9 +104,9 @@ export default function ConferidosPage() {
       setCarregandoItens((prev) => new Set(prev).add(id))
       try {
         const data = await pedidosApi.buscar(id)
-        setItensCache((prev) => ({ ...prev, [id]: data.itens ?? [] }))
+        setItensCache((prev) => ({ ...prev, [id]: { itens: data.itens ?? [], volumes: data.volumes ?? [] } }))
       } catch {
-        setItensCache((prev) => ({ ...prev, [id]: [] }))
+        setItensCache((prev) => ({ ...prev, [id]: { itens: [], volumes: [] } }))
       } finally {
         setCarregandoItens((prev) => {
           const next = new Set(prev)
@@ -166,7 +160,7 @@ export default function ConferidosPage() {
             <ul>
               {pedidos.map((p) => {
                 const aberto = expandidos.has(p.id)
-                const itens = itensCache[p.id]
+                const detalhe = itensCache[p.id]
                 const carregandoEsse = carregandoItens.has(p.id)
                 return (
                   <li key={p.id} className="border-b border-surface-border last:border-b-0">
@@ -250,54 +244,10 @@ export default function ConferidosPage() {
 
                     {aberto && (
                       <div className="bg-emerald-50 dark:bg-emerald-500/10 border-t border-emerald-200 dark:border-emerald-500/30 border-l-4 border-l-emerald-400 dark:border-l-emerald-500 pl-6 pr-4 py-3">
-                        {carregandoEsse && !itens ? (
+                        {carregandoEsse && !detalhe ? (
                           <p className="text-xs text-ink-subtle italic">Carregando itens…</p>
-                        ) : !itens || itens.length === 0 ? (
-                          <p className="text-xs text-ink-subtle italic">Sem itens registrados.</p>
                         ) : (
-                          <ul className="space-y-1.5">
-                            {itens.map((item) => {
-                              const completo = item.status !== 'ok' || item.qtd_separada >= item.qtd_pedida
-                              return (
-                                <li
-                                  key={item.id}
-                                  className={`flex items-start gap-3 p-2 rounded-lg ${
-                                    item.status === 'cancelado' ? 'bg-surface-elev/60 opacity-60' :
-                                    item.status === 'falta' ? 'bg-orange-50 dark:bg-orange-500/10' :
-                                    'bg-surface-card shadow-sm border border-emerald-100 dark:border-emerald-500/20'
-                                  }`}
-                                >
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-ink leading-snug">
-                                      {item.descricao || item.sku}
-                                    </p>
-                                    <p className="text-xs text-ink-subtle mt-0.5">
-                                      {item.sku}
-                                      {item.ean && (
-                                        <>
-                                          <span className="mx-1">·</span>
-                                          <code className="font-mono">{item.ean}</code>
-                                        </>
-                                      )}
-                                    </p>
-                                  </div>
-                                  <div className="shrink-0 text-right">
-                                    {item.status === 'cancelado' && (
-                                      <span className="text-xs bg-zinc-200 dark:bg-zinc-700 text-ink-muted px-2 py-0.5 rounded-full">cancelado</span>
-                                    )}
-                                    {item.status === 'falta' && (
-                                      <span className="text-xs bg-orange-200 dark:bg-orange-500/20 text-orange-700 dark:text-orange-300 px-2 py-0.5 rounded-full">em falta</span>
-                                    )}
-                                    {item.status === 'ok' && (
-                                      <span className={`text-sm font-bold ${completo ? 'text-emerald-600 dark:text-emerald-400' : 'text-ink'}`}>
-                                        {item.qtd_separada}/{item.qtd_pedida}
-                                      </span>
-                                    )}
-                                  </div>
-                                </li>
-                              )
-                            })}
-                          </ul>
+                          <ItensPorVolume itens={detalhe?.itens ?? []} volumes={detalhe?.volumes ?? []} />
                         )}
                       </div>
                     )}

@@ -18,7 +18,7 @@ export const supervisorConferidos: AjudaTela = {
     'Abra Gestão → Conferidos.',
     'Procure por número ou cliente no campo de busca.',
     'Leia a linha do documento: data, conferente, separador, quantidade de itens e o tempo da conferência.',
-    'Toque na linha para abrir os itens com a quantidade separada sobre a pedida.',
+    'Toque na linha para abrir os itens agrupados por volume: cada caixa ou fardo mostra o que foi dentro e quantas peças. Item dividido em mais de um volume aparece como "2 de 5". O que ficou em falta, cancelado ou sem lançamento fica no bloco "Fora de volume".',
     'Para imprimir a etiqueta de volume, toque em "Etiqueta", escolha a impressora e toque em "Imprimir". Se já foi impressa, o botão vira "Reimprimir" e mostra quando.',
     'Para ver o que aconteceu com o documento, toque em "Histórico".',
     'Para trocar transportadora, frete ou volumes da NF, toque em "Corrigir NF".',

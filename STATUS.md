@@ -6,6 +6,12 @@
 
 ---
 
+## 2026-11-06 — OP sem tamanho fixo + Conferidos mostra itens por volume
+
+- **OP do Sisplan**: a regra "7 dígitos" virou "só dígitos, menos de 13" (o tamanho do EAN) — a numeração vai crescer. `RE_OP` no backend, `ehOp()` no web e no coletor; na barra, código que é EAN de item do documento nunca vira OP. APK **0.12.1** (versionCode 19) gerado; o 0.12.0 já estava publicado.
+- **Produção: Celery parado desde o deploy de 05/11 17:13** (achado ao investigar "NF 150225 não aparece em Vendas"). `celery` e `celery-beat` em `Restarting` com `ModuleNotFoundError: No module named 'packaging'` em `kombu/transport/redis.py` — a camada do `pip install` da imagem veio em cache com um kombu 5.6 que importa `packaging` sem declará-lo (dev está em kombu 5.6.2 + packaging 26.3 e funciona). Sem sync, cancelamentos, vínculo de NF, etiqueta automática nem fardo (a OP consulta Oracle direto, esse funciona) desde 05/11 10:35; última NF importada 04/11. Correção: `kombu>=5.6.2` + `packaging>=24.0` no `requirements.txt` (muda a camada → rebuild do pip). A NF 150225 (pedido 185796, Pendente) entra sozinha quando o sync voltar (janela de produção = 10 dias). O backend web não caiu porque o Django não importa o transporte Redis na partida — o `/api/health/` não cobre o Celery; Admin → Saúde cobre (tarefas "atrasadas").
+- **Conferidos → itens por volume** (pedido do usuário): `GET /api/pedidos/<id>/` passou a devolver `volumes` (mesmo formato do detalhe da conferência: `VolumeSerializer`/`VolumeItemSerializer` em `pedidos/serializers.py`, prefetch `volumes__itens`). O acordeão de Conferidos (web `components/pedidos/ItensPorVolume.tsx`, mobile `components/ItensPorVolume.tsx`) mostra um bloco por volume ("Caixa 1 · 12 peças", "Fardo OP N" com selo fábrica) com a quantidade que foi naquele volume ("2 de 5" quando dividido) e um bloco "Fora de volume" (falta, cancelado, separado sem lançamento). Sem volumes cai na lista plana antiga. Manual atualizado. **Falta**: commit, deploy e APK (o 0.12.1 foi gerado antes desta tela — precisa de novo build para o coletor mostrar por volume).
+
 ## 2026-11-05 (noite) — Fardo fechado da fábrica pela OP + código de barras efetivo dos itens
 
 **Gatilho.** Pedido do usuário: o fardo fechado chega com a etiqueta da OP do Sisplan (só dígitos, sem tamanho fixo — ajustado em 2026-11-06 de "7 dígitos" para "menos de 13", o tamanho do EAN; sem acesso ao Sisplan). A TI publicou a view `REPORTS.USU_OP_PRODUTOS` (OP, CODPRO, CODBAR, TAM, QTD). Bipar a OP deve conferir o fardo com o documento e lançar tudo se bater.
