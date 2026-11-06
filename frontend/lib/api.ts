@@ -99,7 +99,7 @@ export const conferenciaApi = {
       .then((r) => r.data),
   removerVolume: (pedidoId: number, volumeId: number) =>
     api.delete(`/api/conferencia/pedidos/${pedidoId}/volumes/${volumeId}/`).then((r) => r.data),
-  // fardo fechado da fábrica: bipou a OP do Sisplan (7 dígitos), lança o fardo inteiro
+  // fardo fechado da fábrica: bipou a OP do Sisplan (só dígitos, < 13), lança o fardo inteiro
   fardo: (pedidoId: number, op: string) =>
     api.post(`/api/conferencia/pedidos/${pedidoId}/fardo/`, { op }).then((r) => r.data),
 }

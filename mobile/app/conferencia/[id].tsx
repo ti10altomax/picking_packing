@@ -399,7 +399,7 @@ export default function ConferenciaDetalhe() {
   function processarCodigoLido(cod: string) {
     setCameraGlobalAberta(false)
     if (!pedido) return
-    if (/^\d{7}$/.test(cod)) {
+    if (ehOp(pedido, cod)) {
       setQtdArmada(false)
       lerFardo(cod)
       return
@@ -423,6 +423,12 @@ export default function ConferenciaDetalhe() {
     }
   }
 
+  // OP do Sisplan: só dígitos, sem tamanho fixo (vai crescer), sempre menor que os 13 do EAN.
+  // Código que é de algum item do documento nunca vira OP (SKU tem hífen, não colide).
+  function ehOp(p: Pedido, cod: string) {
+    return /^\d{1,12}$/.test(cod) && !p.itens.some((i) => i.ean === cod)
+  }
+
   function itemPendente(p: Pedido, cod: string) {
     return p.itens.find(
       (i) =>
@@ -440,7 +446,7 @@ export default function ConferenciaDetalhe() {
     )
   }
 
-  // Fardo fechado da fábrica (2026-11-05): a etiqueta traz a OP do Sisplan (7 dígitos).
+  // Fardo fechado da fábrica (2026-11-05): a etiqueta traz a OP do Sisplan (só dígitos, menos de 13).
   // O backend compara o fardo inteiro com o que falta; bateu, cria um volume "OP N" já
   // fechado. Não bateu, não lança nada. Não precisa de volume aberto.
   function lerFardo(op: string) {

@@ -652,7 +652,7 @@ def bipar(request, pk):
 
 
 # ---------------------------------------------------------------------------
-# Fardo fechado da fábrica — bipou a OP (7 dígitos), lança o fardo inteiro
+# Fardo fechado da fábrica — bipou a OP (só dígitos, < 13), lança o fardo inteiro
 # ---------------------------------------------------------------------------
 
 @api_view(['POST'])

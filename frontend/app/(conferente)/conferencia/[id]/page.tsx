@@ -417,7 +417,7 @@ export default function ConferenciaPedidoPage() {
   const processarCodigo = (cod: string) => {
     if (!cod || !pedido) return
 
-    if (/^\d{7}$/.test(cod)) {
+    if (ehOp(pedido, cod)) {
       setQtdArmada(false)
       lerFardo(cod)
       return
@@ -442,6 +442,12 @@ export default function ConferenciaPedidoPage() {
     }
   }
 
+  // OP do Sisplan: só dígitos, sem tamanho fixo (vai crescer), sempre menor que os 13 do EAN.
+  // Código que é de algum item do documento nunca vira OP (SKU tem hífen, não colide).
+  function ehOp(p: Pedido, cod: string) {
+    return /^\d{1,12}$/.test(cod) && !p.itens.some((i) => i.ean === cod)
+  }
+
   function itemPendente(p: Pedido, cod: string) {
     return p.itens.find(
       (i) => i.status === 'ok'
@@ -458,7 +464,7 @@ export default function ConferenciaPedidoPage() {
     )
   }
 
-  // Fardo fechado da fábrica (2026-11-05): a etiqueta traz a OP do Sisplan (7 dígitos).
+  // Fardo fechado da fábrica (2026-11-05): a etiqueta traz a OP do Sisplan (só dígitos, menos de 13).
   // O backend compara o fardo inteiro com o que falta; bateu, cria um volume "OP N" já
   // fechado. Não bateu, não lança nada. Não precisa de volume aberto.
   function lerFardo(op: string) {
@@ -714,7 +720,7 @@ export default function ConferenciaPedidoPage() {
       )}
 
       {/* Scanner principal — bipou, registra 1; com "Qtd" armado abre o modal de quantidade;
-          OP de fardo (7 dígitos) lança o fardo inteiro — por isso aparece mesmo sem volume aberto */}
+          OP de fardo (só dígitos, menos de 13) lança o fardo inteiro — por isso aparece mesmo sem volume aberto */}
       {pedido.status === 'conferindo' && (
         <div className="bg-surface-card px-4 py-3 border-b border-surface-border sticky top-14 z-10">
           <div

@@ -8,7 +8,7 @@
 
 ## 2026-11-05 (noite) — Fardo fechado da fábrica pela OP + código de barras efetivo dos itens
 
-**Gatilho.** Pedido do usuário: o fardo fechado chega com a etiqueta da OP do Sisplan (7 dígitos, sem acesso ao Sisplan). A TI publicou a view `REPORTS.USU_OP_PRODUTOS` (OP, CODPRO, CODBAR, TAM, QTD). Bipar a OP deve conferir o fardo com o documento e lançar tudo se bater.
+**Gatilho.** Pedido do usuário: o fardo fechado chega com a etiqueta da OP do Sisplan (só dígitos, sem tamanho fixo — ajustado em 2026-11-06 de "7 dígitos" para "menos de 13", o tamanho do EAN; sem acesso ao Sisplan). A TI publicou a view `REPORTS.USU_OP_PRODUTOS` (OP, CODPRO, CODBAR, TAM, QTD). Bipar a OP deve conferir o fardo com o documento e lançar tudo se bater.
 
 **Decisões do usuário:**
 - Uma OP é um fardo.
@@ -28,7 +28,7 @@
   - Outros: `op_nao_encontrada` (404) e `oracle_indisponivel` (503).
 - O volume nasce fechado, sem lixeira nos lançamentos. "Desfazer fardo" (no `DELETE` do volume, quando tem `op`) devolve as quantidades (log `fardo_op_desfeito`).
 - **Web e mobile:**
-  - 7 dígitos na barra vira leitura de fardo, na mesma fila do 1 em 1, e ignora o Qtd armado.
+  - Só dígitos com menos de 13 na barra vira leitura de fardo (e nunca um código que é EAN de item do documento), na mesma fila do 1 em 1, e ignora o Qtd armado.
   - Toast verde "Fardo OP N conferido" (itens · peças) ou vermelho com a lista das divergências (12 s).
   - A barra aparece com a conferência iniciada mesmo sem volume aberto.
   - Diálogo de "Desfazer fardo".

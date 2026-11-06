@@ -292,7 +292,7 @@ QUERY_DERIVACOES = f"""
 """
 
 # Fardo fechado da fábrica (2026-11-05): a etiqueta do fardo traz a OP do Sisplan
-# (7 dígitos) e a view da TI lista o que vai dentro. Uma OP = um fardo.
+# (só dígitos, sem tamanho fixo, menos de 13) e a view da TI lista o que vai dentro. Uma OP = um fardo.
 # Fica no schema REPORTS (o pool troca o current_schema para o do Senior).
 QUERY_OP_PRODUTOS = """
     SELECT op, codpro, codbar, tam, qtd

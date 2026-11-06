@@ -1,6 +1,7 @@
 """Fardo fechado da fábrica (2026-11-05).
 
-O fardo chega lacrado com a etiqueta da OP do Sisplan (7 dígitos). A TI publicou a view
+O fardo chega lacrado com a etiqueta da OP do Sisplan (só dígitos, sem tamanho fixo — sempre
+menos de 13, que é o tamanho do EAN). A TI publicou a view
 `REPORTS.USU_OP_PRODUTOS` (OP, CODPRO, CODBAR, TAM, QTD) com o que vai dentro. Bipar a OP
 na conferência compara o fardo inteiro com o que ainda falta no documento:
 
@@ -26,7 +27,8 @@ from apps.pedidos.models import Pedido, PedidoItem, PedidoLog, Volume, VolumeIte
 
 logger = logging.getLogger(__name__)
 
-RE_OP = re.compile(r'^\d{7}$')
+# Sem tamanho fixo (a numeração vai crescer); sempre menor que os 13 dígitos do EAN.
+RE_OP = re.compile(r'^\d{1,12}$')
 
 
 class FardoErro(Exception):
@@ -93,7 +95,7 @@ def ler_fardo(pedido: Pedido, op, user):
     """Lança o fardo da OP no pedido (status Em conferência). Devolve (volume, lançados)."""
     op = _texto(op)
     if not RE_OP.match(op):
-        raise FardoErro('op_invalida', 'código de OP inválido (7 dígitos)', http_status.HTTP_400_BAD_REQUEST)
+        raise FardoErro('op_invalida', 'código de OP inválido (só dígitos, menos de 13)', http_status.HTTP_400_BAD_REQUEST)
 
     usado = _op_em_uso(op)
     if usado:

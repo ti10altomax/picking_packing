@@ -30,7 +30,7 @@ export const conferenciaPedido: AjudaTela = {
     'Toque em + Volume, escolha caixa, fardo ou outro, confira o identificador e toque em Criar.',
     'Bipe o produto na barra "Bipe o código…". Cada leitura soma 1 unidade no volume ativo, sem abrir nada.',
     'Para pôr várias unidades de uma vez (caixa fechada), toque em Qtd antes de bipar, ou toque no item na lista. Informe a quantidade e toque em Confirmar.',
-    'Fardo fechado da fábrica: bipe a etiqueta da OP (7 dígitos). Se o fardo bate com o que falta, o sistema cria o volume "OP N" já fechado com todos os itens. Não precisa abrir volume antes.',
+    'Fardo fechado da fábrica: bipe a etiqueta da OP (só números, menos de 13 dígitos). Se o fardo bate com o que falta, o sistema cria o volume "OP N" já fechado com todos os itens. Não precisa abrir volume antes.',
     'Repita até todos os itens ficarem com ✓. Abra outro volume com + Volume sempre que precisar.',
     'Quando o botão ficar verde, toque em Concluir ✓ e confirme.',
   ],
