@@ -68,6 +68,10 @@ function Cabecalho({ dados, et }: { dados: EtiquetasPedido; et: EtiquetaVolume }
   const rotuloVol = et.total_paginas > 1 ? `VOLUME · pág. ${et.pagina}/${et.total_paginas}` : 'VOLUME'
   const barra = dados.barra
   const comChave = barra.rotulo === 'DANFE'
+  // Com a chave do DANFE a coluna do documento tem a largura do número: rótulo curto
+  // ("NFE · filial 1" / "PEDIDO · filial 1") para não espremer a barra.
+  const serie = p.codsnf ? (/^\d+$/.test(p.codsnf) ? `NF ${p.codsnf}` : p.codsnf) : 'NF'
+  const cabCurto = (p.tipo === 'nota_fiscal' ? serie : 'PEDIDO') + (p.codfil ? ` · filial ${p.codfil}` : '')
 
   return (
     <>
@@ -84,8 +88,8 @@ function Cabecalho({ dados, et }: { dados: EtiquetasPedido; et: EtiquetaVolume }
 
       {/* Documento + código de barras (chave do DANFE quando existe, senão NF/pedido) */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '2mm' }}>
-        <div style={{ flexShrink: 0 }}>
-          <div className="mini corta">{cab}</div>
+        <div style={{ flexShrink: 0, maxWidth: comChave ? '34mm' : undefined }}>
+          <div className="mini corta">{comChave ? cabCurto : cab}</div>
           {/* com a chave do DANFE o número encolhe um pouco (6 mm) para a barra caber ao lado */}
           <div style={{ fontSize: comChave ? '6mm' : '8mm', fontWeight: 800, lineHeight: 1.05, whiteSpace: 'nowrap', marginTop: comChave ? '1mm' : 0 }}>{p.numero_externo}</div>
         </div>

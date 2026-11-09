@@ -181,11 +181,13 @@ def _cabecalho(c: _Canvas, dados: dict, et: dict) -> None:
     largura_bar = X2 - x_bar
     if com_chave:
         # a coluna do documento ficou estreita (~190 dots): rótulo curto e condensado
-        cab = ('NF' if p['tipo'] == 'nota_fiscal' else 'PEDIDO')
-        if p['tipo'] == 'nota_fiscal' and p['codsnf']:
-            cab += f" serie {p['codsnf']}"
+        if p['tipo'] == 'nota_fiscal':
+            serie = _txt(p['codsnf'])
+            cab = (f'NF {serie}' if serie.isdigit() else serie) or 'NF'   # "NFE" / "NF 1"
+        else:
+            cab = 'PEDIDO'
         if p.get('codfil'):
-            cab += f" fil. {p['codfil']}"
+            cab += f" - filial {p['codfil']}"
         c.texto(M, 132, 20, cab, largura=x_bar - M - 10, largura_fonte=14, fator=0.60)
     else:
         c.texto(M, 130, 24, cab, largura=x_bar - M - 10)
