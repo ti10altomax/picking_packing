@@ -1,11 +1,27 @@
 import { useEffect, useRef, useState } from 'react'
 import { View, Text, Pressable, Modal, Vibration, ActivityIndicator } from 'react-native'
 import { CameraView, useCameraPermissions, type BarcodeScanningResult, type BarcodeType } from 'expo-camera'
+import { ToastHost } from '@/components/Toast'
 
+/**
+ * Leitor por câmera (celular comum, sem o leitor do TC21).
+ *
+ * `continuo` (2026-11-09, pedido do usuário): a câmera fica ligada e lê um código atrás do
+ * outro — um toque no 📷 liga, o × desliga — em vez de abrir e fechar a cada bip. Para o
+ * conferente não lançar duas vezes a peça que ficou na frente da lente, o MESMO código só
+ * vale de novo depois de `INTERVALO_REPETIR_MS`; código diferente passa na hora. O último
+ * lido fica escrito embaixo, com a contagem. Os toasts da tela (✓ +1, erro de item) aparecem
+ * por cima da câmera (`ToastHost` dentro do Modal). Sem `continuo`, fecha na primeira
+ * leitura (quem chama decide — ex.: pegar documento, campo de código do modal de quantidade).
+ */
 type Props = {
   onResultado: (codigo: string) => void
   onFechar: () => void
+  continuo?: boolean
 }
+
+/** Tempo mínimo entre duas leituras do MESMO código no modo contínuo */
+export const INTERVALO_REPETIR_MS = 3000
 
 const FORMATOS_SUPORTADOS: BarcodeType[] = [
   'ean13',
@@ -19,10 +35,22 @@ const FORMATOS_SUPORTADOS: BarcodeType[] = [
   'itf14',
 ] as never
 
-export function CameraScanner({ onResultado, onFechar }: Props) {
+export function CameraScanner({ onResultado, onFechar, continuo = false }: Props) {
   const [permission, requestPermission] = useCameraPermissions()
   const ultimoCodigo = useRef<{ codigo: string; ts: number } | null>(null)
   const [pronto, setPronto] = useState(false)
+  // modo contínuo: último código lido + segundos que faltam para ele valer de novo
+  const [ultimo, setUltimo] = useState<{ codigo: string; ts: number } | null>(null)
+  const [restante, setRestante] = useState(0)
+  const [lidos, setLidos] = useState(0)
+
+  useEffect(() => {
+    if (!continuo || !ultimo) return
+    const tick = () => setRestante(Math.max(0, Math.ceil((ultimo.ts + INTERVALO_REPETIR_MS - Date.now()) / 1000)))
+    tick()
+    const t = setInterval(tick, 250)
+    return () => clearInterval(t)
+  }, [continuo, ultimo])
 
   useEffect(() => {
     if (!permission) return
@@ -34,15 +62,21 @@ export function CameraScanner({ onResultado, onFechar }: Props) {
   function aoLer(result: BarcodeScanningResult) {
     const codigo = result.data
     if (!codigo) return
-    // Debounce — mesma leitura em frames seguidos não dispara N vezes
+    // Debounce — mesma leitura em frames seguidos não dispara N vezes; no contínuo o mesmo
+    // código espera INTERVALO_REPETIR_MS (conferente que demora a tirar a peça da frente)
     const agora = Date.now()
+    const janela = continuo ? INTERVALO_REPETIR_MS : 1500
     if (
       ultimoCodigo.current
       && ultimoCodigo.current.codigo === codigo
-      && agora - ultimoCodigo.current.ts < 1500
+      && agora - ultimoCodigo.current.ts < janela
     ) return
     ultimoCodigo.current = { codigo, ts: agora }
     Vibration.vibrate(60)
+    if (continuo) {
+      setUltimo({ codigo, ts: agora })
+      setLidos((n) => n + 1)
+    }
     onResultado(codigo)
   }
 
@@ -99,19 +133,35 @@ export function CameraScanner({ onResultado, onFechar }: Props) {
             </View>
 
             {/* Status */}
-            <View className="absolute bottom-12 left-0 right-0 items-center">
-              <Text className="text-white/80 text-sm bg-black/40 px-4 py-2 rounded-full">
-                {pronto ? 'Aponte para o código de barras' : 'Iniciando câmera…'}
-              </Text>
+            <View className="absolute bottom-12 left-0 right-0 items-center px-6">
+              {continuo && ultimo ? (
+                <View className="bg-black/60 px-4 py-2.5 rounded-2xl items-center">
+                  <Text className="text-white text-xs opacity-80">
+                    Lido ({lidos}): <Text className="font-mono text-[13px]">{ultimo.codigo}</Text>
+                  </Text>
+                  <Text className={`text-sm mt-0.5 ${restante > 0 ? 'text-amber-300' : 'text-emerald-300'}`}>
+                    {restante > 0 ? `mesmo código de novo em ${restante} s · outro código já vale` : 'Pronto — aponte para o próximo'}
+                  </Text>
+                </View>
+              ) : (
+                <Text className="text-white/80 text-sm bg-black/40 px-4 py-2 rounded-full">
+                  {!pronto ? 'Iniciando câmera…' : continuo ? 'Câmera ligada — bipe um código atrás do outro · × desliga' : 'Aponte para o código de barras'}
+                </Text>
+              )}
             </View>
 
-            {/* Botão fechar */}
+            {/* Botão fechar (no contínuo é o "desliga") */}
             <Pressable
               onPress={onFechar}
-              className="absolute top-12 right-4 w-12 h-12 rounded-full bg-black/60 items-center justify-center"
+              accessibilityLabel={continuo ? 'Desligar a câmera' : 'Fechar'}
+              className={`absolute top-12 right-4 h-12 rounded-full bg-black/60 items-center justify-center ${continuo ? 'px-4 flex-row' : 'w-12'}`}
             >
               <Text className="text-white text-2xl">×</Text>
+              {continuo ? <Text className="text-white text-sm ml-2 font-semibold">Desligar</Text> : null}
             </Pressable>
+
+            {/* Toasts da tela por cima da câmera (o Modal cobre o host da raiz) */}
+            {continuo ? <ToastHost topo={56} /> : null}
           </>
         )}
       </View>

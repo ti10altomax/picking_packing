@@ -404,8 +404,9 @@ export default function ConferenciaDetalhe() {
   }
 
   // Scanner global da lista — bipou um código (leitor ou câmera), busca o item
+  // Câmera contínua (2026-11-09): fica ligada lendo 1 em 1 e OP; só fecha quando a leitura
+  // precisa de outra tela (modal de quantidade) ou de uma ação do conferente (criar volume).
   function processarCodigoLido(cod: string) {
-    setCameraGlobalAberta(false)
     if (!pedido) return
     if (ehOp(pedido, cod)) {
       setQtdArmada(false)
@@ -413,6 +414,7 @@ export default function ConferenciaDetalhe() {
       return
     }
     if (!volumeAtivo) {
+      setCameraGlobalAberta(false)
       falhaScan('Crie um volume antes de bipar', 'Toque em "Novo volume" e bipe de novo.', cod)
       return
     }
@@ -420,6 +422,7 @@ export default function ConferenciaDetalhe() {
       registrarUm(cod, volumeAtivo.id)
       return
     }
+    setCameraGlobalAberta(false)
     const item = itemPendente(pedido, cod)
     setQtdArmada(false)
     if (item) {
@@ -743,7 +746,7 @@ export default function ConferenciaDetalhe() {
           <Pressable
             onPress={() => setCameraGlobalAberta(true)}
             className="w-12 h-12 items-center justify-center rounded-lg active:bg-zinc-800"
-            accessibilityLabel="Bipar com a câmera"
+            accessibilityLabel="Ligar a câmera para bipar vários códigos"
           >
             <Text className={`text-xl ${scanFlash === 'erro' ? 'text-red-400' : 'text-emerald-400'}`}>📷</Text>
           </Pressable>
@@ -896,6 +899,7 @@ export default function ConferenciaDetalhe() {
 
       {cameraGlobalAberta ? (
         <CameraScanner
+          continuo
           onResultado={processarCodigoLido}
           onFechar={() => setCameraGlobalAberta(false)}
         />

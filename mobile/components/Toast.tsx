@@ -49,6 +49,9 @@ const ESTILO: Record<ToastTipo, { caixa: string; texto: string; icone: string; s
 }
 
 const Ctx = createContext<ToastApi | null>(null)
+// Lista atual — separada da API para o `ToastHost` poder ser montado também dentro de um
+// Modal (a câmera contínua): um Modal nativo cobre o host da raiz (2026-11-09).
+const ItensCtx = createContext<{ itens: Item[]; fechar: (id: number) => void } | null>(null)
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [itens, setItens] = useState<Item[]>([])
@@ -70,17 +73,31 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     return { ok: abrir('ok'), erro: abrir('erro'), aviso: abrir('aviso'), info: abrir('info'), fechar }
   }, [fechar])
 
+  const estado = useMemo(() => ({ itens, fechar }), [itens, fechar])
   return (
     <Ctx.Provider value={api}>
-      {children}
-      <View
-        pointerEvents="box-none"
-        style={{ position: 'absolute', left: 0, right: 0, top: insets.top + 60, zIndex: 70, elevation: 70 }}
-        className="px-3 gap-2"
-      >
-        {itens.map((t) => <ToastUI key={t.id} item={t} fechar={fechar} />)}
-      </View>
+      <ItensCtx.Provider value={estado}>
+        {children}
+        <ToastHost />
+      </ItensCtx.Provider>
     </Ctx.Provider>
+  )
+}
+
+/** Camada que desenha os toasts. A raiz já tem um; um Modal que precise mostrar toasts
+ *  por cima de si (câmera contínua) monta outro dentro dele. */
+export function ToastHost({ topo }: { topo?: number } = {}) {
+  const insets = useSafeAreaInsets()
+  const estado = useContext(ItensCtx)
+  if (!estado) return null
+  return (
+    <View
+      pointerEvents="box-none"
+      style={{ position: 'absolute', left: 0, right: 0, top: topo ?? insets.top + 60, zIndex: 70, elevation: 70 }}
+      className="px-3 gap-2"
+    >
+      {estado.itens.map((t) => <ToastUI key={t.id} item={t} fechar={estado.fechar} />)}
+    </View>
   )
 }
 

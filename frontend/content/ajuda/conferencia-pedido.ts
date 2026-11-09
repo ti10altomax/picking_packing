@@ -75,7 +75,8 @@ export const conferenciaPedido: AjudaTela = {
     },
     {
       nome: 'Ícone da câmera',
-      descricao: 'Na barra de bipagem. Lê o código pela câmera quando o leitor não funcionar.',
+      descricao:
+        'Na barra de bipagem. Um toque liga a câmera, que fica lendo um código atrás do outro (cada leitura soma 1, OP lança o volume inteiro). Toque em × Desligar para fechar. O mesmo código só vale de novo depois de 3 segundos, para não lançar duas vezes a peça que ficou na frente da lente; outro código vale na hora. A câmera fecha sozinha quando a leitura abre a tela de quantidade (Qtd armado) ou quando falta criar um volume.',
     },
     {
       nome: 'copiar',
