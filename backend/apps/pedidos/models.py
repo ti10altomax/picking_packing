@@ -72,6 +72,14 @@ class Pedido(models.Model):
     nf_codsnf = models.CharField(max_length=10, blank=True)
     nf_numero = models.CharField(max_length=20, blank=True)
     nf_vinculada_em = models.DateTimeField(null=True, blank=True)
+    # Dados da nota que a etiqueta de volume precisa (2026-11-09). Valem para o documento
+    # NF (a própria) e para o pedido faturado (a NF vinculada). `nf_chave` = chave de acesso
+    # do DANFE (E140IDE.chvdoe, 44 dígitos) — vai no código de barras da etiqueta no lugar do
+    # número; `nf_volumes` = quantidade de volumes da NF (E140NFV.qtdemb) — a etiqueta só sai
+    # quando bate com os volumes do Separa (senão, carta de correção antes). Atualizados pelo
+    # sync (NF), pelo vínculo (pedido), pelo `monitorar_cancelamentos` e pela própria CC-e.
+    nf_chave = models.CharField(max_length=44, blank=True)
+    nf_volumes = models.IntegerField(null=True, blank=True)
     # Só tipo=nota_fiscal: números dos pedidos de origem (E140IPV.numped), ex. ['169011'].
     # Vazio = NF sem pedido. Desde 2026-11-05 a NF que sai de pedido também vira documento
     # (faturamento parcial: um pedido em várias notas, o galpão confere pela nota) — é o que

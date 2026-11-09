@@ -17,6 +17,7 @@ class Configuracao(models.Model):
         ETIQUETA_AUTOMATICA = 'etiqueta_automatica', 'Imprimir etiqueta de volume ao concluir'
         ETIQUETA_MODELO = 'etiqueta_modelo', 'Modelo da etiqueta de volume'
         ETIQUETA_EXIGE_NF = 'etiqueta_exige_nf', 'Etiqueta de volume só com NF emitida'
+        ETIQUETA_EXIGE_VOLUMES = 'etiqueta_exige_volumes', 'Etiqueta de volume só com volumes iguais aos da NF'
         CCE_MODO = 'cce_modo', 'Carta de correção: modo'
         CCE_TIPGER = 'cce_tipger', 'Carta de correção: tipo de geração (tipGer)'
         CCE_TEXTO = 'cce_texto', 'Carta de correção: texto (montado | livre)'
@@ -40,6 +41,12 @@ class Configuracao(models.Model):
         # (NF vinculada pela E140IPV); 'nao' = volta à regra antiga (só transportadora).
         # Documento do tipo nota_fiscal já é a NF, não é afetado.
         'etiqueta_exige_nf': 'sim',                                # | nao
+        # Etiqueta só com volumes batendo (2026-11-09): 'sim' = a quantidade de volumes com
+        # itens no Separa tem que ser igual ao `qtdemb` da NF (Pedido.nf_volumes); diferente,
+        # o botão fica desabilitado e a automática não sai até a carta de correção ajustar a
+        # nota (a própria CC-e dispara a impressão quando iguala). NF sem `qtdemb` lido ainda
+        # não bloqueia. 'nao' = ignora a comparação.
+        'etiqueta_exige_volumes': 'sim',                           # | nao
         # Carta de correção (2026-10-22): desligado | gravar | gravar_e_transmitir.
         # 'gravar' cria a carta 'Não enviada' no Senior (o faturamento transmite lá);
         # 'gravar_e_transmitir' também chama EmitirCartaCorrecao (evento na SEFAZ, sem volta).

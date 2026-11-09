@@ -98,11 +98,24 @@ class _Canvas:
         e = max(1, round(espessura * self.ff))
         self.cmds.append(f'^FO{self.x(x)},{self.y(y)}^GB{self.x(largura)},{self.y(altura)},{e}^FS')
 
-    def code128(self, x, y, altura, valor):
+    def code128(self, x, y, altura, valor, largura_max=None):
+        """Code 128 começando em `x`. Dígitos em quantidade par vão em subconjunto C
+        (metade dos símbolos). Com `largura_max` (dots do desenho), o módulo cai de 2 para 1
+        quando o código não cabe — é o caso da chave do DANFE (44 dígitos = 277 módulos) na
+        coluna da direita; sobra centralizada."""
         fd = _txt(valor)
         if not fd:
             return
-        modulo = max(1, round(2 * self.ff))
+        if fd.isdigit() and len(fd) % 2 == 0:
+            fd = '>;' + fd
+        modulo_base = 2
+        if largura_max is not None:
+            largura = _modulos_code128(valor) * 2
+            if largura > largura_max:
+                modulo_base = 1
+                largura //= 2
+            x += max(0, (largura_max - largura) // 2)
+        modulo = max(1, round(modulo_base * self.ff))
         h = self.y(altura)
         self.cmds.append(f'^FO{self.x(x)},{self.y(y)}^BY{modulo},3,{h}^BCN,{h},N,N,N^FD{fd}^FS')
 
@@ -113,16 +126,28 @@ class _Canvas:
 
 CW = W - 2 * M          # 752 — largura útil
 X2 = W - M              # 776 — borda direita
-XR = 460                # coluna direita (caixa do volume / código de barras)
+XR = 460                # coluna direita (caixa do volume / código de barras curto)
 WR = X2 - XR            # 316
+
+
+def _modulos_code128(valor: str) -> int:
+    """Largura em módulos do Code 128 como `_Canvas.code128` o gera (C para dígitos em
+    quantidade par, senão B): start + símbolos + checksum + stop (13)."""
+    fd = _txt(valor)
+    simbolos = len(fd) // 2 if (fd.isdigit() and len(fd) % 2 == 0) else len(fd)
+    return 11 * (simbolos + 2) + 13
 
 
 def _cabecalho(c: _Canvas, dados: dict, et: dict) -> None:
     """Marca + caixa "VOLUME N / M" + documento com Code 128 (igual nos dois modelos).
 
-    2026-10-26: "pag. N/M" em vez de "cont."; NF ao lado do número do pedido quando
-    já existe; o código de barras leva a NF (ou o pedido, se ainda não faturado) e
-    ganha "NF 123456" / "PEDIDO 123456" pequeno embaixo.
+    2026-10-26: "pag. N/M" em vez de "cont."; "NF 123456" / "PEDIDO 123456" pequeno
+    embaixo da barra.
+    2026-11-09: a barra leva a chave do DANFE quando existe (Code 128 C). Como são 44
+    dígitos, ela ocupa tudo que sobra à direita do número do documento — o "NF nº" que
+    ficava entre os dois saiu (já está embaixo da barra) e, com chave, o número cai de
+    64 para 48 dots para a barra caber em módulo 2 (0,25 mm, igual ao DANFE); se nem
+    assim couber, módulo 1. Sem chave, NF ou pedido na coluna original.
     """
     p = dados['pedido']
     vol = et['volume']
@@ -145,21 +170,29 @@ def _cabecalho(c: _Canvas, dados: dict, et: dict) -> None:
         cab = 'PEDIDO'
     if p.get('codfil'):
         cab += f" - filial {p['codfil']}"
-    largura_doc = XR - M - 10                       # 426 — coluna do documento
     numero = _txt(p['numero_externo'])
-    c.texto(M, 130, 24, cab, largura=largura_doc)
-    c.texto(M, 158, 64, numero, largura=largura_doc, fator=0.60)
-    nf = p.get('nf_numero')
-    if nf:
-        # "NF 147911" à direita do número do pedido, na largura que sobrar (dígitos
-        # na fonte 0 medem ~0.60 da altura; condensa até caber, sem descer de 18)
-        x_nf = M + int(len(numero) * 64 * 0.60) + 12
-        sobra = XR - 10 - x_nf
-        texto_nf = f'NF {nf}'
-        lf = max(18, min(30, int(sobra / (len(texto_nf) * 0.60))))
-        c.texto(x_nf, 180, 40, texto_nf, largura=sobra, largura_fonte=lf, fator=0.60)
-    c.code128(XR, 128, 70, barra['valor'])
-    c.texto(XR, 202, 16, f"{barra['rotulo']} {barra['valor']}", largura=WR, alinh='C', fator=0.60)
+    com_chave = barra['rotulo'] == 'DANFE'
+    fonte_num = 48 if com_chave else 64             # dígitos na fonte 0 medem ~0.60 da altura
+    largura_num = int(len(numero) * fonte_num * 0.60)
+    if com_chave:
+        x_bar = M + largura_num + 16                # a barra começa logo depois do número
+    else:
+        x_bar = XR                                  # coluna original (NF/pedido curto)
+    largura_bar = X2 - x_bar
+    if com_chave:
+        # a coluna do documento ficou estreita (~190 dots): rótulo curto e condensado
+        cab = ('NF' if p['tipo'] == 'nota_fiscal' else 'PEDIDO')
+        if p['tipo'] == 'nota_fiscal' and p['codsnf']:
+            cab += f" serie {p['codsnf']}"
+        if p.get('codfil'):
+            cab += f" fil. {p['codfil']}"
+        c.texto(M, 132, 20, cab, largura=x_bar - M - 10, largura_fonte=14, fator=0.60)
+    else:
+        c.texto(M, 130, 24, cab, largura=x_bar - M - 10)
+    c.texto(M, 158 + (64 - fonte_num) // 2, fonte_num, numero, largura=x_bar - M - 10, fator=0.60)
+    # módulo 2 se couber em `largura_bar`, senão 1; centralizada no espaço
+    c.code128(x_bar, 128, 70, barra['valor'], largura_max=largura_bar)
+    c.texto(x_bar, 202, 16, barra.get('texto') or f"{barra['rotulo']} {barra['valor']}", largura=largura_bar, alinh='C', fator=0.60)
 
 
 RODAPE_Y = 972   # linha que abre o rodapé; ele termina em ~1172 (folga até 1200)
@@ -292,13 +325,14 @@ def _etiqueta_compacta(dados: dict, et: dict, dpi: int, largura_mm: int, altura_
     maior_qtd = max((len(str(i['qtd'])) for i in et['itens']), default=1)
     lf_qtd = max(14, min(28, int(g['wq'] / (maior_qtd * 0.62))))
     usadas = min(n_col, -(-len(et['itens']) // COMPACTA_LINHAS)) if et['itens'] else 1
+    y_cab = 380
     for x in xs[:usadas]:
-        c.texto(x, 380, 20, 'SKU')
-        c.texto(x + wc - g['wq'], 380, 20, 'QTD', largura=g['wq'], alinh='R')
+        c.texto(x, y_cab, 20, 'SKU')
+        c.texto(x + wc - g['wq'], y_cab, 20, 'QTD', largura=g['wq'], alinh='R')
     c.linha(M, 402, CW, 1)
     for k in range(1, usadas):
         x_sep = xs[k] - g['gap'] // 2
-        c.cmds.append(f'^FO{c.x(x_sep)},{c.y(380)}^GB1,{c.y(y_fim - 380)},1^FS')
+        c.cmds.append(f'^FO{c.x(x_sep)},{c.y(y_cab)}^GB1,{c.y(y_fim - y_cab)},1^FS')
 
     for k, item in enumerate(et['itens']):
         col, lin = divmod(k, COMPACTA_LINHAS)

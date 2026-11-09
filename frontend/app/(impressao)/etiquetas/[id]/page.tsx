@@ -14,6 +14,11 @@ import { svgCode128 } from '@/lib/code128'
  * (só SKU em 18 linhas × 2 ou 3 colunas, pedido da supervisão em 2026-10-23).
  * Cabeçalho e rodapé são os mesmos — 1 mm aqui ≈ 8 dots do ZPL.
  *
+ * 2026-11-09: o código de barras leva a chave de acesso do DANFE (44 dígitos) quando
+ * existe. Ele ocupa tudo que sobra à direita do número do documento (o "NF nº" que
+ * ficava entre os dois saiu — já está embaixo da barra) e o número fica um pouco menor
+ * para a barra caber em módulo de 0,25 mm. Sem chave, NF/pedido na coluna de 38 mm.
+ *
  * 2026-10-26: "pág. N/M"; NF ao lado do pedido e no código de barras quando já
  * existe, com "NF/PEDIDO nº" pequeno embaixo; rodapé sem endereço/telefone;
  * compacta com 3 colunas quando nenhuma quantidade do volume passa de 99.
@@ -62,6 +67,7 @@ function Cabecalho({ dados, et }: { dados: EtiquetasPedido; et: EtiquetaVolume }
     : 'PEDIDO') + (p.codfil ? ` · filial ${p.codfil}` : '')
   const rotuloVol = et.total_paginas > 1 ? `VOLUME · pág. ${et.pagina}/${et.total_paginas}` : 'VOLUME'
   const barra = dados.barra
+  const comChave = barra.rotulo === 'DANFE'
 
   return (
     <>
@@ -76,20 +82,16 @@ function Cabecalho({ dados, et }: { dados: EtiquetasPedido; et: EtiquetaVolume }
       </div>
       <div className="hr" />
 
-      {/* Documento */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '3mm' }}>
-        <div style={{ minWidth: 0 }}>
+      {/* Documento + código de barras (chave do DANFE quando existe, senão NF/pedido) */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '2mm' }}>
+        <div style={{ flexShrink: 0 }}>
           <div className="mini corta">{cab}</div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '2mm', minWidth: 0 }}>
-            <div style={{ fontSize: '8mm', fontWeight: 800, lineHeight: 1.05 }}>{p.numero_externo}</div>
-            {p.nf_numero && (
-              <div className="corta" style={{ fontSize: '5mm', fontWeight: 800, lineHeight: 1.05 }}>NF {p.nf_numero}</div>
-            )}
-          </div>
+          {/* com a chave do DANFE o número encolhe um pouco (6 mm) para a barra caber ao lado */}
+          <div style={{ fontSize: comChave ? '6mm' : '8mm', fontWeight: 800, lineHeight: 1.05, whiteSpace: 'nowrap', marginTop: comChave ? '1mm' : 0 }}>{p.numero_externo}</div>
         </div>
-        <div style={{ width: '38mm', paddingTop: '0.5mm', textAlign: 'center' }}>
-          <div dangerouslySetInnerHTML={{ __html: svgCode128(barra.valor, '9mm', '38mm') }} />
-          <div style={{ fontSize: '2mm', fontWeight: 700, lineHeight: 1, marginTop: '0.3mm' }}>{barra.rotulo} {barra.valor}</div>
+        <div style={{ flex: comChave ? 1 : 'none', width: comChave ? undefined : '38mm', maxWidth: '70mm', paddingTop: '0.5mm', textAlign: 'center' }}>
+          <div dangerouslySetInnerHTML={{ __html: svgCode128(barra.valor, '9mm', '100%') }} />
+          <div className="corta" style={{ fontSize: '2mm', fontWeight: 700, lineHeight: 1, marginTop: '0.3mm' }}>{barra.texto ?? `${barra.rotulo} ${barra.valor}`}</div>
         </div>
       </div>
     </>

@@ -313,6 +313,7 @@ function ConfigEtiquetas({ impressoras }: { impressoras: Impressora[] }) {
   const [padrao, setPadrao] = useState<number | null>(null)
   const [automatica, setAutomatica] = useState(true)
   const [exigeNf, setExigeNf] = useState(true)
+  const [exigeVolumes, setExigeVolumes] = useState(true)
   const [modelo, setModelo] = useState<ModeloEtiqueta>('padrao')
   const [modelos, setModelos] = useState<{ valor: ModeloEtiqueta; label: string }[]>([])
   const [carregado, setCarregado] = useState(false)
@@ -324,13 +325,14 @@ function ConfigEtiquetas({ impressoras }: { impressoras: Impressora[] }) {
       setPadrao(c.impressora_padrao)
       setAutomatica(c.automatica)
       setExigeNf(c.exige_nf)
+      setExigeVolumes(c.exige_volumes ?? true)
       setModelo(c.modelo)
       setModelos(c.modelos)
       setCarregado(true)
     }).catch(() => setCarregado(true))
   }, [])
 
-  async function salvar(dados: { impressora_padrao?: number | null; automatica?: boolean; exige_nf?: boolean; modelo?: ModeloEtiqueta }) {
+  async function salvar(dados: { impressora_padrao?: number | null; automatica?: boolean; exige_nf?: boolean; exige_volumes?: boolean; modelo?: ModeloEtiqueta }) {
     setSalvando(true)
     setMsg('')
     try {
@@ -338,6 +340,7 @@ function ConfigEtiquetas({ impressoras }: { impressoras: Impressora[] }) {
       setPadrao(c.impressora_padrao)
       setAutomatica(c.automatica)
       setExigeNf(c.exige_nf)
+      setExigeVolumes(c.exige_volumes ?? true)
       setModelo(c.modelo)
       setMsg('Salvo.')
     } catch (e: unknown) {
@@ -392,6 +395,18 @@ function ConfigEtiquetas({ impressoras }: { impressoras: Impressora[] }) {
             onChange={(e) => salvar({ exige_nf: e.target.checked })}
           />
           Só imprimir com NF emitida
+        </label>
+        <label
+          className="flex items-center gap-2 text-sm text-ink min-h-[40px] cursor-pointer"
+          title="Ligado: a quantidade de volumes fechados na conferência tem que ser igual à quantidade de volumes da NF no Senior. Diferente, o botão fica desabilitado e o documento espera em Gestão → Etiquetas até a carta de correção ajustar a nota (a própria carta dispara a impressão). Desligado: não compara."
+        >
+          <input
+            type="checkbox"
+            checked={exigeVolumes}
+            disabled={salvando}
+            onChange={(e) => salvar({ exige_volumes: e.target.checked })}
+          />
+          Só imprimir com volumes iguais aos da NF
         </label>
         <label className="flex items-center gap-2 text-sm text-ink">
           <span className="text-ink-muted">Modelo</span>

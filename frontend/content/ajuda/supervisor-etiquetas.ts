@@ -35,16 +35,16 @@ export const supervisorEtiquetas: AjudaTela = {
     },
     {
       nome: 'Prontas para imprimir',
-      descricao: 'Têm transportadora e, se a regra "só com NF" estiver ligada, nota fiscal emitida. Entre parênteses fica a quantidade.',
+      descricao: 'Têm transportadora, nota fiscal emitida (se a regra "só com NF" estiver ligada) e a mesma quantidade de volumes da nota (se a regra dos volumes estiver ligada). Entre parênteses fica a quantidade.',
     },
     {
       nome: 'Aguardando Senior',
       descricao:
-        'Conferidos sem transportadora no Senior ou, com a regra "só com NF", pedidos ainda não faturados. A linha mostra "sem transportadora" ou "sem NF emitida".',
+        'Conferidos sem transportadora no Senior, pedidos ainda não faturados (regra "só com NF") ou documentos cujos volumes não batem com a nota (regra dos volumes). A linha mostra "sem transportadora", "sem NF emitida" ou "volumes ≠ NF (3 aqui × 2 na nota)". Esse último se resolve em Conferidos → Corrigir NF.',
     },
     {
       nome: 'Etiqueta',
-      descricao: 'Botão verde da linha. Imprime as etiquetas do documento: uma por volume. Nas linhas de "Aguardando Senior" ele fica apagado, com o motivo escrito ("Sem transportadora" ou "Sem NF").',
+      descricao: 'Botão verde da linha. Imprime as etiquetas do documento: uma por volume. Nas linhas de "Aguardando Senior" ele fica apagado, com o motivo escrito ("Sem transportadora", "Sem NF" ou "Volumes ≠ NF").',
     },
     {
       nome: 'Impressora ou Navegador',

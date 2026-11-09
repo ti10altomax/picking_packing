@@ -64,6 +64,9 @@ export default function Conferidos() {
   const [carregandoMais, setCarregandoMais] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [busca, setBusca] = useState('')
+  // '' | 'com' | 'sem' — separar o que já pode sair do que ainda espera transportadora (2026-11-09)
+  const [transportadora, setTransportadora] = useState<'' | 'com' | 'sem'>('')
+  const transportadoraRef = useRef<'' | 'com' | 'sem'>('')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const buscaAtivaRef = useRef('')
 
@@ -79,7 +82,9 @@ export default function Conferidos() {
     else setCarregandoMais(true)
     buscaAtivaRef.current = search
     try {
-      const data: Paginado | Pedido[] = await supervisorApi.listarConferidos({ search, page })
+      const data: Paginado | Pedido[] = await supervisorApi.listarConferidos({
+        search, page, transportadora: transportadoraRef.current || undefined,
+      })
       if (Array.isArray(data)) {
         setPedidos(data); setCount(data.length); setProximaPagina(null)
       } else {
@@ -98,10 +103,11 @@ export default function Conferidos() {
   useEffect(() => { carregar('', 1, false) }, [carregar])
 
   useEffect(() => {
+    transportadoraRef.current = transportadora
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => carregar(busca, 1, false), 300)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
-  }, [busca, carregar])
+  }, [busca, transportadora, carregar])
 
   async function alternarExpansao(id: number) {
     setExpandidos((prev) => {
@@ -140,6 +146,11 @@ export default function Conferidos() {
           placeholder="Buscar por pedido, NF ou cliente"
           placeholderTextColor="#52525b"
           className="h-11 px-3 bg-surface-card border border-surface-border rounded-lg text-ink"
+        />
+        <FiltroChips
+          valor={transportadora}
+          onChange={(v) => setTransportadora(v as '' | 'com' | 'sem')}
+          opcoes={[['', 'Todos'], ['com', 'Com transp.'], ['sem', 'Sem transp.']]}
         />
       </View>
 
@@ -282,5 +293,31 @@ export default function Conferidos() {
         onImpresso={() => carregar(buscaAtivaRef.current, 1, false)}
       />
     </SafeAreaView>
+  )
+}
+
+function FiltroChips({
+  valor, onChange, opcoes,
+}: {
+  valor: string
+  onChange: (v: string) => void
+  opcoes: [string, string][]
+}) {
+  return (
+    <View className="flex-row self-start rounded-lg border border-surface-border overflow-hidden">
+      {opcoes.map(([v, label]) => (
+        <Pressable
+          key={v}
+          onPress={() => onChange(v)}
+          className={`px-3 h-11 items-center justify-center ${
+            valor === v ? 'bg-emerald-600' : 'bg-surface-card active:bg-surface-elev'
+          }`}
+        >
+          <Text className={`text-sm ${valor === v ? 'text-white font-semibold' : 'text-ink-muted'}`}>
+            {label}
+          </Text>
+        </Pressable>
+      ))}
+    </View>
   )
 }

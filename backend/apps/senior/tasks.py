@@ -146,7 +146,8 @@ def _transportadora(row) -> tuple[str, str]:
 
 
 def _localizar_ou_criar(tipo, numero, codfil, codsnf, cliente, criado_em, frete,
-                        codtra='', transportadora='', pedidos_origem=None):
+                        codtra='', transportadora='', pedidos_origem=None,
+                        nf_chave='', nf_volumes=None):
     """Localiza o documento pela identidade Senior (tipo, codfil, codsnf, numero) ou cria.
 
     Compat: pedidos importados antes de codfil existir ficaram com codfil=''.
@@ -155,6 +156,7 @@ def _localizar_ou_criar(tipo, numero, codfil, codsnf, cliente, criado_em, frete,
     """
     from django.db import IntegrityError
     from apps.pedidos.models import Pedido
+    from apps.pedidos.nf_vinculo import aplicar_dados_nf
 
     base = Pedido.objects.filter(tipo=tipo, numero_externo=numero, codsnf=codsnf)
     pedido = base.filter(codfil=codfil).first()
@@ -179,6 +181,9 @@ def _localizar_ou_criar(tipo, numero, codfil, codsnf, cliente, criado_em, frete,
         if pedidos_origem and not pedido.pedidos_origem:
             pedido.pedidos_origem = pedidos_origem
             campos.append('pedidos_origem')
+        if tipo == Pedido.Tipo.NOTA_FISCAL:
+            # chave do DANFE e volumes mudam depois da emissão (transmissão, carta de correção)
+            campos += aplicar_dados_nf(pedido, nf_chave, nf_volumes)
         if campos:
             pedido.save(update_fields=campos)
         return pedido, False, bool(campos)
@@ -189,6 +194,7 @@ def _localizar_ou_criar(tipo, numero, codfil, codsnf, cliente, criado_em, frete,
             cliente=cliente, criado_em=criado_em, frete=frete,
             codtra=codtra, transportadora=transportadora,
             pedidos_origem=pedidos_origem or [],
+            nf_chave=nf_chave if len(nf_chave) == 44 else '', nf_volumes=nf_volumes,
             status=Pedido.Status.PENDENTE,
         )
     except IntegrityError:
@@ -225,9 +231,15 @@ def _sincronizar_fonte(tipo, rows, col_numero, col_qtd, query_itens, params_iten
             vinculadas += 1
             continue
 
+        nf_chave = str(row.get('chvdoe') or '').strip()
+        try:
+            nf_volumes = int(row.get('qtdemb')) if row.get('qtdemb') is not None else None
+        except (TypeError, ValueError):
+            nf_volumes = None
         pedido, created, updated = _localizar_ou_criar(
             tipo, numero, codfil, codsnf, cliente, criado_em, frete,
             codtra, transportadora, [n for _, n in origens],
+            nf_chave=nf_chave, nf_volumes=nf_volumes,
         )
 
         if created:
@@ -268,7 +280,7 @@ def _vincular_se_faturamento(row, origens, numero, codfil, codsnf) -> bool:
         })
     for pedido in pedidos:
         mudou = aplicar_vinculo(pedido, row)
-        if (mudou['nf'] or mudou['transportadora']) and pedido.status == Pedido.Status.CONFERIDO:
+        if (mudou['nf'] or mudou['dados_nf'] or mudou['transportadora']) and pedido.status == Pedido.Status.CONFERIDO:
             try:
                 disparar_se_pendente(pedido)
             except Exception:
@@ -383,6 +395,7 @@ def monitorar_cancelamentos(passada_completa: bool = False):
     )
     from apps.pedidos.models import Pedido
     from apps.pedidos.cancelamento import STATUS_MONITORADOS, cancelar
+    from apps.pedidos.nf_vinculo import aplicar_dados_nf
     from apps.impressao.services import disparar_se_pendente
 
     limite = timezone.now() - dt.timedelta(days=max(_janela_dias(), 1))
@@ -410,8 +423,23 @@ def monitorar_cancelamentos(passada_completa: bool = False):
         ),
     }
 
-    cancelados = transportadoras = 0
+    cancelados = transportadoras = dados_nf = 0
     resultado = {'verificados': len(candidatos)}
+
+    def _dados_nf(pedido, row):
+        """Chave do DANFE / volumes da NF que mudaram no Senior (transmissão, carta de
+        correção feita lá) → salva e, se é Conferido que ainda espera a etiqueta, dispara."""
+        nonlocal dados_nf
+        campos = aplicar_dados_nf(pedido, row.get('chvdoe'), row.get('qtdemb'))
+        if not campos:
+            return
+        pedido.save(update_fields=campos)
+        dados_nf += 1
+        if pedido.status == Pedido.Status.CONFERIDO:
+            try:
+                disparar_se_pendente(pedido)
+            except Exception:
+                logger.exception(f'etiqueta de volume: falha ao disparar para {pedido}')
     for tipo, (query, chave_fn, cancelado_fn) in fontes.items():
         do_tipo = [p for p in candidatos if p.tipo == tipo]
         if not do_tipo:
@@ -444,6 +472,8 @@ def monitorar_cancelamentos(passada_completa: bool = False):
                             disparar_se_pendente(pedido)
                         except Exception:
                             logger.exception(f'etiqueta de volume: falha ao disparar para {pedido}')
+            if tipo == Pedido.Tipo.NOTA_FISCAL:
+                _dados_nf(pedido, row)
             if not cancelado_fn(row):
                 continue
             situacao = _s(row.get('sitped') or row.get('sitnfv'))
@@ -451,8 +481,24 @@ def monitorar_cancelamentos(passada_completa: bool = False):
             cancelados += 1
             logger.info(f"{pedido} cancelado no Senior (situação {situacao}) → status CANCELADO")
 
+    # Pedido já faturado: a NF vinculada (E140IPV) também é reconsultada — chave do DANFE e
+    # volumes (`qtdemb`) para a etiqueta de volume (2026-11-09). Mesma query da NF documento.
+    com_nf = [p for p in candidatos if p.tipo == Pedido.Tipo.PEDIDO and p.nf_numero]
+    if com_nf:
+        situacoes = _situacoes_no_senior(
+            QUERY_SITUACAO_NFS, [p.nf_numero for p in com_nf], fontes[Pedido.Tipo.NOTA_FISCAL][1],
+        )
+        if situacoes is None:
+            resultado['nf_dos_pedidos'] = 'falha_oracle'
+        else:
+            for pedido in com_nf:
+                row = situacoes.get((pedido.nf_codfil, pedido.nf_codsnf, pedido.nf_numero))
+                if row is not None:
+                    _dados_nf(pedido, row)
+
     resultado['cancelados'] = cancelados
     resultado['transportadoras_preenchidas'] = transportadoras
+    resultado['dados_nf_atualizados'] = dados_nf
     logger.info(f"monitorar_cancelamentos: {len(candidatos)} verificados, {cancelados} cancelados")
     return resultado
 
@@ -480,7 +526,7 @@ def vincular_nfs_pedidos():
     qs = qs.exclude(status=Pedido.Status.PENDENTE, criado_em__lt=limite)
     vinc = vincular_em_lote(list(qs))
     for pedido, mudou in vinc['alterados']:
-        if (mudou['nf'] or mudou['transportadora']) and pedido.status == Pedido.Status.CONFERIDO:
+        if (mudou['nf'] or mudou['dados_nf'] or mudou['transportadora']) and pedido.status == Pedido.Status.CONFERIDO:
             try:
                 disparar_se_pendente(pedido)
             except Exception:

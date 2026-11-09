@@ -10,6 +10,11 @@ Regras fixas (decididas com o usuário em 2026-10-07):
     `Pedido.nf_*`) — regra ligável em `Configuracao.etiqueta_exige_nf` (default
     `sim`); o beat `vincular_nfs_pedidos` dispara a automática quando a NF chega.
     Documento do tipo NF já é a nota e não é afetado;
+  - desde 2026-11-09, **só imprime se a quantidade de volumes do Separa for igual à da
+    NF** (`Pedido.nf_volumes` = E140NFV.qtdemb) — diferente, o pedido fica em Etiquetas
+    pendentes até a carta de correção ajustar a nota (a CC-e dispara a impressão quando
+    iguala). Regra ligável em `Configuracao.etiqueta_exige_volumes` (default `sim`);
+    NF sem `qtdemb` conhecido ainda não bloqueia;
   - reimpressão sempre disponível depois (web e mobile).
 
 Ninguém sabe ainda como vai imprimir (quantas impressoras, onde). Por isso o
@@ -22,7 +27,7 @@ import datetime as dt
 import logging
 
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, F, Q
 from django.utils import timezone
 
 from apps.core.models import Configuracao
@@ -68,6 +73,11 @@ def etiqueta_exige_nf() -> bool:
     return Configuracao.obter(Configuracao.Chave.ETIQUETA_EXIGE_NF) != 'nao'
 
 
+def etiqueta_exige_volumes() -> bool:
+    """Só imprime com volumes do Separa iguais aos da NF (`qtdemb`)? Default sim (2026-11-09)."""
+    return Configuracao.obter(Configuracao.Chave.ETIQUETA_EXIGE_VOLUMES) != 'nao'
+
+
 def _janela_dias() -> int:
     try:
         return max(int(Configuracao.obter(Configuracao.Chave.JANELA_SYNC_DIAS)), 1)
@@ -79,12 +89,15 @@ def _janela_dias() -> int:
 # Elegibilidade
 # ---------------------------------------------------------------------------
 
-def verificar_elegivel(pedido: Pedido, *, exige_nf: bool | None = None) -> None:
+def verificar_elegivel(pedido: Pedido, *, exige_nf: bool | None = None,
+                       exige_volumes: bool | None = None, qtd_volumes: int | None = None) -> None:
     """Levanta ErroImpressao se o pedido não pode ter etiqueta agora.
 
-    `exige_nf` permite passar a configuração já lida (listas); None = lê agora.
+    `exige_nf`/`exige_volumes` permitem passar a configuração já lida (listas); None = lê
+    agora. `qtd_volumes` = volumes com itens já contados (evita a query por linha).
     A NF é checada antes da transportadora: quando a regra está ligada, é ela
     que falta de verdade — e a transportadora costuma chegar junto com a nota.
+    Por último os volumes: só comparáveis com NF e `qtdemb` conhecidos.
     """
     if pedido.status == Pedido.Status.CANCELADO:
         raise ErroImpressao('pedido_cancelado', 'documento cancelado no Senior — não imprime etiqueta')
@@ -105,23 +118,42 @@ def verificar_elegivel(pedido: Pedido, *, exige_nf: bool | None = None) -> None:
             'sem_transportadora',
             'documento ainda sem transportadora no Senior — a etiqueta fica pendente até ela chegar',
         )
+    if exige_volumes is None:
+        exige_volumes = etiqueta_exige_volumes()
+    if exige_volumes and pedido.identificacao_nf is not None and pedido.nf_volumes is not None:
+        if qtd_volumes is None:
+            qtd_volumes = qtd_volumes_com_itens(pedido)
+        if qtd_volumes != pedido.nf_volumes:
+            raise ErroImpressao(
+                'volumes_divergentes',
+                f'a NF está com {pedido.nf_volumes} volume(s) e a conferência fechou {qtd_volumes} — '
+                'corrija os volumes da nota (carta de correção) antes de imprimir',
+            )
 
 
-def motivo_bloqueio(pedido: Pedido, *, exige_nf: bool | None = None) -> dict | None:
+def motivo_bloqueio(pedido: Pedido, *, exige_nf: bool | None = None,
+                    exige_volumes: bool | None = None, qtd_volumes: int | None = None) -> dict | None:
     try:
-        verificar_elegivel(pedido, exige_nf=exige_nf)
+        verificar_elegivel(pedido, exige_nf=exige_nf, exige_volumes=exige_volumes, qtd_volumes=qtd_volumes)
     except ErroImpressao as e:
         return {'codigo': e.codigo, 'mensagem': e.mensagem}
     return None
 
 
 def filtro_pronta() -> Q:
-    """Q equivalente a `motivo_bloqueio(p) is None` num queryset de Conferidos
-    (contagens do painel Agora)."""
+    """Q equivalente a `motivo_bloqueio(p) is None` num queryset de Conferidos anotado por
+    `anotar_volumes` (contagens do painel Agora; `pendentes_qs` já vem anotado)."""
     q = Q(transportadora__gt='')
     if etiqueta_exige_nf():
         q &= Q(tipo=Pedido.Tipo.NOTA_FISCAL) | Q(nf_numero__gt='')
+    if etiqueta_exige_volumes():
+        q &= Q(nf_volumes__isnull=True) | Q(nf_volumes=F('n_volumes'))
     return q
+
+
+def anotar_volumes(qs):
+    """`n_volumes` = volumes com itens (o que `qtd_volumes_com_itens` conta, em SQL)."""
+    return qs.annotate(n_volumes=Count('volumes', filter=Q(volumes__itens__isnull=False), distinct=True))
 
 
 # ---------------------------------------------------------------------------
@@ -156,6 +188,7 @@ def imprimir(pedido: Pedido, *, impressora: Impressora | None = None, canal: str
     - `canal='navegador'` → só registra (o HTML já foi impresso pelo usuário).
     Erros de rede viram registro `erro` (não levantam) para o histórico mostrar.
     """
+    completar_dados_nf(pedido)
     verificar_elegivel(pedido)
     dados = dados_etiquetas(pedido, modelo_etiqueta())
     qtd = len(dados['etiquetas'])
@@ -205,6 +238,21 @@ def imprimir(pedido: Pedido, *, impressora: Impressora | None = None, canal: str
             pedido, canal=ImpressaoEtiqueta.Canal.AGENTE, status=ImpressaoEtiqueta.Status.OK,
             impressora=impressora, qtd=qtd, automatica=automatica, usuario=usuario, print_job=job,
         )
+
+
+def completar_dados_nf(pedido: Pedido) -> bool:
+    """NF conhecida mas sem chave do DANFE ou volumes lidos (vínculo anterior a 2026-11-09,
+    Conferido fora da janela do beat, DANFE transmitido depois): relê no Senior na hora, para
+    a barra do DANFE e a regra dos volumes valerem já nesta etiqueta — vale para a Zebra, o
+    ZPL e a página do navegador. Oracle fora → segue com o que tem. True = algo mudou."""
+    if pedido.identificacao_nf is None or (pedido.nf_volumes is not None and pedido.nf_chave):
+        return False
+    from apps.pedidos.nf_vinculo import atualizar_nf_senior  # lazy: evita ciclo
+    try:
+        return atualizar_nf_senior(pedido)
+    except Exception as e:
+        logger.warning(f'etiqueta {pedido}: não deu para reler a NF no Senior ({e})')
+        return False
 
 
 def qtd_volumes_com_itens(pedido: Pedido) -> int:
@@ -270,7 +318,7 @@ def pendentes_qs():
     (transportadora e, com `etiqueta_exige_nf`, NF vinculada).
     """
     limite = timezone.now() - dt.timedelta(days=_janela_dias())
-    return (
+    return anotar_volumes(
         Pedido.objects
         .filter(status=Pedido.Status.CONFERIDO, conferido_em__gte=limite)
         .exclude(impressoes_etiqueta__status=ImpressaoEtiqueta.Status.OK)

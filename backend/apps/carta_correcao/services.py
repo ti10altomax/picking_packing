@@ -200,6 +200,9 @@ def _sincronizar_com_nf(pedido: Pedido, situacao: dict) -> None:
     if ciffob in dict(Pedido.Frete.choices) and ciffob != (pedido.frete or ''):
         pedido.frete = ciffob
         campos.append('frete')
+    # chave do DANFE e volumes da NF (etiqueta de volume, 2026-11-09)
+    from apps.pedidos.nf_vinculo import aplicar_dados_nf  # lazy: evita ciclo
+    campos += aplicar_dados_nf(pedido, situacao.get('chvdoe'), situacao.get('qtdemb'))
     if campos:
         pedido.save(update_fields=campos)
         logger.info('carta_correcao: pedido alinhado com a NF (%s)', ', '.join(campos), extra={'pedido': pedido.id})
@@ -440,10 +443,22 @@ def executar(pedido: Pedido, usuario, codtra_novo: str, frete_novo: str, volumes
         if muda_frete:
             pedido.frete = frete_novo
             campos.append('frete')
+        if muda_volumes:
+            # o Gravar já trocou o qtdemb da nota: espelha aqui sem esperar o beat
+            pedido.nf_volumes = vol_novo
+            campos.append('nf_volumes')
         if campos:
             pedido.save(update_fields=campos)
         _log(pedido, usuario, carta)
     logger.info('carta_correcao gravada', extra={'pedido': pedido.id, 'carta': carta.id})
+    if muda_volumes or muda_transportadora:
+        # Etiqueta de volume: a correção pode ter sido exatamente o que a travava (volumes
+        # diferentes da NF, sem transportadora) — Conferido recente sem impressão sai agora.
+        from apps.impressao.services import disparar_se_pendente  # lazy: evita ciclo
+        try:
+            disparar_se_pendente(pedido)
+        except Exception:
+            logger.exception('etiqueta de volume: falha ao disparar após carta de correção', extra={'pedido': pedido.id})
 
     # --- 2) Transmitir (opcional) ----------------------------------------------------
     if modo == 'gravar_e_transmitir':

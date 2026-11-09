@@ -67,6 +67,7 @@ def _serializar_impressora(imp: Impressora, padrao_id: int | None) -> dict:
 def etiquetas(request, pk):
     """Conteúdo das etiquetas (para a página HTML) + histórico + bloqueio, se houver."""
     pedido = get_object_or_404(Pedido.objects.select_related('conferente', 'sequencia'), pk=pk)
+    services.completar_dados_nf(pedido)   # chave do DANFE / volumes que ainda faltem
     dados = dados_etiquetas(pedido, _modelo(request))
     dados['bloqueio'] = services.motivo_bloqueio(pedido)
     dados['impressoes'] = [
@@ -80,6 +81,7 @@ def etiquetas(request, pk):
 def etiquetas_zpl(request, pk):
     """ZPL cru — para testar numa Zebra à mão ou no labelary.com."""
     pedido = get_object_or_404(Pedido.objects.select_related('conferente', 'sequencia'), pk=pk)
+    services.completar_dados_nf(pedido)   # chave do DANFE / volumes que ainda faltem
     dados = dados_etiquetas(pedido, _modelo(request))
     imp = None
     if request.query_params.get('impressora'):
@@ -138,9 +140,10 @@ def pendentes(request):
         return err
     lista = []
     exige_nf = services.etiqueta_exige_nf()
+    exige_volumes = services.etiqueta_exige_volumes()
     for p in services.pendentes_qs():
         ultimo_erro = p.impressoes_etiqueta.filter(status=ImpressaoEtiqueta.Status.ERRO).first()
-        bloqueio = services.motivo_bloqueio(p, exige_nf=exige_nf)
+        bloqueio = services.motivo_bloqueio(p, exige_nf=exige_nf, exige_volumes=exige_volumes, qtd_volumes=p.n_volumes)
         lista.append({
             'id': p.id,
             'tipo': p.tipo,
@@ -152,9 +155,10 @@ def pendentes(request):
             'conferido_em': p.conferido_em,
             'conferente': p.conferente.username if p.conferente else None,
             'sequencia_numero': p.sequencia.numero if p.sequencia else None,
-            'qtd_volumes': services.qtd_volumes_com_itens(p),
+            'qtd_volumes': p.n_volumes,
+            'nf_volumes': p.nf_volumes,   # volumes da NF no Senior (qtdemb); None = ainda não lido
             'pronta': bloqueio is None,
-            'bloqueio': bloqueio,  # {codigo, mensagem} — sem_transportadora | sem_nf
+            'bloqueio': bloqueio,  # {codigo, mensagem} — sem_transportadora | sem_nf | volumes_divergentes
             'ultimo_erro': ultimo_erro.erro if ultimo_erro else None,
         })
     # A chave `aguardando_transportadora` ficou com esse nome por compatibilidade com o
@@ -163,6 +167,7 @@ def pendentes(request):
         'prontas': [x for x in lista if x['pronta']],
         'aguardando_transportadora': [x for x in lista if not x['pronta']],
         'exige_nf': exige_nf,
+        'exige_volumes': exige_volumes,
     })
 
 
@@ -213,6 +218,11 @@ def config(request):
                 chave=Configuracao.Chave.ETIQUETA_EXIGE_NF,
                 defaults={'valor': 'sim' if request.data.get('exige_nf') else 'nao'},
             )
+        if 'exige_volumes' in request.data:
+            Configuracao.objects.update_or_create(
+                chave=Configuracao.Chave.ETIQUETA_EXIGE_VOLUMES,
+                defaults={'valor': 'sim' if request.data.get('exige_volumes') else 'nao'},
+            )
         if 'modelo' in request.data:
             modelo = request.data.get('modelo')
             if modelo not in MODELOS:
@@ -226,6 +236,7 @@ def config(request):
         'impressora_padrao_nome': padrao.nome if padrao else None,
         'automatica': services.impressao_automatica_ligada(),
         'exige_nf': services.etiqueta_exige_nf(),
+        'exige_volumes': services.etiqueta_exige_volumes(),
         'modelo': services.modelo_etiqueta(),
         'modelos': [{'valor': k, 'label': v['label']} for k, v in MODELOS.items()],
     })

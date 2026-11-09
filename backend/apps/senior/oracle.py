@@ -159,11 +159,19 @@ QUERY_SITUACAO_PEDIDOS = f"""
       AND ped.numped IN ({{placeholders}})
 """
 
+# Também traz `qtdemb` (volumes da NF) e `chvdoe` (chave do DANFE) — o beat mantém
+# `Pedido.nf_volumes`/`nf_chave` em dia para a etiqueta de volume (2026-11-09).
 QUERY_SITUACAO_NFS = f"""
-    SELECT nfv.codfil, nfv.codsnf, nfv.numnfv, nfv.sitnfv, nfv.codtra, tra.nomtra
+    SELECT nfv.codfil, nfv.codsnf, nfv.numnfv, nfv.sitnfv, nfv.codtra, tra.nomtra,
+           nfv.qtdemb, ide.chvdoe
     FROM E140NFV nfv
     LEFT JOIN E073TRA tra
         ON tra.codtra = nfv.codtra
+    LEFT JOIN E140IDE ide
+        ON ide.codemp = nfv.codemp
+       AND ide.codfil = nfv.codfil
+       AND ide.codsnf = nfv.codsnf
+       AND ide.numnfv = nfv.numnfv
     WHERE nfv.codemp = {SENIOR_CODEMP}
       AND nfv.numnfv IN ({{placeholders}})
 """
@@ -175,7 +183,8 @@ QUERY_SITUACAO_NFS = f"""
 # nota é a palavra final sobre eles. {placeholders} = números de pedido (blocos ≤ 500).
 QUERY_NFS_DOS_PEDIDOS = f"""
     SELECT DISTINCT ipv.filped, ipv.numped, nfv.codfil, nfv.codsnf, nfv.numnfv,
-           nfv.sitnfv, nfv.datemi, nfv.codtra, tra.nomtra, nfv.ciffob, nfv.qtdemb
+           nfv.sitnfv, nfv.datemi, nfv.codtra, tra.nomtra, nfv.ciffob, nfv.qtdemb,
+           ide.chvdoe
     FROM E140IPV ipv
     JOIN E140NFV nfv
         ON nfv.codemp = ipv.codemp
@@ -184,6 +193,11 @@ QUERY_NFS_DOS_PEDIDOS = f"""
        AND nfv.numnfv = ipv.numnfv
     LEFT JOIN E073TRA tra
         ON tra.codtra = nfv.codtra
+    LEFT JOIN E140IDE ide
+        ON ide.codemp = nfv.codemp
+       AND ide.codfil = nfv.codfil
+       AND ide.codsnf = nfv.codsnf
+       AND ide.numnfv = nfv.numnfv
     WHERE ipv.codemp = {SENIOR_CODEMP}
       AND ipv.numped IN ({{placeholders}})
       AND nfv.sitnfv = '2'
@@ -221,6 +235,8 @@ _SELECT_NF = f"""
         nfv.ciffob,
         nfv.codtra,
         tra.nomtra,
+        nfv.qtdemb,
+        ide.chvdoe,
         cli.nomcli,
         (SELECT LISTAGG(DISTINCT ipv.filped || ':' || ipv.numped, ',')
                 WITHIN GROUP (ORDER BY ipv.filped || ':' || ipv.numped)
@@ -235,6 +251,11 @@ _SELECT_NF = f"""
         ON cli.codcli = nfv.codcli
     LEFT JOIN E073TRA tra
         ON tra.codtra = nfv.codtra
+    LEFT JOIN E140IDE ide
+        ON ide.codemp = nfv.codemp
+       AND ide.codfil = nfv.codfil
+       AND ide.codsnf = nfv.codsnf
+       AND ide.numnfv = nfv.numnfv
     WHERE nfv.codemp = {SENIOR_CODEMP}
       AND nfv.sitnfv = 2
 """

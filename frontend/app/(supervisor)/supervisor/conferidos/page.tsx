@@ -42,6 +42,10 @@ export default function ConferidosPage() {
   const [carregandoMais, setCarregandoMais] = useState(false)
   const [busca, setBusca] = useState('')
   const [buscaAtiva, setBuscaAtiva] = useState('')
+  // '' | 'com' | 'sem' — separar o que já pode sair (etiqueta/transporte) do que ainda espera
+  // transportadora no Senior (2026-11-09). O ref deixa `carregar` estável (paginação).
+  const [transportadora, setTransportadora] = useState<'' | 'com' | 'sem'>('')
+  const transportadoraRef = useRef<'' | 'com' | 'sem'>('')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const podeCce = useCcePermissao() === true   // Corrigir NF só para os perfis em Configuracao.cce_perfis
 
@@ -54,7 +58,9 @@ export default function ConferidosPage() {
     if (page === 1) setCarregando(true)
     else setCarregandoMais(true)
     try {
-      const data: Paginado<Pedido> | Pedido[] = await supervisorApi.listarConferidos({ search, page })
+      const data: Paginado<Pedido> | Pedido[] = await supervisorApi.listarConferidos({
+        search, page, transportadora: transportadoraRef.current || undefined,
+      })
       if (Array.isArray(data)) {
         setPedidos(data)
         setCount(data.length)
@@ -79,6 +85,7 @@ export default function ConferidosPage() {
   }, [])
 
   useEffect(() => {
+    transportadoraRef.current = transportadora
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
       setBuscaAtiva(busca)
@@ -87,7 +94,7 @@ export default function ConferidosPage() {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
     }
-  }, [busca, carregar])
+  }, [busca, transportadora, carregar])
 
   async function carregarMais() {
     if (proximaPagina) await carregar(buscaAtiva, proximaPagina, true)
@@ -129,13 +136,18 @@ export default function ConferidosPage() {
         </button>
       </div>
 
-      <div className="mb-3">
+      <div className="mb-3 flex flex-col sm:flex-row gap-2">
         <input
           type="text"
           placeholder="Buscar por pedido, NF ou cliente"
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
-          className="w-full bg-surface-card border border-surface-border text-ink placeholder:text-ink-subtle rounded-lg px-3 py-2 text-sm min-h-[44px] focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-300"
+          className="flex-1 bg-surface-card border border-surface-border text-ink placeholder:text-ink-subtle rounded-lg px-3 py-2 text-sm min-h-[44px] focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-300"
+        />
+        <FiltroChips
+          valor={transportadora}
+          onChange={(v) => setTransportadora(v as '' | 'com' | 'sem')}
+          opcoes={[['', 'Todos'], ['com', 'Com transportadora'], ['sem', 'Sem transportadora']]}
         />
       </div>
 
@@ -270,6 +282,33 @@ export default function ConferidosPage() {
           )}
         </>
       )}
+    </div>
+  )
+}
+
+function FiltroChips({
+  valor, onChange, opcoes,
+}: {
+  valor: string
+  onChange: (v: string) => void
+  opcoes: [string, string][]
+}) {
+  return (
+    <div className="inline-flex rounded-lg border border-surface-border overflow-hidden self-start">
+      {opcoes.map(([v, label]) => (
+        <button
+          key={v}
+          type="button"
+          onClick={() => onChange(v)}
+          className={`px-3 min-h-[44px] text-sm whitespace-nowrap transition-colors ${
+            valor === v
+              ? 'bg-emerald-600 text-white font-semibold'
+              : 'bg-surface-card text-ink-muted hover:bg-surface-elev'
+          }`}
+        >
+          {label}
+        </button>
+      ))}
     </div>
   )
 }

@@ -281,7 +281,8 @@ export const supervisorApi = {
     api.get('/api/pedidos/', { params: { status: 'selecionado', ...params } }).then((r) => r.data),
   listarConferentes: () =>
     api.get('/api/users/conferentes/').then((r) => r.data),
-  listarConferidos: (params: { search?: string; page?: number } = {}) =>
+  // `transportadora`: 'com' | 'sem' filtra pela presença da transportadora (2026-11-09)
+  listarConferidos: (params: { search?: string; page?: number; transportadora?: 'com' | 'sem' | '' } = {}) =>
     api.get('/api/pedidos/', { params: { status: 'conferido', ...params } }).then((r) => r.data),
   listarNaoConformes: () =>
     api.get('/api/nao-conformes/').then((r) => r.data),
@@ -354,12 +355,13 @@ export function rotuloBloqueio(b: BloqueioEtiqueta | null | undefined): string {
   if (!b) return ''
   if (b.codigo === 'sem_transportadora') return 'sem transportadora'
   if (b.codigo === 'sem_nf') return 'sem NF emitida'
+  if (b.codigo === 'volumes_divergentes') return 'volumes ≠ NF'
   return 'indisponível'
 }
 
 /** Veredito da impressão automática devolvido pelo concluir */
 export type VereditoEtiqueta = {
-  resultado: 'enfileirada' | 'sem_transportadora' | 'sem_nf' | 'sem_impressora_padrao' | 'desligada' | 'erro'
+  resultado: 'enfileirada' | 'sem_transportadora' | 'sem_nf' | 'volumes_divergentes' | 'sem_impressora_padrao' | 'desligada' | 'erro'
     | 'nao_conferido' | 'pedido_cancelado' | 'sem_volumes'
   impressora: string | null
   impressora_id?: number

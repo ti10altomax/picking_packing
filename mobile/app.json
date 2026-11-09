@@ -3,7 +3,7 @@
     "name": "Separa",
     "slug": "separa",
     "scheme": "separa",
-    "version": "0.12.1",
+    "version": "0.13.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,

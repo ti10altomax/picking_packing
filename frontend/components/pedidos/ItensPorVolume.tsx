@@ -3,7 +3,7 @@
 /**
  * Itens de um documento agrupados por volume (Conferidos, 2026-11-06).
  *
- * Cada volume vira um bloco "Caixa 1 · 12 peças" (ou "Fardo OP 1234567") com os itens e a
+ * Cada volume vira um bloco "Caixa 1 · 12 peças" (ou "Fardo OP 1234567" / "Caixa OP …") com os itens e a
  * quantidade que foi NAQUELE volume; item dividido em mais de um volume mostra "2 de 5".
  * O que não está em volume nenhum (falta, cancelado ou quantidade separada sem lançamento)
  * fica num bloco final "Fora de volume", para nada sumir. Sem volumes (backend antigo ou
@@ -32,7 +32,7 @@ export type VolumeDoc = {
 const TIPO_LABEL: Record<string, string> = { caixa: 'Caixa', fardo: 'Fardo', outro: 'Volume' }
 
 export function tituloVolume(v: VolumeDoc, indice: number) {
-  if (v.op) return `Fardo OP ${v.op}`
+  if (v.op) return `${TIPO_LABEL[v.tipo] ?? 'Volume'} OP ${v.op}`
   const base = TIPO_LABEL[v.tipo] ?? 'Volume'
   if (v.identificador && v.identificador.toLowerCase().startsWith(base.toLowerCase())) return v.identificador
   return v.identificador ? `${base} ${v.identificador}` : `${base} ${indice + 1}`

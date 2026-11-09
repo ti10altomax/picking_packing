@@ -40,13 +40,53 @@ def _int(v):
         return None
 
 
+def aplicar_dados_nf(pedido: Pedido, chvdoe, qtdemb) -> list[str]:
+    """Chave do DANFE (E140IDE.chvdoe) e volumes da NF (E140NFV.qtdemb) → `nf_chave`/`nf_volumes`,
+    só em memória; devolve os campos que mudaram (quem chama salva). Vale para o documento NF
+    e para o pedido faturado. Chave só se tiver os 44 dígitos; `qtdemb` NULL não apaga o que
+    já se sabe (2026-11-09, etiqueta de volume: barra do DANFE + volumes iguais aos da NF)."""
+    campos: list[str] = []
+    chave = _s(chvdoe)
+    if len(chave) == 44 and chave.isdigit() and chave != pedido.nf_chave:
+        pedido.nf_chave = chave
+        campos.append('nf_chave')
+    volumes = _int(qtdemb)
+    if volumes is not None and volumes != pedido.nf_volumes:
+        pedido.nf_volumes = volumes
+        campos.append('nf_volumes')
+    return campos
+
+
+def atualizar_nf_senior(pedido: Pedido) -> bool:
+    """Sob demanda (botão de etiqueta): relê a NF do documento no Senior e atualiza chave e
+    volumes (e transportadora/frete vazios). True = algo mudou. Levanta se o Oracle falhar."""
+    from apps.carta_correcao.senior import situacao_nf
+    from apps.senior.tasks import _transportadora
+
+    ident = pedido.identificacao_nf
+    if ident is None:
+        return False
+    situacao = situacao_nf(*ident)
+    if not (situacao.get('disponivel') and situacao.get('encontrada')):
+        return False
+    campos = aplicar_dados_nf(pedido, situacao.get('chvdoe'), situacao.get('qtdemb'))
+    if not pedido.codtra:
+        codtra, nome = _transportadora({'codtra': situacao.get('codtra'), 'nomtra': situacao.get('nomtra')})
+        if codtra:
+            pedido.codtra, pedido.transportadora = codtra, nome
+            campos += ['codtra', 'transportadora']
+    if campos:
+        pedido.save(update_fields=campos)
+    return bool(campos)
+
+
 def aplicar_vinculo(pedido: Pedido, row: dict) -> dict:
     """Preenche `nf_*` (e transportadora/frete vazios) a partir de uma linha do Oracle.
-    Devolve o que mudou: {'nf', 'transportadora', 'frete'}. Só salva se algo mudou."""
+    Devolve o que mudou: {'nf', 'dados_nf', 'transportadora', 'frete'}. Só salva se algo mudou."""
     from apps.senior.tasks import _transportadora
 
     campos: list[str] = []
-    mudou = {'nf': False, 'transportadora': False, 'frete': False}
+    mudou = {'nf': False, 'dados_nf': False, 'transportadora': False, 'frete': False}
 
     numnfv = _s(_int(row.get('numnfv')))
     codsnf = _s(row.get('codsnf'))
@@ -56,6 +96,12 @@ def aplicar_vinculo(pedido: Pedido, row: dict) -> dict:
         pedido.nf_vinculada_em = timezone.now()
         campos += ['nf_codfil', 'nf_codsnf', 'nf_numero', 'nf_vinculada_em']
         mudou['nf'] = True
+        pedido.nf_chave, pedido.nf_volumes = '', None   # nota nova: não herda dados da anterior
+
+    dados = aplicar_dados_nf(pedido, row.get('chvdoe'), row.get('qtdemb'))
+    if dados or mudou['nf']:
+        campos += ['nf_chave', 'nf_volumes']
+        mudou['dados_nf'] = bool(dados)
 
     if not pedido.codtra:
         codtra, nome = _transportadora(row)
@@ -227,7 +273,7 @@ def descobrir_nf(pedido: Pedido) -> dict | None:
                        extra={'pedido': pedido.id, 'nfs': [_int(r.get('numnfv')) for r in rows]})
         rows.sort(key=lambda r: (_int(r.get('numnfv')) or 0), reverse=True)
     mudou = aplicar_vinculo(pedido, rows[0])
-    if mudou['nf'] or mudou['transportadora']:
+    if mudou['nf'] or mudou['dados_nf'] or mudou['transportadora']:
         # Mesma consequência do beat: Conferido recente que acabou de ganhar a NF pode
         # imprimir a etiqueta de volume (só se a automática estiver ligada; nunca reimprime).
         from apps.impressao.services import disparar_se_pendente  # lazy: evita ciclo

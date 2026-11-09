@@ -21,7 +21,7 @@ export const etiquetaNavegador: AjudaTela = {
   ],
   elementos: [
     { nome: 'VOLUME 1 / 2', descricao: 'Número do volume e total de volumes do documento. Quando o volume tem muitos itens, aparece "pág. N/M" e há mais de uma etiqueta para o mesmo volume.' },
-    { nome: 'NF 980509 ao lado do pedido', descricao: 'A nota fiscal já emitida. O código de barras passa a ser o da NF.' },
+    { nome: 'Código de barras ao lado do número', descricao: 'Quando a nota já tem DANFE, a barra é a chave de acesso (44 dígitos), a mesma que a transportadora bipa, e ocupa o espaço ao lado do número do documento; embaixo dela fica "NF nº". Sem chave, a barra é o número da NF ou do pedido.' },
     { nome: 'Modelo padrão ou compacto', descricao: 'Aparece no cabeçalho. O padrão mostra descrição e SKU; o compacto mostra só o SKU em colunas.' },
     { nome: '(forçado pela URL)', descricao: 'Aparece ao lado do modelo quando o endereço da página tem o parâmetro de modelo.' },
     { nome: 'Baixar ZPL', descricao: 'Baixa o arquivo da etiqueta no formato da Zebra. Use para testar numa Zebra.' },

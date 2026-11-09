@@ -334,7 +334,8 @@ export const supervisorApi = {
     api.get(`/api/cancelados/${id}/destinos/`, { params: { q } }).then((r) => r.data),
   transferirConferencia: (id: number, destinoId: number) =>
     api.post(`/api/cancelados/${id}/transferir/`, { destino_id: destinoId }).then((r) => r.data),
-  listarConferidos: (params: { search?: string; page?: number } = {}) =>
+  // `transportadora`: 'com' | 'sem' filtra pela presença da transportadora (2026-11-09)
+  listarConferidos: (params: { search?: string; page?: number; transportadora?: 'com' | 'sem' | '' } = {}) =>
     api.get('/api/pedidos/', {
       params: { status: 'conferido', ...params },
     }).then((r) => r.data),
@@ -409,9 +410,12 @@ export type EtiquetasPedido = {
     conferido_em: string | null; conferente: string | null; sequencia_numero: number | null
     /** NF emitida do pedido (vínculo E140IPV); vazio enquanto não faturado. Em documento NF fica vazio */
     nf_numero: string; nf_codsnf: string
+    /** Chave de acesso do DANFE (44 dígitos) e volumes da NF no Senior — 2026-11-09 */
+    nf_chave: string; nf_volumes: number | null
   }
-  /** O que vai no código de barras: a NF quando existe, senão o pedido */
-  barra: { valor: string; rotulo: 'NF' | 'PEDIDO' }
+  /** O que vai no código de barras: a chave do DANFE quando existe, senão a NF, senão o pedido.
+   *  `texto` é o que vai escrito embaixo (chave em grupos de 4). */
+  barra: { valor: string; rotulo: 'DANFE' | 'NF' | 'PEDIDO'; texto: string }
   total_volumes: number
   etiquetas: EtiquetaVolume[]
   rodape: { titulo: string; subtitulo: string; responsabilidades: string[] }
@@ -443,9 +447,11 @@ export type EtiquetaPendente = {
   conferente: string | null
   sequencia_numero: number | null
   qtd_volumes: number
+  /** Volumes da NF no Senior (qtdemb); null = ainda não lido — 2026-11-09 */
+  nf_volumes: number | null
   nf_numero: string
   pronta: boolean
-  /** Por que não está pronta (sem_transportadora | sem_nf); null = pronta */
+  /** Por que não está pronta (sem_transportadora | sem_nf | volumes_divergentes); null = pronta */
   bloqueio: BloqueioEtiqueta | null
   ultimo_erro: string | null
 }
@@ -455,7 +461,7 @@ export type BloqueioEtiqueta = { codigo: string; mensagem: string }
 
 /** Veredito da impressão automática devolvido pelo concluir / fechar sobra */
 export type VereditoEtiqueta = {
-  resultado: 'enfileirada' | 'sem_transportadora' | 'sem_nf' | 'sem_impressora_padrao' | 'desligada' | 'erro'
+  resultado: 'enfileirada' | 'sem_transportadora' | 'sem_nf' | 'volumes_divergentes' | 'sem_impressora_padrao' | 'desligada' | 'erro'
     | 'nao_conferido' | 'pedido_cancelado' | 'sem_volumes'
   impressora: string | null
   impressora_id?: number
@@ -469,6 +475,8 @@ export type ConfigEtiqueta = {
   automatica: boolean
   /** Pedido só imprime depois de faturado (NF vinculada) — 2026-10-27 */
   exige_nf: boolean
+  /** Só imprime com volumes do Separa iguais aos da NF (qtdemb) — 2026-11-09 */
+  exige_volumes: boolean
   modelo: ModeloEtiqueta
   modelos: { valor: ModeloEtiqueta; label: string }[]
 }
@@ -486,13 +494,13 @@ export const impressaoApi = {
   pendentes: () =>
     api.get('/api/impressao/pendentes/')
       // `aguardando_transportadora` = aguardando o Senior (transportadora ou, com exige_nf, a NF)
-      .then((r) => r.data as { prontas: EtiquetaPendente[]; aguardando_transportadora: EtiquetaPendente[]; exige_nf: boolean }),
+      .then((r) => r.data as { prontas: EtiquetaPendente[]; aguardando_transportadora: EtiquetaPendente[]; exige_nf: boolean; exige_volumes?: boolean }),
   impressoras: () =>
     api.get('/api/impressao/impressoras/')
       .then((r) => r.data as { impressoras: ImpressoraEtiqueta[]; impressora_padrao: number | null; automatica: boolean; exige_nf: boolean }),
   config: () =>
     api.get('/api/impressao/config/').then((r) => r.data as ConfigEtiqueta),
-  salvarConfig: (dados: { impressora_padrao?: number | null; automatica?: boolean; exige_nf?: boolean; modelo?: ModeloEtiqueta }) =>
+  salvarConfig: (dados: { impressora_padrao?: number | null; automatica?: boolean; exige_nf?: boolean; exige_volumes?: boolean; modelo?: ModeloEtiqueta }) =>
     api.put('/api/impressao/config/', dados).then((r) => r.data as ConfigEtiqueta),
 }
 

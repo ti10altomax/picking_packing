@@ -66,7 +66,7 @@ type DivergenciaFardo = {
 }
 
 function textoDivergencia(d: DivergenciaFardo) {
-  return `${d.codpro} ${d.tam}: ${d.qtd} no fardo — ${
+  return `${d.codpro} ${d.tam}: ${d.qtd} na OP — ${
     d.motivo === 'excede' ? `faltam só ${d.restante}` : 'não é deste documento'
   }`
 }
@@ -327,6 +327,14 @@ export default function ConferenciaPedidoPage() {
       })
       return
     }
+    if (e.resultado === 'volumes_divergentes') {
+      await dialog.alert({
+        title: 'Volumes diferentes da NF',
+        message: `${e.mensagem ?? 'A quantidade de volumes não bate com a nota fiscal.'} A etiqueta sai sozinha depois da carta de correção (Gestão → Cartas de correção).`,
+        variant: 'warning',
+      })
+      return
+    }
     if (e.resultado === 'sem_impressora_padrao' || e.resultado === 'desligada') {
       const abrir = await dialog.confirm({
         title: 'Imprimir etiquetas?',
@@ -388,8 +396,8 @@ export default function ConferenciaPedidoPage() {
   const aoRemoverVolume = async (volumeId: number) => {
     const fardo = pedido?.volumes.find((v) => v.id === volumeId)?.op
     const ok = await dialog.confirm(fardo ? {
-      title: `Desfazer o fardo OP ${fardo}?`,
-      message: 'O volume do fardo sai e as quantidades voltam para a fila. O fardo pode ser lido de novo.',
+      title: `Desfazer a OP ${fardo}?`,
+      message: 'O volume da OP sai e as quantidades voltam para a fila. A OP pode ser lida de novo.',
       variant: 'danger',
       confirmText: 'Desfazer',
     } : {
@@ -464,16 +472,17 @@ export default function ConferenciaPedidoPage() {
     )
   }
 
-  // Fardo fechado da fábrica (2026-11-05): a etiqueta traz a OP do Sisplan (só dígitos, menos de 13).
-  // O backend compara o fardo inteiro com o que falta; bateu, cria um volume "OP N" já
-  // fechado. Não bateu, não lança nada. Não precisa de volume aberto.
+  // Volume fechado da fábrica (2026-11-05): a etiqueta traz a OP do Sisplan (só dígitos, menos de 13).
+  // O backend compara a OP inteira com o que falta; bateu, cria um volume "OP N" já fechado —
+  // caixa ou fardo conforme o produto (2026-11-09). Não bateu, não lança nada. Não precisa de volume aberto.
   function lerFardo(op: string) {
     filaBip.current = filaBip.current.then(async () => {
       try {
         const r = await conferenciaApi.fardo(pedidoId, op)
         piscar('ok', 700)
         playBeep(880, 120); setTimeout(() => playBeep(1320, 120), 140)
-        toast.ok(`Fardo OP ${op} conferido`, {
+        const tipoOp = (r as { volume?: { tipo?: string } }).volume?.tipo
+        toast.ok(tipoOp === 'caixa' ? `Caixa OP ${op} conferida` : `Fardo OP ${op} conferido`, {
           detalhe: `${r.itens.length} item(ns) · ${r.pecas} peças — volume fechado`,
           chave: 'leitor',
         })
@@ -483,13 +492,13 @@ export default function ConferenciaPedidoPage() {
         const e = err as { response?: { data?: { resultado?: string; erro?: string; divergencias?: DivergenciaFardo[] } } }
         const d = e?.response?.data
         if (d?.resultado === 'fardo_divergente') {
-          erroScan('Fardo não confere — nada foi lançado', <ul className="list-disc pl-4">{(d.divergencias ?? []).map((x, i) => <li key={i}>{textoDivergencia(x)}</li>)}</ul>, op, 12000)
+          erroScan('OP não confere — nada foi lançado', <ul className="list-disc pl-4">{(d.divergencias ?? []).map((x, i) => <li key={i}>{textoDivergencia(x)}</li>)}</ul>, op, 12000)
         } else if (d?.resultado === 'op_ja_lida') {
-          erroScan('Este fardo já foi lido', d.erro ?? '', op)
+          erroScan('Esta OP já foi lida', d.erro ?? '', op)
         } else if (d?.resultado === 'op_nao_encontrada') {
-          erroScan('OP não encontrada', 'Confira a etiqueta do fardo ou confira peça a peça.', op)
+          erroScan('OP não encontrada', 'Confira a etiqueta da caixa ou do fardo, ou confira peça a peça.', op)
         } else {
-          erroScan('Não foi possível ler o fardo', d?.erro ?? 'Tente de novo.', op)
+          erroScan('Não foi possível ler a OP', d?.erro ?? 'Tente de novo.', op)
         }
       }
     }).catch(() => {})
@@ -696,7 +705,7 @@ export default function ConferenciaPedidoPage() {
               </p>
             </>
           ) : (
-            <p className="text-sm text-ink-muted">Nenhum volume aberto — abra um, ou bipe a OP do fardo</p>
+            <p className="text-sm text-ink-muted">Nenhum volume aberto — abra um, ou bipe a OP da caixa ou do fardo</p>
           )}
         </div>
         <button
@@ -1083,7 +1092,7 @@ function ListaVolumes({
                       onClick={() => onRemoverVolume(v.id)}
                       className="mt-1 w-full px-3 h-9 rounded-md bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-500/15 dark:hover:bg-red-500/25 dark:text-red-300 text-xs font-semibold"
                     >
-                      Desfazer fardo
+                      Desfazer OP
                     </button>
                   )}
                 </div>

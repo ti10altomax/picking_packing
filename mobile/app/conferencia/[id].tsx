@@ -33,7 +33,7 @@ type DivergenciaFardo = {
 }
 
 function textoDivergencia(d: DivergenciaFardo) {
-  return `${d.codpro} ${d.tam}: ${d.qtd} no fardo — ${
+  return `${d.codpro} ${d.tam}: ${d.qtd} na OP — ${
     d.motivo === 'excede' ? `faltam só ${d.restante}` : 'não é deste documento'
   }`
 }
@@ -310,6 +310,14 @@ export default function ConferenciaDetalhe() {
       })
       return false
     }
+    if (e.resultado === 'volumes_divergentes') {
+      await dialog.alert({
+        variant: 'warning',
+        title: 'Volumes diferentes da NF',
+        message: `${e.mensagem ?? 'A quantidade de volumes não bate com a nota fiscal.'} A etiqueta sai sozinha depois da carta de correção (Gestão → Cartas de correção, no web).`,
+      })
+      return false
+    }
     if (e.resultado === 'sem_impressora_padrao' || e.resultado === 'desligada') {
       return dialog.confirm({
         variant: 'question',
@@ -371,8 +379,8 @@ export default function ConferenciaDetalhe() {
     const fardo = pedido?.volumes.find((v) => v.id === volumeId)?.op
     const ok = await dialog.confirm(fardo ? {
       variant: 'danger',
-      title: `Desfazer o fardo OP ${fardo}?`,
-      message: 'O volume do fardo sai e as quantidades voltam para a fila. O fardo pode ser lido de novo.',
+      title: `Desfazer a OP ${fardo}?`,
+      message: 'O volume da OP sai e as quantidades voltam para a fila. A OP pode ser lida de novo.',
       confirmText: 'Desfazer',
     } : {
       variant: 'danger',
@@ -446,8 +454,8 @@ export default function ConferenciaDetalhe() {
     )
   }
 
-  // Fardo fechado da fábrica (2026-11-05): a etiqueta traz a OP do Sisplan (só dígitos, menos de 13).
-  // O backend compara o fardo inteiro com o que falta; bateu, cria um volume "OP N" já
+  // Volume fechado da fábrica (2026-11-05): a etiqueta traz a OP do Sisplan (só dígitos, menos de 13).
+  // O backend compara a OP inteira com o que falta; bateu, cria um volume "OP N" (caixa ou fardo, pelo produto) já
   // fechado. Não bateu, não lança nada. Não precisa de volume aberto.
   function lerFardo(op: string) {
     filaBip.current = filaBip.current.then(async () => {
@@ -455,7 +463,8 @@ export default function ConferenciaDetalhe() {
         const r = await conferenciaApi.fardo(pedidoId, op)
         piscar('ok', 700)
         Vibration.vibrate([0, 60, 60, 60])
-        toast.ok(`Fardo OP ${op} conferido`, {
+        const tipoOp = (r as { volume?: { tipo?: string } }).volume?.tipo
+        toast.ok(tipoOp === 'caixa' ? `Caixa OP ${op} conferida` : `Fardo OP ${op} conferido`, {
           detalhe: `${r.itens.length} item(ns) · ${r.pecas} peças — volume fechado`,
           chave: 'leitor',
         })
@@ -465,13 +474,13 @@ export default function ConferenciaDetalhe() {
         const e = err as { response?: { data?: { resultado?: string; erro?: string; divergencias?: DivergenciaFardo[] } } }
         const d = e?.response?.data
         if (d?.resultado === 'fardo_divergente') {
-          falhaScan('Fardo não confere — nada foi lançado', (d.divergencias ?? []).map(textoDivergencia).join('\n'), op, 12000)
+          falhaScan('OP não confere — nada foi lançado', (d.divergencias ?? []).map(textoDivergencia).join('\n'), op, 12000)
         } else if (d?.resultado === 'op_ja_lida') {
-          falhaScan('Este fardo já foi lido', d.erro ?? '', op)
+          falhaScan('Esta OP já foi lida', d.erro ?? '', op)
         } else if (d?.resultado === 'op_nao_encontrada') {
-          falhaScan('OP não encontrada', 'Confira a etiqueta do fardo ou confira peça a peça.', op)
+          falhaScan('OP não encontrada', 'Confira a etiqueta da caixa ou do fardo, ou confira peça a peça.', op)
         } else {
-          falhaScan('Não foi possível ler o fardo', d?.erro ?? 'Tente de novo.', op)
+          falhaScan('Não foi possível ler a OP', d?.erro ?? 'Tente de novo.', op)
         }
       }
     }).catch(() => {})
@@ -670,7 +679,7 @@ export default function ConferenciaDetalhe() {
               </Text>
             </>
           ) : (
-            <Text className="text-sm text-ink-muted">Nenhum volume aberto — abra um, ou bipe a OP do fardo</Text>
+            <Text className="text-sm text-ink-muted">Nenhum volume aberto — abra um, ou bipe a OP da caixa ou do fardo</Text>
           )}
         </View>
         <Pressable
@@ -1300,7 +1309,7 @@ function ListaVolumes({
                       onPress={() => onRemoverVolume(v.id)}
                       className="mt-1 h-10 rounded-lg bg-red-500/15 border border-red-500/30 items-center justify-center"
                     >
-                      <Text className="text-xs font-semibold text-red-300">Desfazer fardo</Text>
+                      <Text className="text-xs font-semibold text-red-300">Desfazer OP</Text>
                     </Pressable>
                   ) : null}
                 </View>

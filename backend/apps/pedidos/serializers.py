@@ -92,11 +92,12 @@ class PedidoListSerializer(serializers.ModelSerializer):
         return _nome_separado_por(obj)
 
     def get_etiqueta_bloqueio(self, obj):
-        from apps.impressao.services import etiqueta_exige_nf, motivo_bloqueio
+        from apps.impressao.services import etiqueta_exige_nf, etiqueta_exige_volumes, motivo_bloqueio
         ctx = self.context  # dict compartilhado pela lista: lê a Configuracao uma vez
         if '_etiqueta_exige_nf' not in ctx:
             ctx['_etiqueta_exige_nf'] = etiqueta_exige_nf()
-        return motivo_bloqueio(obj, exige_nf=ctx['_etiqueta_exige_nf'])
+            ctx['_etiqueta_exige_volumes'] = etiqueta_exige_volumes()
+        return motivo_bloqueio(obj, exige_nf=ctx['_etiqueta_exige_nf'], exige_volumes=ctx['_etiqueta_exige_volumes'])
 
     def get_nfs_documento(self, obj):
         if obj.tipo != Pedido.Tipo.PEDIDO:

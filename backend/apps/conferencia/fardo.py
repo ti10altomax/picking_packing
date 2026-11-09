@@ -1,14 +1,18 @@
-"""Fardo fechado da fábrica (2026-11-05).
+"""Volume fechado da fábrica lido pela OP (2026-11-05).
 
-O fardo chega lacrado com a etiqueta da OP do Sisplan (só dígitos, sem tamanho fixo — sempre
+O volume chega lacrado com a etiqueta da OP do Sisplan (só dígitos, sem tamanho fixo — sempre
 menos de 13, que é o tamanho do EAN). A TI publicou a view
 `REPORTS.USU_OP_PRODUTOS` (OP, CODPRO, CODBAR, TAM, QTD) com o que vai dentro. Bipar a OP
-na conferência compara o fardo inteiro com o que ainda falta no documento:
+na conferência compara o volume inteiro com o que ainda falta no documento:
 
-- bateu  → cria um volume `fardo` "OP N" já fechado, com os itens lançados;
+- bateu  → cria um volume "OP N" já fechado, com os itens lançados;
 - não bateu (produto fora do documento ou mais do que falta) → bloqueia tudo e não lança
-  nada, porque fardo lacrado não se divide;
+  nada, porque volume lacrado não se divide;
 - OP já lida em outro volume (fora de documento cancelado) → bloqueia.
+
+Caixa ou fardo (2026-11-09): nem toda OP é fardo. O tipo sai do produto — posições 4-5 do
+CODPRO em RP ou AL = fardo, o resto = caixa (regra da TI, `tipo_volume_da_op`). Basta o
+primeiro item da OP: um volume nunca mistura os dois tipos.
 
 Casamento: o CODBAR da OP com o código de barras do item (`PedidoItem.ean`, que já é o
 efetivo: CODBAR → CODGTN → CODBAR do tamanho base — ver `senior.tasks.codigo_barras`); sem
@@ -50,6 +54,16 @@ def _texto(v) -> str:
 
 def _tamanho_base(codder: str) -> str:
     return re.sub(r'\d+$', '', codder or '')
+
+
+# Famílias de produto que saem em fardo (posições 4-5 do CODPRO); o resto vai em caixa.
+FAMILIAS_FARDO = ('RP', 'AL')
+
+
+def tipo_volume_da_op(codpro) -> str:
+    """Caixa ou fardo pelo CODPRO do (primeiro) item da OP — mesma regra do SQL da TI:
+    `CASE WHEN substr(codpro, 4, 2) IN ('RP', 'AL') THEN 'FARDO' ELSE 'CAIXA' END`."""
+    return Volume.Tipo.FARDO if _texto(codpro)[3:5].upper() in FAMILIAS_FARDO else Volume.Tipo.CAIXA
 
 
 def buscar_op(op: str) -> list[dict]:
@@ -102,8 +116,8 @@ def ler_fardo(pedido: Pedido, op, user):
         mesmo = usado.pedido_id == pedido.id
         raise FardoErro(
             'op_ja_lida',
-            'este fardo já foi lido neste documento' if mesmo
-            else f'este fardo já foi lido no documento {usado.pedido.numero_externo}',
+            'esta OP já foi lida neste documento' if mesmo
+            else f'esta OP já foi lida no documento {usado.pedido.numero_externo}',
             numero=usado.pedido.numero_externo, mesmo_documento=mesmo,
         )
 
@@ -123,7 +137,7 @@ def ler_fardo(pedido: Pedido, op, user):
             .order_by('sku', 'id')
         )
         if _op_em_uso(op):  # leitura simultânea em outro coletor
-            raise FardoErro('op_ja_lida', 'este fardo acabou de ser lido em outro coletor')
+            raise FardoErro('op_ja_lida', 'esta OP acabou de ser lida em outro coletor')
 
         plano, divergencias = [], []
         for linha in linhas:
@@ -142,24 +156,25 @@ def ler_fardo(pedido: Pedido, op, user):
                     continue
                 q = min(livre, falta)
                 plano.append((i, q))
-                i.qtd_separada += q  # para o próximo cálculo dentro deste fardo
+                i.qtd_separada += q  # para o próximo cálculo dentro desta OP
                 falta -= q
 
         if not divergencias:
-            return _lancar(pedido, op, plano, user)
+            return _lancar(pedido, op, plano, user, tipo_volume_da_op(linhas[0]['codpro']))
 
     # fora da transação (que só travou os itens) para o rastro ficar gravado
     PedidoLog.objects.create(
         pedido=pedido, usuario=user, acao='fardo_op_divergente',
         payload={'op': op, 'divergencias': divergencias},
     )
-    raise FardoErro('fardo_divergente', 'o fardo não confere com o documento', divergencias=divergencias)
+    raise FardoErro('fardo_divergente', 'a OP não confere com o documento', divergencias=divergencias)
 
 
-def _lancar(pedido, op, plano, user):
-    """Dentro da transação de `ler_fardo`: volume fechado + lançamentos + rastro."""
+def _lancar(pedido, op, plano, user, tipo=Volume.Tipo.FARDO):
+    """Dentro da transação de `ler_fardo`: volume fechado (caixa ou fardo, pelo produto) +
+    lançamentos + rastro."""
     volume = Volume.objects.create(
-        pedido=pedido, tipo=Volume.Tipo.FARDO, identificador=f'OP {op}', op=op,
+        pedido=pedido, tipo=tipo, identificador=f'OP {op}', op=op,
         criado_por=user, fechado_em=timezone.now(),
     )
     lancados = []
@@ -169,13 +184,13 @@ def _lancar(pedido, op, plano, user):
         lancados.append({'item_id': item.id, 'sku': item.sku, 'qtd': q})
     PedidoLog.objects.create(
         pedido=pedido, usuario=user, acao='fardo_op_lido',
-        payload={'op': op, 'volume_id': volume.id, 'itens': lancados},
+        payload={'op': op, 'volume_id': volume.id, 'tipo': tipo, 'itens': lancados},
     )
     return volume, lancados
 
 
 def desfazer_fardo(pedido: Pedido, volume: Volume, user):
-    """Apaga o volume do fardo e devolve as quantidades aos itens."""
+    """Apaga o volume da OP e devolve as quantidades aos itens."""
     with transaction.atomic():
         devolvidos = []
         for vi in volume.itens.select_related('pedido_item'):

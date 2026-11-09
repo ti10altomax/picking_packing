@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { impressaoApi, type BloqueioEtiqueta, type ImpressoraEtiqueta } from '@/lib/api'
+import { useToast } from '@/components/Toast'
 
 // Última impressora escolhida neste aparelho — conveniência local, nada de servidor
 const CHAVE_ULTIMA = 'etiqueta_impressora'
@@ -42,6 +43,7 @@ export function rotuloBloqueio(b: BloqueioEtiqueta | null | undefined): string {
   if (!b) return ''
   if (b.codigo === 'sem_transportadora') return 'Sem transportadora'
   if (b.codigo === 'sem_nf') return 'Sem NF'
+  if (b.codigo === 'volumes_divergentes') return 'Volumes ≠ NF'
   return 'Indisponível'
 }
 
@@ -61,6 +63,7 @@ export function ImprimirEtiqueta({
   const [enviando, setEnviando] = useState(false)
   const [feedback, setFeedback] = useState<{ ok: boolean; msg: string } | null>(null)
   const ref = useRef<HTMLDivElement>(null)
+  const toast = useToast()
 
   useEffect(() => {
     if (!aberto) return
@@ -90,11 +93,18 @@ export function ImprimirEtiqueta({
     setFeedback(null)
     try {
       const r = await impressaoApi.imprimir(pedidoId, { impressora_id: escolhida })
-      setFeedback({ ok: true, msg: `${r.impressao.qtd_etiquetas} etiqueta(s) → ${r.impressao.impressora}` })
+      // A impressora fica longe de quem clica: toast dizendo que já foi, para não mandar
+      // de novo (2026-11-09). Rede = já enviado à Zebra; USB = na fila do agente.
+      const viaAgente = r.impressao.canal === 'agente'
+      toast.ok(viaAgente ? 'Etiquetas na fila do agente' : 'Etiquetas enviadas à impressora', {
+        detalhe: `${r.impressao.qtd_etiquetas} etiqueta(s) → ${r.impressao.impressora}. Não precisa mandar de novo.`,
+      })
+      setAberto(false)
       onImpresso?.()
     } catch (e: unknown) {
       const d = (e as { response?: { data?: { erro?: string } } })?.response?.data
       setFeedback({ ok: false, msg: d?.erro ?? 'Falha ao imprimir' })
+      toast.erro('Falha ao imprimir a etiqueta', { detalhe: d?.erro ?? 'Tente de novo ou use o navegador.' })
     } finally {
       setEnviando(false)
     }

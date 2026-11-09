@@ -17,6 +17,7 @@ export const supervisorConferidos: AjudaTela = {
   passos: [
     'Abra Gestão → Conferidos.',
     'Procure por número ou cliente no campo de busca.',
+    'Use o filtro ao lado da busca: Todos, Com transportadora ou Sem transportadora. "Sem transportadora" mostra o que ainda não pode sair.',
     'Leia a linha do documento: data, conferente, separador, quantidade de itens e o tempo da conferência.',
     'Toque na linha para abrir os itens agrupados por volume: cada caixa ou fardo mostra o que foi dentro e quantas peças. Item dividido em mais de um volume aparece como "2 de 5". O que ficou em falta, cancelado ou sem lançamento fica no bloco "Fora de volume".',
     'Para imprimir a etiqueta de volume, toque em "Etiqueta", escolha a impressora e toque em "Imprimir". Se já foi impressa, o botão vira "Reimprimir" e mostra quando.',
@@ -51,6 +52,15 @@ export const supervisorConferidos: AjudaTela = {
       descricao: 'Botão apagado. O pedido ainda não foi faturado e a regra "só com NF" está ligada. A etiqueta sai quando a NF for emitida.',
     },
     {
+      nome: 'Volumes ≠ NF',
+      descricao:
+        'Botão apagado. A quantidade de volumes fechados na conferência é diferente da quantidade de volumes da nota fiscal. Corrija a nota em "Corrigir NF" (volumes). A etiqueta sai sozinha quando a carta é gravada.',
+    },
+    {
+      nome: 'Todos / Com transportadora / Sem transportadora',
+      descricao: 'Filtro da lista. "Sem transportadora" junta os documentos que esperam o Senior; "Com transportadora" o que já pode ser etiquetado.',
+    },
+    {
       nome: 'Histórico',
       descricao: 'Abre a linha do tempo do documento: quem fez o quê e quando.',
     },
@@ -67,7 +77,7 @@ export const supervisorConferidos: AjudaTela = {
     },
     {
       quando: 'Botão "Etiqueta" apagado.',
-      oQueFazer: 'Passe o mouse sobre o botão para ler o motivo. Resolva no Senior (transportadora ou faturamento) e a etiqueta libera.',
+      oQueFazer: 'Passe o mouse sobre o botão para ler o motivo. Transportadora ou faturamento se resolvem no Senior; "Volumes ≠ NF" se resolve em "Corrigir NF", ajustando a quantidade de volumes da nota.',
     },
     {
       quando: 'Documento sem "Corrigir NF" na linha.',
@@ -80,6 +90,7 @@ export const supervisorConferidos: AjudaTela = {
   ],
   dicas: [
     'Depois de uma carta de correção que troca a transportadora, use "Reimprimir" para a etiqueta sair com o nome novo.',
+    'O código de barras da etiqueta é a chave de acesso do DANFE (44 dígitos), a mesma que a transportadora bipa na nota.',
   ],
   relacionadas: ['supervisor-etiquetas', 'supervisor-cartas', 'supervisor-agora', 'admin-impressoras'],
 }

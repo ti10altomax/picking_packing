@@ -16,6 +16,13 @@ rodapé sem as 2 linhas de endereço/telefone da empresa; compacta em 3 colunas
 quando nenhuma quantidade do volume tem 3 dígitos e nenhum SKU passa de 16
 caracteres (senão 2 colunas) — a fonte dos itens não muda.
 
+2026-11-09 (pedido do usuário): o código de barras passou a ser a **chave de acesso do
+DANFE** (44 dígitos, `Pedido.nf_chave`) — é o que a transportadora bipa —, ao lado do
+número do documento, ocupando tudo que sobra até a borda direita (o "NF nº" que ficava
+entre os dois saiu: já está embaixo da barra). Sem chave (pedido ainda não faturado, NF
+sem registro eletrônico) cai no número da NF/pedido como antes. Sob a barra fica
+"NF 147911" — a chave inteira não cabe legível ali e já está no DANFE.
+
 Substitui o que hoje é escrito a pincel na caixa (volumes + itens +
 transportadora + dados do pedido) e absorve a *carta de transporte* (folha A4
 que ia junto com a mercadoria) como rodapé em fonte pequena.
@@ -138,7 +145,15 @@ def dados_etiquetas(pedido: Pedido, modelo: str = MODELO_PADRAO) -> dict:
         nf = {'numero': pedido.numero_externo, 'codsnf': pedido.codsnf, 'codfil': pedido.codfil}
     else:
         nf = {'numero': pedido.nf_numero, 'codsnf': pedido.nf_codsnf, 'codfil': pedido.nf_codfil}
-    barra = {'valor': nf['numero'] or pedido.numero_externo, 'rotulo': 'NF' if nf['numero'] else 'PEDIDO'}
+    # Código de barras: a chave do DANFE quando a nota já tem registro eletrônico (é o que a
+    # transportadora bipa — 2026-11-09); senão o número da NF; sem NF, o do pedido.
+    # `texto` é o que vai escrito embaixo: sempre o número (a chave não cabe legível ali).
+    chave = pedido.nf_chave if nf['numero'] else ''
+    if chave:
+        barra = {'valor': chave, 'rotulo': 'DANFE', 'texto': f"NF {nf['numero']}"}
+    else:
+        valor = nf['numero'] or pedido.numero_externo
+        barra = {'valor': valor, 'rotulo': 'NF' if nf['numero'] else 'PEDIDO', 'texto': f"{'NF' if nf['numero'] else 'PEDIDO'} {valor}"}
     return {
         'modelo': modelo,
         'modelo_label': MODELOS[modelo]['label'],
@@ -163,6 +178,8 @@ def dados_etiquetas(pedido: Pedido, modelo: str = MODELO_PADRAO) -> dict:
             # NF ao lado do pedido (vazia enquanto o pedido não foi faturado / vinculado)
             'nf_numero': nf['numero'] if pedido.tipo != Pedido.Tipo.NOTA_FISCAL else '',
             'nf_codsnf': nf['codsnf'] if pedido.tipo != Pedido.Tipo.NOTA_FISCAL else '',
+            'nf_chave': chave,
+            'nf_volumes': pedido.nf_volumes,
         },
         'barra': barra,
         'total_volumes': total,

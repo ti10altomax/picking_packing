@@ -32,7 +32,7 @@ export type VolumeDoc = {
 const TIPO_LABEL: Record<string, string> = { caixa: 'Caixa', fardo: 'Fardo', outro: 'Volume' }
 
 export function tituloVolume(v: VolumeDoc, indice: number) {
-  if (v.op) return `Fardo OP ${v.op}`
+  if (v.op) return `${TIPO_LABEL[v.tipo] ?? 'Volume'} OP ${v.op}`
   const base = TIPO_LABEL[v.tipo] ?? 'Volume'
   if (v.identificador && v.identificador.toLowerCase().startsWith(base.toLowerCase())) return v.identificador
   return v.identificador ? `${base} ${v.identificador}` : `${base} ${indice + 1}`

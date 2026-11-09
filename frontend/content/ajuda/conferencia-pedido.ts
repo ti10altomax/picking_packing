@@ -30,7 +30,7 @@ export const conferenciaPedido: AjudaTela = {
     'Toque em + Volume, escolha caixa, fardo ou outro, confira o identificador e toque em Criar.',
     'Bipe o produto na barra "Bipe o código…". Cada leitura soma 1 unidade no volume ativo, sem abrir nada.',
     'Para pôr várias unidades de uma vez (caixa fechada), toque em Qtd antes de bipar, ou toque no item na lista. Informe a quantidade e toque em Confirmar.',
-    'Fardo fechado da fábrica: bipe a etiqueta da OP (só números, menos de 13 dígitos). Se o fardo bate com o que falta, o sistema cria o volume "OP N" já fechado com todos os itens. Não precisa abrir volume antes.',
+    'Caixa ou fardo fechado da fábrica: bipe a etiqueta da OP (só números, menos de 13 dígitos). Se a OP bate com o que falta, o sistema cria o volume "OP N" já fechado com todos os itens, e decide sozinho se é caixa ou fardo pelo produto. Não precisa abrir volume antes.',
     'Repita até todos os itens ficarem com ✓. Abra outro volume com + Volume sempre que precisar.',
     'Quando o botão ficar verde, toque em Concluir ✓ e confirme.',
   ],
@@ -69,9 +69,9 @@ export const conferenciaPedido: AjudaTela = {
         'Na barra de bipagem. Toque antes de bipar e a próxima leitura abre a tela de quantidade. A barra fica amarela enquanto estiver armado. Depois dessa leitura volta sozinho para 1 em 1. Toque de novo para cancelar.',
     },
     {
-      nome: 'Volume "OP N" (fardo)',
+      nome: 'Volume "OP N" (caixa ou fardo)',
       descricao:
-        'Criado sozinho ao bipar a OP de um fardo fechado. Já vem fechado, sem lixeira nos lançamentos. Para corrigir, abra o volume e toque em Desfazer fardo: as quantidades voltam e o fardo pode ser lido de novo.',
+        'Criado sozinho ao bipar a OP de uma caixa ou fardo fechado da fábrica. O tipo vem do produto. Já vem fechado, sem lixeira nos lançamentos. Para corrigir, abra o volume e toque em Desfazer OP: as quantidades voltam e a OP pode ser lida de novo.',
     },
     {
       nome: 'Ícone da câmera',
@@ -108,13 +108,13 @@ export const conferenciaPedido: AjudaTela = {
       oQueFazer: 'O produto não está neste pedido ou o item já está completo. Confira o produto na mão.',
     },
     {
-      quando: 'Vermelho: "Fardo não confere — nada foi lançado", com a lista do que diverge.',
+      quando: 'Vermelho: "OP não confere — nada foi lançado", com a lista do que diverge.',
       oQueFazer:
-        'O fardo tem produto que não é deste documento ou mais peças do que falta. Nada entrou. Separe o fardo e avise o Sup. Pátio, ou confira peça a peça.',
+        'A caixa ou fardo tem produto que não é deste documento ou mais peças do que falta. Nada entrou. Separe o volume e avise o Sup. Pátio, ou confira peça a peça.',
     },
     {
-      quando: 'Aparece "Este fardo já foi lido".',
-      oQueFazer: 'Essa OP já entrou neste ou em outro documento (o aviso diz qual). Cada fardo só entra uma vez.',
+      quando: 'Aparece "Esta OP já foi lida".',
+      oQueFazer: 'Essa OP já entrou neste ou em outro documento (o aviso diz qual). Cada OP só entra uma vez.',
     },
     {
       quando: 'Aparece "OP não encontrada".',

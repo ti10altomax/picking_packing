@@ -170,6 +170,11 @@ function Linha({ p, onImpresso }: { p: EtiquetaPendente; onImpresso: () => void 
             ? <strong className="text-ink">{p.transportadora}</strong>
             : <span className="text-amber-600 dark:text-amber-400">sem transportadora</span>}
           {p.bloqueio?.codigo === 'sem_nf' && <> · <span className="text-amber-600 dark:text-amber-400">sem NF emitida</span></>}
+          {p.bloqueio?.codigo === 'volumes_divergentes' && (
+            <> · <span className="text-amber-600 dark:text-amber-400" title={p.bloqueio.mensagem}>
+              volumes ≠ NF ({p.qtd_volumes} aqui × {p.nf_volumes ?? '?'} na nota) — corrija a NF
+            </span></>
+          )}
           {p.tipo === 'pedido' && p.nf_numero && <> · NF <strong className="text-ink">{p.nf_numero}</strong></>}
           {p.conferido_em && <> · conferido {fmt(p.conferido_em)}</>}
           {p.conferente && <> por <strong className="text-ink">{p.conferente}</strong></>}
