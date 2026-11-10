@@ -33,6 +33,12 @@ import java.util.UUID
  *
  * Tudo é broadcast; a resposta do DataWedge chega em RESULT_ACTION, por isso as funções
  * que precisam de resposta registram um receiver temporário com timeout.
+ *
+ * Visto no logcat do TC21 (2026-11-10): o SET_CONFIG responde SUCCESS e ~15 ms depois o
+ * DataWedge recarrega o perfil, desabilitando e reabilitando o scanner por ~750 ms. Um
+ * START_SCANNING mandado nesse intervalo é engolido sem erro. Por isso `iniciarLeituraQuandoPronto`
+ * registra a notificação SCANNER_STATUS, espera o scanner voltar a WAITING, manda o START e
+ * só devolve true quando o status vira SCANNING (feixe realmente aceso).
  */
 class DataWedgeModule : Module() {
   companion object {
@@ -43,7 +49,15 @@ class DataWedgeModule : Module() {
     const val EXTRA_SET_CONFIG = "com.symbol.datawedge.api.SET_CONFIG"
     const val EXTRA_GET_ACTIVE_PROFILE = "com.symbol.datawedge.api.GET_ACTIVE_PROFILE"
     const val EXTRA_RESULT_GET_ACTIVE_PROFILE = "com.symbol.datawedge.api.RESULT_GET_ACTIVE_PROFILE"
+    const val NOTIFICATION_ACTION = "com.symbol.datawedge.api.NOTIFICATION_ACTION"
+    const val EXTRA_NOTIFICATION = "com.symbol.datawedge.api.NOTIFICATION"
+    const val EXTRA_REGISTER_NOTIFICATION = "com.symbol.datawedge.api.REGISTER_FOR_NOTIFICATION"
+    const val EXTRA_UNREGISTER_NOTIFICATION = "com.symbol.datawedge.api.UNREGISTER_FOR_NOTIFICATION"
     const val TIMEOUT_MS = 2000L
+    /** sem WAITING novo nesse prazo, assume que o scanner já estava pronto e manda o START */
+    const val ESPERA_PRONTO_MS = 2500L
+    /** START mandado e nenhum SCANNING nesse prazo → falhou */
+    const val ESPERA_SCANNING_MS = 1500L
   }
 
   private val context: Context
@@ -81,6 +95,81 @@ class DataWedgeModule : Module() {
 
     Function("iniciarLeitura") { softScan("START_SCANNING") }
     Function("pararLeitura") { softScan("STOP_SCANNING") }
+
+    AsyncFunction("iniciarLeituraQuandoPronto") { promise: Promise ->
+      iniciarQuandoPronto { ok -> promise.resolve(ok) }
+    }
+  }
+
+  /**
+   * Espera o scanner estar WAITING (habilitado, parado), manda START_SCANNING e confirma
+   * pelo status SCANNING. Usa a notificação SCANNER_STATUS do DataWedge, registrada só
+   * durante a chamada. Devolve false se o feixe não acendeu.
+   */
+  private fun iniciarQuandoPronto(aoTerminar: (Boolean) -> Unit) {
+    val ctx: Context
+    try {
+      ctx = context
+    } catch (e: Exception) {
+      aoTerminar(false)
+      return
+    }
+    val handler = Handler(Looper.getMainLooper())
+    var terminado = false
+    var iniciado = false
+    var receiver: BroadcastReceiver? = null
+
+    fun notificacao(registrar: Boolean) {
+      val b = Bundle().apply {
+        putString("com.symbol.datawedge.api.APPLICATION_NAME", ctx.packageName)
+        putString("com.symbol.datawedge.api.NOTIFICATION_TYPE", "SCANNER_STATUS")
+      }
+      val extra = if (registrar) EXTRA_REGISTER_NOTIFICATION else EXTRA_UNREGISTER_NOTIFICATION
+      try { ctx.sendBroadcast(Intent(ACTION).putExtra(extra, b)) } catch (e: Exception) { /* sem DW */ }
+    }
+
+    val encerrar: (Boolean) -> Unit = { ok ->
+      if (!terminado) {
+        terminado = true
+        handler.removeCallbacksAndMessages(null)
+        try { receiver?.let { ctx.unregisterReceiver(it) } } catch (e: Exception) { /* já saiu */ }
+        notificacao(false)
+        aoTerminar(ok)
+      }
+    }
+
+    val iniciar = {
+      if (!iniciado && !terminado) {
+        iniciado = true
+        softScan("START_SCANNING")
+        handler.postDelayed({ encerrar(false) }, ESPERA_SCANNING_MS)
+      }
+    }
+
+    receiver = object : BroadcastReceiver() {
+      override fun onReceive(c: Context?, recebido: Intent?) {
+        val b = recebido?.getBundleExtra(EXTRA_NOTIFICATION) ?: return
+        if (b.getString("NOTIFICATION_TYPE") != "SCANNER_STATUS") return
+        when (b.getString("STATUS")) {
+          "WAITING" -> if (!iniciado) iniciar()
+          "SCANNING" -> if (iniciado) encerrar(true)
+        }
+      }
+    }
+    val filtro = IntentFilter(NOTIFICATION_ACTION).apply { addCategory(Intent.CATEGORY_DEFAULT) }
+    try {
+      if (Build.VERSION.SDK_INT >= 33) {
+        ctx.registerReceiver(receiver, filtro, Context.RECEIVER_EXPORTED)
+      } else {
+        ctx.registerReceiver(receiver, filtro)
+      }
+      notificacao(true)
+    } catch (e: Exception) {
+      encerrar(false)
+      return
+    }
+    // scanner já estava WAITING antes de registrarmos e não vai mandar status novo
+    handler.postDelayed({ iniciar() }, ESPERA_PRONTO_MS)
   }
 
   private fun temDataWedge(): Boolean = try {
