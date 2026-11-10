@@ -1,0 +1,7 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- Android 11+ só deixa o app ver o pacote do DataWedge se ele estiver declarado aqui
+       (package visibility). Sem isso `temDataWedge()` diria "não" em todo coletor. -->
+  <queries>
+    <package android:name="com.symbol.datawedge" />
+  </queries>
+</manifest>

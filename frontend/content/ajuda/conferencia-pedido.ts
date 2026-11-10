@@ -79,6 +79,11 @@ export const conferenciaPedido: AjudaTela = {
         'Na barra de bipagem. Um toque liga a câmera, que fica lendo um código atrás do outro (cada leitura soma 1, OP lança o volume inteiro). Toque em × Desligar para fechar. O mesmo código só vale de novo depois de 3 segundos, para não lançar duas vezes a peça que ficou na frente da lente; outro código vale na hora. A câmera fecha sozinha quando a leitura abre a tela de quantidade (Qtd armado) ou quando falta criar um volume.',
     },
     {
+      nome: 'Leitor (só no coletor Zebra)',
+      descricao:
+        'Na barra de bipagem, ao lado da câmera. Aparece só no coletor com leitor embutido, não no celular. Um toque deixa o leitor da frente ligado direto, sem segurar o gatilho: bipe um código atrás do outro (cada leitura soma 1, OP lança o volume inteiro). O mesmo código só vale de novo depois de 3 segundos; outro código vale na hora. Toque de novo em Leitor para desligar. Desliga sozinho quando a leitura abre a tela de quantidade (Qtd armado), quando falta criar um volume, ao sair da tela ou ao trocar de app. Se apertar o gatilho com o leitor ligado, o feixe apaga: toque em Leitor duas vezes para ligar de novo.',
+    },
+    {
       nome: 'copiar',
       descricao: 'Ao lado do código de barras do item. Copia o número do código.',
     },

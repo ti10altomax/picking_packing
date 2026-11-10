@@ -6,7 +6,19 @@ import { Platform } from 'react-native'
  *  Admin → App do coletor) e no relato de erros. Sem import de api.ts para
  *  não criar ciclo (api.ts e erros.ts importam daqui). */
 export const VERSAO_APP = Constants.expoConfig?.version ?? '?'
-export const DISPOSITIVO = `${Platform.OS} ${Platform.Version} · ${Constants.deviceName ?? 'aparelho'}`.slice(0, 200)
+
+// Fabricante + modelo de verdade (Android expõe em Platform.constants: "Zebra Technologies TC21",
+// "samsung SM-A155M"); até 2026-11-10 ia só o nome que o usuário deu ao aparelho
+// (Constants.deviceName), que raramente dizia o que era. O nome continua no fim.
+const constantes = Platform.OS === 'android'
+  ? (Platform.constants as { Manufacturer?: string; Model?: string })
+  : {}
+const modelo = [constantes.Manufacturer, constantes.Model].filter(Boolean).join(' ')
+export const DISPOSITIVO = [
+  `${Platform.OS} ${Platform.Version}`,
+  modelo || null,
+  Constants.deviceName && Constants.deviceName !== constantes.Model ? Constants.deviceName : null,
+].filter(Boolean).join(' · ').slice(0, 200) || 'aparelho'
 
 /** '0.9.0' → [0, 9, 0] */
 function tupla(v: string): number[] {

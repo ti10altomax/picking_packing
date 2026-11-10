@@ -11,11 +11,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   Vibration,
+  AppState,
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { conferenciaApi, separadoresApi, SeparadorLiberado, type VereditoEtiqueta } from '@/lib/api'
-import { CameraScanner } from '@/components/CameraScanner'
+import { CameraScanner, INTERVALO_REPETIR_MS } from '@/components/CameraScanner'
+import { TEM_DATAWEDGE, ligarLeitorContinuo, desligarLeitorContinuo } from '@/modules/datawedge'
 import { EscolherImpressora } from '@/components/EscolherImpressora'
 import { useDialog } from '@/components/Dialog'
 import { DocBadges } from '@/components/DocBadges'
@@ -116,6 +118,15 @@ export default function ConferenciaDetalhe() {
   const [itemSelecionado, setItemSelecionado] = useState<ItemPedido | null>(null)
   const [codigoInicial, setCodigoInicial] = useState('')
   const [cameraGlobalAberta, setCameraGlobalAberta] = useState(false)
+
+  // Leitor contínuo do coletor Zebra (2026-11-10, pedido do usuário): o "fica ligado" da
+  // câmera, mas no leitor da frente do TC21, pelo DataWedge (modules/datawedge). O botão
+  // "Leitor" só existe onde há DataWedge; a leitura continua chegando como teclado na barra,
+  // e o próprio DataWedge segura o MESMO código por INTERVALO_REPETIR_MS. Desliga sozinho ao
+  // abrir um modal, sair da tela ou mandar o app pro fundo (senão o feixe ficaria aceso).
+  const [leitorLigado, setLeitorLigado] = useState(false)
+  const [leitorOcupado, setLeitorOcupado] = useState(false)
+  const leitorLigadoRef = useRef(false)
 
   // Scanner de hardware (Zebra TC21 via DataWedge em modo teclado): um TextInput
   // sempre focado recebe os caracteres + Enter. Sem teclado virtual
@@ -415,6 +426,7 @@ export default function ConferenciaDetalhe() {
     }
     if (!volumeAtivo) {
       setCameraGlobalAberta(false)
+      desligarLeitor()
       falhaScan('Crie um volume antes de bipar', 'Toque em "Novo volume" e bipe de novo.', cod)
       return
     }
@@ -551,6 +563,34 @@ export default function ConferenciaDetalhe() {
     toast.erro(titulo, { detalhe, codigo, chave: 'leitor', duracao })
   }
 
+  async function ligarLeitor() {
+    if (leitorOcupado || leitorLigadoRef.current) return
+    setLeitorOcupado(true)
+    let ok = false
+    try {
+      ok = await ligarLeitorContinuo(INTERVALO_REPETIR_MS)
+    } catch {
+      ok = false
+    }
+    setLeitorOcupado(false)
+    if (!ok) {
+      toast.erro('Não deu para ligar o leitor', {
+        detalhe: 'O DataWedge do coletor não respondeu. Use o gatilho.',
+        chave: 'leitor',
+      })
+      return
+    }
+    leitorLigadoRef.current = true
+    setLeitorLigado(true)
+  }
+
+  function desligarLeitor() {
+    if (!leitorLigadoRef.current) return
+    leitorLigadoRef.current = false
+    setLeitorLigado(false)
+    desligarLeitorContinuo().catch(() => {})
+  }
+
   // Enter do leitor (ou submit) — consome o que foi digitado na barra
   function handleScan() {
     const cod = scanValue.trim()
@@ -571,6 +611,21 @@ export default function ConferenciaDetalhe() {
     const t = setTimeout(() => scanRef.current?.focus(), 120)
     return () => clearTimeout(t)
   }, [loading, algumModalAberto, pedido?.status, volumeAtivo?.id])
+
+  // Leitor contínuo: modal aberto (a leitura iria pro campo errado) ou conferência que
+  // acabou → desliga; app pro fundo ou saída da tela → desliga também
+  useEffect(() => {
+    if (algumModalAberto || pedido?.status !== 'conferindo') desligarLeitor()
+  }, [algumModalAberto, pedido?.status])
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (estado) => {
+      if (estado !== 'active') desligarLeitor()
+    })
+    return () => {
+      sub.remove()
+      desligarLeitor()
+    }
+  }, [])
 
   // -------------------------------------------------------------------------
   // Render
@@ -743,6 +798,24 @@ export default function ConferenciaDetalhe() {
           >
             <Text className={`text-sm font-bold ${qtdArmada ? 'text-zinc-950' : 'text-zinc-300'}`}>Qtd</Text>
           </Pressable>
+          {TEM_DATAWEDGE ? (
+            <Pressable
+              onPress={() => (leitorLigado ? desligarLeitor() : ligarLeitor())}
+              disabled={leitorOcupado}
+              accessibilityRole="button"
+              accessibilityState={{ selected: leitorLigado, busy: leitorOcupado }}
+              accessibilityLabel={leitorLigado ? 'Desligar o leitor contínuo' : 'Deixar o leitor ligado para bipar vários códigos'}
+              className={`h-11 px-3 ml-1 items-center justify-center rounded-lg ${
+                leitorLigado ? 'bg-emerald-500' : 'border border-zinc-700 active:bg-zinc-800'
+              }`}
+            >
+              {leitorOcupado ? (
+                <ActivityIndicator size="small" color="#a1a1aa" />
+              ) : (
+                <Text className={`text-sm font-bold ${leitorLigado ? 'text-zinc-950' : 'text-zinc-300'}`}>Leitor</Text>
+              )}
+            </Pressable>
+          ) : null}
           <Pressable
             onPress={() => setCameraGlobalAberta(true)}
             className="w-12 h-12 items-center justify-center rounded-lg active:bg-zinc-800"
@@ -754,6 +827,10 @@ export default function ConferenciaDetalhe() {
         {qtdArmada ? (
           <Text className="mx-4 mt-1.5 text-sm font-semibold text-amber-400">
             Próxima leitura abre a quantidade · toque em Qtd para cancelar
+          </Text>
+        ) : leitorLigado ? (
+          <Text className="mx-4 mt-1.5 text-sm font-semibold text-emerald-400">
+            Leitor ligado — bipe um código atrás do outro · o mesmo código só repete depois de {INTERVALO_REPETIR_MS / 1000} s · toque em Leitor para desligar
           </Text>
         ) : null}
         </>

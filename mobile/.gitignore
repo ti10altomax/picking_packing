@@ -21,6 +21,8 @@ android/.gradle/
 android/.kotlin/
 android/build/
 android/app/build/
+# saída do gradle dos módulos nativos locais (modules/<nome>/android/build)
+modules/*/android/build/
 android/app/release/
 android/local.properties
 android/.cxx/
