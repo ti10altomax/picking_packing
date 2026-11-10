@@ -58,6 +58,7 @@ class _Canvas:
     """Acumula comandos já escalados para o dpi/tamanho da impressora."""
 
     def __init__(self, dpi: int, largura_mm: int, altura_mm: int):
+        self.dpi = dpi
         self.pw = round(W * (largura_mm / LARGURA_MM_BASE) * (dpi / DPI_BASE))
         self.ll = round(H * (altura_mm / ALTURA_MM_BASE) * (dpi / DPI_BASE))
         # Origem (^LH) afastada do corte; o desenho de WxH é escalado para a
@@ -98,32 +99,69 @@ class _Canvas:
         e = max(1, round(espessura * self.ff))
         self.cmds.append(f'^FO{self.x(x)},{self.y(y)}^GB{self.x(largura)},{self.y(altura)},{e}^FS')
 
+    def code128_geometria(self, x, largura_max, valor):
+        """Onde o Code 128 vai sair, em dots reais: (x_inicial, módulo). Tudo é medido
+        em dots da impressora porque o módulo não escala com o desenho (2 dots = 0,25 mm
+        a 203 dpi, igual ao DANFE) e a leitura depende de zona branca de 10 módulos nos
+        dois lados (2026-11-10: a barra passava da margem, a 1,5 mm do corte, e
+        encostava no número).
+
+        A barra termina na borda direita do desenho (`x + largura_max`, que já fica
+        `MARGEM_IMPRESSORA_MM` do corte — essa margem é a zona branca da direita) e o
+        que sobra vira zona branca à esquerda, até `x`. Se não cabe em módulo 2, cai
+        para 1 (não deveria acontecer: `_cabecalho` encolhe o número antes). Devolve
+        `None` se nem em módulo 1 cabe."""
+        x0 = self.x(x)
+        x_fim = self.x(x + largura_max)
+        modulos = _modulos_code128(valor)
+        for modulo in (max(1, round(2 * self.ff)), 1):
+            largura = modulos * modulo
+            x_ini = x_fim - largura
+            if x_ini >= x0 + 10 * modulo:
+                return x_ini, modulo
+        return None
+
     def code128(self, x, y, altura, valor, largura_max=None):
         """Code 128 começando em `x`. Dígitos em quantidade par vão em subconjunto C
-        (metade dos símbolos). Com `largura_max` (dots do desenho), o módulo cai de 2 para 1
-        quando o código não cabe — é o caso da chave do DANFE (44 dígitos = 277 módulos) na
-        coluna da direita; sobra centralizada."""
+        (metade dos símbolos). Com `largura_max` (dots do desenho) a posição e o módulo
+        vêm de `code128_geometria` (zona branca garantida) — é o caso da chave do DANFE
+        (44 dígitos = 277 módulos) ao lado do número do documento."""
         fd = _txt(valor)
         if not fd:
             return
         if fd.isdigit() and len(fd) % 2 == 0:
             fd = '>;' + fd
-        modulo_base = 2
+        modulo = max(1, round(2 * self.ff))
+        x_real = self.x(x)
         if largura_max is not None:
-            largura = _modulos_code128(valor) * 2
-            if largura > largura_max:
-                modulo_base = 1
-                largura //= 2
-            x += max(0, (largura_max - largura) // 2)
-        modulo = max(1, round(modulo_base * self.ff))
+            geo = self.code128_geometria(x, largura_max, valor)
+            if geo is None:
+                geo = (x_real, 1)
+            x_real, modulo = geo
         h = self.y(altura)
-        self.cmds.append(f'^FO{self.x(x)},{self.y(y)}^BY{modulo},3,{h}^BCN,{h},N,N,N^FD{fd}^FS')
+        self.cmds.append(f'^FO{x_real},{self.y(y)}^BY{modulo},3,{h}^BCN,{h},N,N,N^FD{fd}^FS')
+
+    def qr(self, x_fim, y_centro, valor, modulo_mm=0.625):
+        """QR Code (ECC M) encostado à direita em `x_fim` e centrado em `y_centro`
+        (dots do desenho). O módulo é `modulo_mm` (0,625 mm = magnificação 5 a 203 dpi).
+        A Zebra posiciona o ^BQ a partir da última ^BY: o `^BY…,10` antes dele zera a
+        altura herdada do Code 128 (sem isso o QR desce ~70 dots — medido no Labelary)."""
+        fd = _txt(valor)
+        if not fd:
+            return
+        mag = max(2, min(10, round(modulo_mm * self.dpi / 25.4)))
+        lado = QR_MODULOS * mag
+        x = self.x(x_fim) - lado - 6        # 6 dots: o desenho do ^BQ começa um pouco à direita do ^FO
+        y = self.y(y_centro) - lado // 2
+        self.cmds.append(f'^BY2,3,10^FO{x},{y}^BQN,2,{mag}^FDMA,{fd}^FS')
 
     def render(self) -> str:
         corpo = '\n'.join(self.cmds)
         return f'^XA\n^PW{self.pw}\n^LL{self.ll}\n^LH{self.ox},{self.oy}\n{corpo}\n^PQ1\n^XZ\n'
 
 
+QR_MODULOS = 25         # QR versão 2 (44 dígitos numéricos em ECC M); 25 x 0,625 mm = 15,6 mm
+QR_RESERVA = 170        # dots do desenho reservados ao QR no canto direito do rodapé (lado + folga)
 CW = W - 2 * M          # 752 — largura útil
 X2 = W - M              # 776 — borda direita
 XR = 460                # coluna direita (caixa do volume / código de barras curto)
@@ -146,8 +184,12 @@ def _cabecalho(c: _Canvas, dados: dict, et: dict) -> None:
     2026-11-09: a barra leva a chave do DANFE quando existe (Code 128 C). Como são 44
     dígitos, ela ocupa tudo que sobra à direita do número do documento — o "NF nº" que
     ficava entre os dois saiu (já está embaixo da barra) e, com chave, o número cai de
-    64 para 48 dots para a barra caber em módulo 2 (0,25 mm, igual ao DANFE); se nem
+    64 para 44 dots para a barra caber em módulo 2 (0,25 mm, igual ao DANFE); se nem
     assim couber, módulo 1. Sem chave, NF ou pedido na coluna original.
+    2026-11-10: leitura ruim no TC21 (e na câmera) — a barra era baixa (8,6 mm para
+    69 mm de largura), terminava a 3 mm do corte e encostava no número. Agora tem
+    84 dots de altura, termina na margem do desenho e `code128_geometria` garante
+    10 módulos de zona branca dos dois lados (número encolhe antes de cair o módulo).
     """
     p = dados['pedido']
     vol = et['volume']
@@ -172,11 +214,18 @@ def _cabecalho(c: _Canvas, dados: dict, et: dict) -> None:
         cab += f" - filial {p['codfil']}"
     numero = _txt(p['numero_externo'])
     com_chave = barra['rotulo'] == 'DANFE'
-    fonte_num = 48 if com_chave else 64             # dígitos na fonte 0 medem ~0.60 da altura
-    largura_num = int(len(numero) * fonte_num * 0.60)
     if com_chave:
-        x_bar = M + largura_num + 16                # a barra começa logo depois do número
+        # 2026-11-10: o número encolhe (44 → 40 → 36) até a chave caber em módulo 2 com
+        # zona branca dos dois lados — com 6 dígitos fica em 44; 7 dígitos caem para 36.
+        for fonte_num in (44, 40, 36):             # dígitos na fonte 0 medem ~0.60 da altura
+            largura_num = int(len(numero) * fonte_num * 0.60)
+            x_bar = M + largura_num                 # daqui até a barra é zona branca (>= 10 módulos)
+            geo = c.code128_geometria(x_bar, X2 - x_bar, barra['valor'])
+            if geo and geo[1] >= round(2 * c.ff):
+                break
     else:
+        fonte_num = 64
+        largura_num = int(len(numero) * fonte_num * 0.60)
         x_bar = XR                                  # coluna original (NF/pedido curto)
     largura_bar = X2 - x_bar
     if com_chave:
@@ -188,13 +237,16 @@ def _cabecalho(c: _Canvas, dados: dict, et: dict) -> None:
             cab = 'PEDIDO'
         if p.get('codfil'):
             cab += f" - filial {p['codfil']}"
-        c.texto(M, 132, 20, cab, largura=x_bar - M - 10, largura_fonte=14, fator=0.60)
+        c.texto(M, 132, 20, cab, largura=x_bar - M, largura_fonte=14, fator=0.60)
     else:
         c.texto(M, 130, 24, cab, largura=x_bar - M - 10)
-    c.texto(M, 158 + (64 - fonte_num) // 2, fonte_num, numero, largura=x_bar - M - 10, fator=0.60)
-    # módulo 2 se couber em `largura_bar`, senão 1; centralizada no espaço
-    c.code128(x_bar, 128, 70, barra['valor'], largura_max=largura_bar)
-    c.texto(x_bar, 202, 16, barra.get('texto') or f"{barra['rotulo']} {barra['valor']}", largura=largura_bar, alinh='C', fator=0.60)
+    # com chave, sem ^FB: a largura da coluna foi calculada a partir do próprio número
+    c.texto(M, 158 + (64 - fonte_num) // 2, fonte_num, numero, largura=None if com_chave else x_bar - M - 10, fator=0.60)
+    # 2026-11-10: barra de 84 dots (~10,3 mm; era 70) — a chave tem ~69 mm de largura e o
+    # leitor precisa cruzar todas as barras; o texto embaixo encolheu para 14 para caber
+    # antes do cliente (226 no modelo compacto). Posição/módulo em `code128_geometria`.
+    c.code128(x_bar, 124, 84, barra['valor'], largura_max=largura_bar)
+    c.texto(x_bar, 210, 14, barra.get('texto') or f"{barra['rotulo']} {barra['valor']}", largura=largura_bar, alinh='C', fator=0.60)
 
 
 RODAPE_Y = 972   # linha que abre o rodapé; ele termina em ~1172 (folga até 1200)
@@ -202,7 +254,10 @@ RODAPE_Y = 972   # linha que abre o rodapé; ele termina em ~1172 (folga até 12
 
 def _rodape(c: _Canvas, dados: dict, y0: int = RODAPE_Y) -> None:
     """Antiga carta de transporte + linha "Conferido em" (igual nos dois modelos).
-    Sem as 2 linhas de endereço/telefone desde 2026-10-26 — o espaço virou itens."""
+    Sem as 2 linhas de endereço/telefone desde 2026-10-26 — o espaço virou itens.
+    2026-11-10: QR Code com a chave do DANFE no canto direito (15,6 mm), ao lado das
+    linhas de responsabilidade — o Code 128 do cabeçalho é comprido e baixo e lê mal
+    no TC21 e na câmera; o 2D lê de primeira, até no papel brilhante. Só com chave."""
     p = dados['pedido']
     c.linha(M, y0, CW)
 
@@ -210,13 +265,20 @@ def _rodape(c: _Canvas, dados: dict, y0: int = RODAPE_Y) -> None:
     # Título e "É de responsabilidade do lojista:" em linhas separadas — juntos
     # passam da largura e o ^FB desenharia o excesso por cima da linha seguinte.
     rod = dados['rodape']
-    c.texto(M, y0 + 8, 22, rod['titulo'], largura=CW)
-    c.texto(M, y0 + 32, 20, rod['subtitulo'], largura=CW)
+    barra = dados['barra']
+    com_qr = barra['rotulo'] == 'DANFE'
+    # Com QR, os textos ficam à esquerda dele (fator 0.40 medido no Labelary para
+    # essas frases: a mais longa, 78 caracteres em 18 dots, termina em ~550 dots).
+    largura_txt = CW - QR_RESERVA if com_qr else CW
+    c.texto(M, y0 + 8, 22, rod['titulo'], largura=largura_txt, fator=0.40)
+    c.texto(M, y0 + 32, 20, rod['subtitulo'], largura=largura_txt, fator=0.40)
     y = y0 + 56
     for texto in rod['responsabilidades']:
-        c.texto(M, y, 18, f'- {texto}', largura=CW)
+        c.texto(M, y, 18, f'- {texto}', largura=largura_txt, fator=0.40)
         y += 22
     c.linha(M, y + 6, CW, 1)
+    if com_qr:
+        c.qr(X2, (y0 + 8 + y + 6) // 2, barra['valor'])
 
     conferido = p['conferido_em']
     if conferido:

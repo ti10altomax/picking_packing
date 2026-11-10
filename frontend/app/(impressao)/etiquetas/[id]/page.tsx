@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { api, impressaoApi, type EtiquetasPedido, type EtiquetaVolume, type ModeloEtiqueta } from '@/lib/api'
 import { svgCode128 } from '@/lib/code128'
+import QRCode from 'qrcode'
 
 /**
  * Etiquetas de volume 10x15 cm para imprimir pelo navegador (qualquer
@@ -13,6 +14,10 @@ import { svgCode128 } from '@/lib/code128'
  * um para comparar): `padrao` (descrição + SKU, 10 por etiqueta) e `compacta`
  * (só SKU em 18 linhas × 2 ou 3 colunas, pedido da supervisão em 2026-10-23).
  * Cabeçalho e rodapé são os mesmos — 1 mm aqui ≈ 8 dots do ZPL.
+ *
+ * 2026-11-10: a barra ficou mais alta (10,5 mm) e o rodapé ganhou um QR Code com a
+ * mesma chave do DANFE (15,6 mm, pacote `qrcode`) no canto direito — o Code 128 de
+ * 44 dígitos é comprido e baixo e lia mal no coletor e na câmera; o 2D lê de primeira.
  *
  * 2026-11-09: o código de barras leva a chave de acesso do DANFE (44 dígitos) quando
  * existe. Ele ocupa tudo que sobra à direita do número do documento (o "NF nº" que
@@ -41,6 +46,8 @@ const CSS = `
 .etq .hr-fina { border-top: 0.25mm solid #000; margin: 0.8mm 0; }
 .etq .mini { font-size: 2.6mm; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; }
 .etq .corta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.etq .qr { flex-shrink: 0; }
+.etq .qr svg { width: 100%; height: 100%; display: block; shape-rendering: crispEdges; }
 .etq .duas { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .etq ul { list-style: disc; }
 `
@@ -94,7 +101,7 @@ function Cabecalho({ dados, et }: { dados: EtiquetasPedido; et: EtiquetaVolume }
           <div style={{ fontSize: comChave ? '6mm' : '8mm', fontWeight: 800, lineHeight: 1.05, whiteSpace: 'nowrap', marginTop: comChave ? '1mm' : 0 }}>{p.numero_externo}</div>
         </div>
         <div style={{ flex: comChave ? 1 : 'none', width: comChave ? undefined : '38mm', maxWidth: '70mm', paddingTop: '0.5mm', textAlign: 'center' }}>
-          <div dangerouslySetInnerHTML={{ __html: svgCode128(barra.valor, '9mm', '100%') }} />
+          <div dangerouslySetInnerHTML={{ __html: svgCode128(barra.valor, '10.5mm', '100%') }} />
           <div className="corta" style={{ fontSize: '2mm', fontWeight: 700, lineHeight: 1, marginTop: '0.3mm' }}>{barra.texto ?? `${barra.rotulo} ${barra.valor}`}</div>
         </div>
       </div>
@@ -103,16 +110,37 @@ function Cabecalho({ dados, et }: { dados: EtiquetasPedido; et: EtiquetaVolume }
 }
 
 /** Antiga carta de transporte + "Conferido em" — igual nos dois modelos */
+/** QR Code (ECC M, sem margem própria) como SVG inline — o `qrcode` gera assíncrono */
+function QrSvg({ valor, lado }: { valor: string; lado: string }) {
+  const [svg, setSvg] = useState('')
+  useEffect(() => {
+    let vivo = true
+    QRCode.toString(valor, { type: 'svg', errorCorrectionLevel: 'M', margin: 0 })
+      .then((s) => { if (vivo) setSvg(s) })
+      .catch(() => { if (vivo) setSvg('') })
+    return () => { vivo = false }
+  }, [valor])
+  return <div className="qr" style={{ width: lado, height: lado }} dangerouslySetInnerHTML={{ __html: svg }} />
+}
+
+/** Antiga carta de transporte + "Conferido em" — igual nos dois modelos.
+ *  2026-11-10: com chave do DANFE, QR Code de 15,6 mm à direita das responsabilidades. */
 function Rodape({ dados }: { dados: EtiquetasPedido }) {
   const p = dados.pedido
+  const comQr = dados.barra.rotulo === 'DANFE'
   return (
     <>
       <div className="hr" />
-      <div className="corta" style={{ fontSize: '2.7mm', fontWeight: 700 }}>{dados.rodape.titulo}</div>
-      <div className="corta" style={{ fontSize: '2.5mm', fontWeight: 700, lineHeight: 1.2 }}>{dados.rodape.subtitulo}</div>
-      <ul style={{ margin: '0.3mm 0 0', paddingLeft: '3mm', fontSize: '2.25mm', lineHeight: 1.25 }}>
-        {dados.rodape.responsabilidades.map((t, idx) => <li key={idx}>{t}</li>)}
-      </ul>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '2mm' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="corta" style={{ fontSize: '2.7mm', fontWeight: 700 }}>{dados.rodape.titulo}</div>
+          <div className="corta" style={{ fontSize: '2.5mm', fontWeight: 700, lineHeight: 1.2 }}>{dados.rodape.subtitulo}</div>
+          <ul style={{ margin: '0.3mm 0 0', paddingLeft: '3mm', fontSize: '2.25mm', lineHeight: 1.25 }}>
+            {dados.rodape.responsabilidades.map((t, idx) => <li key={idx} className="corta">{t}</li>)}
+          </ul>
+        </div>
+        {comQr && <QrSvg valor={dados.barra.valor} lado="15.6mm" />}
+      </div>
       <div className="hr-fina" />
       <div className="corta" style={{ fontSize: '2.5mm' }}>
         {p.conferido_em ? `Conferido em ${fmtData(p.conferido_em)}` : 'Conferência concluída'}
