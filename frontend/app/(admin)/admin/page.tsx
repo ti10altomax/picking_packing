@@ -276,6 +276,10 @@ export default function AdminPage() {
           agentes USB
         </Link>
         {' · '}
+        <Link href="/admin/agente" className="underline underline-offset-2 hover:text-ink transition-colors">
+          agente de impressão (exe)
+        </Link>
+        {' · '}
         <Link href="/admin/app" className="underline underline-offset-2 hover:text-ink transition-colors">
           app do coletor (APK)
         </Link>

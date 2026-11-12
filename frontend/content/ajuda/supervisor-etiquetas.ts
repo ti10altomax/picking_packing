@@ -54,7 +54,7 @@ export const supervisorEtiquetas: AjudaTela = {
     {
       nome: 'Dados da linha',
       descricao:
-        'Número, badges, quantidade de volumes ("2 vol."), cliente, transportadora, NF quando já existe, quem conferiu, data e sequência. Se uma tentativa falhou, aparece "última tentativa:" com o motivo.',
+        'Número, badges, quantidade de volumes ("2 vol."), cliente, transportadora, NF quando já existe, quem conferiu, data e sequência. Se uma tentativa falhou, aparece "última tentativa:" com o motivo. Se a etiqueta está esperando o computador da impressora USB, aparece "na fila do agente USB desde …".',
     },
   ],
   situacoes: [
@@ -77,6 +77,10 @@ export const supervisorEtiquetas: AjudaTela = {
     {
       quando: '"última tentativa:" em vermelho na linha.',
       oQueFazer: 'A impressora recusou o envio. Veja se está ligada e na rede, e tente de novo com "Etiqueta". Se repetir, avise o admin.',
+    },
+    {
+      quando: '"na fila do agente USB desde …" em roxo na linha.',
+      oQueFazer: 'A etiqueta foi mandada para uma impressora USB e o computador dela ainda não confirmou que saiu. Em geral a Zebra está desligada, sem etiquetas ou com a tampa aberta: assim que voltar, a etiqueta sai sozinha e o documento some daqui. Não mande de novo ("Imprimir todas" já pula essas linhas). Se demorar, veja Admin → Print Agents.',
     },
   ],
   dicas: [

@@ -122,9 +122,11 @@ def imprimir(request, pk):
     except services.ErroImpressao as e:
         return Response({'resultado': e.codigo, 'erro': e.mensagem}, status=http_status.HTTP_409_CONFLICT)
 
-    ok = reg.status == ImpressaoEtiqueta.Status.OK
+    # `na_fila` (agente USB) é sucesso do ponto de vista de quem clicou: o job está na fila
+    # e o agente confirma depois (o toast já diz "na fila do agente").
+    ok = reg.status in (ImpressaoEtiqueta.Status.OK, ImpressaoEtiqueta.Status.NA_FILA)
     return Response(
-        {'resultado': 'ok' if ok else 'erro', 'erro': reg.erro or None, 'impressao': _serializar_impressao(reg)},
+        {'resultado': reg.status if ok else 'erro', 'erro': reg.erro or None, 'impressao': _serializar_impressao(reg)},
         status=http_status.HTTP_200_OK if ok else http_status.HTTP_502_BAD_GATEWAY,
     )
 
@@ -143,6 +145,7 @@ def pendentes(request):
     exige_volumes = services.etiqueta_exige_volumes()
     for p in services.pendentes_qs():
         ultimo_erro = p.impressoes_etiqueta.filter(status=ImpressaoEtiqueta.Status.ERRO).first()
+        na_fila = services.na_fila_do_agente(p)
         bloqueio = services.motivo_bloqueio(p, exige_nf=exige_nf, exige_volumes=exige_volumes, qtd_volumes=p.n_volumes)
         lista.append({
             'id': p.id,
@@ -160,6 +163,11 @@ def pendentes(request):
             'pronta': bloqueio is None,
             'bloqueio': bloqueio,  # {codigo, mensagem} — sem_transportadora | sem_nf | volumes_divergentes
             'ultimo_erro': ultimo_erro.erro if ultimo_erro else None,
+            # job esperando o agente USB imprimir (2026-11-11): {impressora, desde}; null = nenhum
+            'na_fila': {
+                'impressora': na_fila.impressora.nome if na_fila.impressora else None,
+                'desde': na_fila.criado_em,
+            } if na_fila else None,
         })
     # A chave `aguardando_transportadora` ficou com esse nome por compatibilidade com o
     # APK já instalado; desde 2026-10-27 ela reúne o que aguarda o Senior (transportadora ou NF).

@@ -3,6 +3,7 @@ from django.urls import path, include
 from rest_framework_simplejwt.views import TokenRefreshView
 from apps.core.views import SeparaTokenView, metrics_protegido
 from apps.app_mobile.urls import urlpatterns_apk
+from apps.impressao.urls import urlpatterns_agente
 
 urlpatterns = [
     # /admin é do frontend (tela admin do Separa).
@@ -27,3 +28,6 @@ urlpatterns = [
 # /apk/ e /apk/separa-X.Y.Z.apk — página e download do app do coletor (fora do /api/,
 # URL curta para digitar no navegador do aparelho; o Caddy também manda pro backend)
 urlpatterns += urlpatterns_apk
+# /agente/, /agente/SeparaAgente-X.Y.Z.exe e /agente/agente.ini — download do agente de
+# impressão USB para o PC da Zebra (2026-11-12), mesmo desenho do /apk/
+urlpatterns += urlpatterns_agente

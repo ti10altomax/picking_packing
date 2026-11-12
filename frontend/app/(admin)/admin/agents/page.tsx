@@ -1,4 +1,5 @@
 'use client'
+import Link from 'next/link'
 import { useEffect, useState, useCallback } from 'react'
 import { adminApi } from '@/lib/api'
 
@@ -42,9 +43,19 @@ export default function AgentsPage() {
         </button>
       </div>
 
-      <div className="mb-4 p-4 bg-blue-50 text-blue-800 dark:bg-blue-500/10 dark:text-blue-300 rounded-xl text-sm">
-        Para registrar um novo agent, execute o binário na estação com Zebra USB.
-        O token gerado aparecerá aqui — copie e cole no campo <strong>Agent ID</strong> da impressora correspondente.
+      <div className="mb-4 p-4 bg-blue-50 text-blue-800 dark:bg-blue-500/10 dark:text-blue-300 rounded-xl text-sm space-y-1">
+        <p>
+          O programa e o agente.ini se baixam pelo navegador do PC da Zebra, na página publicada em{' '}
+          <Link href="/admin/agente" className="underline underline-offset-2">Admin → Agente de impressão</Link>.
+          Lá, rode <code className="font-mono">SeparaAgente.exe registrar</code>: o token gerado aparece aqui e no próprio terminal —
+          cole no campo <strong>Agent ID</strong> da impressora (tipo USB) em Impressoras.
+        </p>
+        <p>
+          Depois, no mesmo computador: <code className="font-mono">SeparaAgente.exe impressoras</code> (nome da fila do Windows
+          para o <code className="font-mono">agente.ini</code>), <code className="font-mono">teste</code> (sai uma etiqueta),{' '}
+          <code className="font-mono">instalar</code> e <code className="font-mono">iniciar</code> (serviço do Windows, como administrador).
+          A etiqueta só conta como impressa quando o agente confirma a saída.
+        </p>
       </div>
 
       {carregando ? (

@@ -117,7 +117,11 @@ function Linha({ p, onImprimir }: { p: EtiquetaPendente; onImprimir?: () => void
           {p.conferido_em ? ` · ${fmt(p.conferido_em)}` : ''}
           {p.conferente ? ` · ${p.conferente}` : ''}
         </Text>
-        {p.ultimo_erro ? (
+        {p.na_fila ? (
+          <Text className="text-xs text-violet-300 mt-0.5" numberOfLines={2}>
+            na fila do agente USB desde {fmt(p.na_fila.desde)}{p.na_fila.impressora ? ` (${p.na_fila.impressora})` : ''}
+          </Text>
+        ) : p.ultimo_erro ? (
           <Text className="text-xs text-red-400 mt-0.5" numberOfLines={2}>última tentativa: {p.ultimo_erro}</Text>
         ) : null}
       </View>

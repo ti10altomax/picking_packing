@@ -1,0 +1,28 @@
+; Agente de impressão USB do Separa — copie para agente.ini (mesma pasta do SeparaAgente.exe)
+
+[servidor]
+; Backend do Separa (produção: http://192.168.1.199:8003)
+url = http://192.168.1.199:8003
+; Preenchido por "SeparaAgente.exe registrar" — cole este mesmo token no campo
+; "Agent ID" da impressora (Admin → Impressoras, tipo USB)
+token =
+
+[impressora]
+; Nome EXATO da fila em Dispositivos e Impressoras ("SeparaAgente.exe impressoras" lista)
+nome_windows = ZDesigner ZD220-203dpi ZPL
+
+; Opcional: um agente atendendo mais de uma impressora do Separa.
+; id da impressora no Separa (Admin → Impressoras) = nome da fila no Windows
+;[impressoras]
+;3 = ZDesigner ZD220-203dpi ZPL
+;4 = ZDesigner ZT231-203dpi ZPL
+
+[agente]
+; segundos entre consultas à fila do servidor
+intervalo_jobs = 3
+; segundos entre sinais de vida (o Separa considera offline depois de 120 s)
+intervalo_heartbeat = 60
+; quanto esperar a etiqueta sair da fila do Windows antes de devolver erro
+confirmar_saida_s = 60
+; quantos dias de agente.log guardar
+log_dias = 14

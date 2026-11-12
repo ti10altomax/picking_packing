@@ -386,7 +386,8 @@ export type ImpressaoEtiqueta = {
   criado_em: string
   canal: 'rede' | 'agente' | 'navegador'
   canal_label: string
-  status: 'ok' | 'erro'
+  /** na_fila = job esperando o agente USB imprimir; vira ok/erro quando ele confirma (2026-11-11) */
+  status: 'ok' | 'erro' | 'na_fila'
   impressora: string | null
   impressora_id: number | null
   qtd_etiquetas: number
@@ -454,6 +455,8 @@ export type EtiquetaPendente = {
   /** Por que não está pronta (sem_transportadora | sem_nf | volumes_divergentes); null = pronta */
   bloqueio: BloqueioEtiqueta | null
   ultimo_erro: string | null
+  /** Job esperando o agente USB (2026-11-11); null = nenhum. Não mandar de novo enquanto houver. */
+  na_fila: { impressora: string | null; desde: string } | null
 }
 
 /** Motivo de a etiqueta não poder sair agora (regra única no backend) */
@@ -577,6 +580,41 @@ export const appApi = {
   publicar: (form: FormData) =>
     api.post('/api/app/versoes/', form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data as VersaoApp),
   apagar: (id: number) => api.delete(`/api/app/versoes/${id}/`),
+}
+
+// Agente de impressão USB — distribuição do SeparaAgente.exe (apps/impressao/distribuicao.py, 2026-11-12)
+export type VersaoAgente = {
+  id: number
+  versao: string
+  tamanho_bytes: number
+  sha256: string
+  notas: string
+  criado_em: string
+  criado_por: string | null
+  nome_arquivo: string  // SeparaAgente-X.Y.Z.exe
+  url: string           // absoluta — /agente/SeparaAgente-X.Y.Z.exe
+  ini_url: string       // /agente/agente.ini (gerado com a URL do servidor)
+  pagina: string        // http://IP:8003/agente/ — o que se abre no navegador do PC da Zebra
+}
+
+export type AgenteRegistrado = {
+  id: number
+  hostname: string
+  versao: string
+  ultimo_heartbeat: string | null
+  criado_em: string
+  online: boolean
+  desatualizado: boolean
+}
+
+export const agenteApi = {
+  listar: () =>
+    api.get('/api/impressao/agente/versoes/').then((r) => r.data as {
+      atual: VersaoAgente | null; versoes: VersaoAgente[]; agentes: AgenteRegistrado[]; ini: string; pagina: string
+    }),
+  publicar: (form: FormData) =>
+    api.post('/api/impressao/agente/versoes/', form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data as VersaoAgente),
+  apagar: (id: number) => api.delete(`/api/impressao/agente/versoes/${id}/`),
 }
 
 export const saudeApi = {

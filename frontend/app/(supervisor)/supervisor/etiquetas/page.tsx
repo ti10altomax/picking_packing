@@ -55,8 +55,10 @@ export default function EtiquetasPendentesPage() {
       return
     }
     guardarUltimaImpressora(String(destinoLote))
-    setLote({ total: prontas.length, feitas: 0, erros: [] })
-    for (const p of prontas) {
+    // Quem já tem job na fila do agente USB fica de fora: mandar de novo duplicaria a etiqueta
+    const alvo = prontas.filter((p) => !p.na_fila)
+    setLote({ total: alvo.length, feitas: 0, erros: [] })
+    for (const p of alvo) {
       try {
         await impressaoApi.imprimir(p.id, { impressora_id: destinoLote })
         setLote((l) => l && { ...l, feitas: l.feitas + 1 })
@@ -180,7 +182,11 @@ function Linha({ p, onImpresso }: { p: EtiquetaPendente; onImpresso: () => void 
           {p.conferente && <> por <strong className="text-ink">{p.conferente}</strong></>}
           {p.sequencia_numero && <> · seq. {p.sequencia_numero}</>}
         </p>
-        {p.ultimo_erro && (
+        {p.na_fila ? (
+          <p className="text-xs text-violet-700 dark:text-violet-300 mt-0.5">
+            na fila do agente USB desde {fmt(p.na_fila.desde)}{p.na_fila.impressora ? ` (${p.na_fila.impressora})` : ''} — sai quando o computador da impressora confirmar
+          </p>
+        ) : p.ultimo_erro && (
           <p className="text-xs text-red-600 dark:text-red-400 mt-0.5">última tentativa: {p.ultimo_erro}</p>
         )}
       </div>

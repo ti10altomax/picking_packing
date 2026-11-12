@@ -127,6 +127,9 @@ export default function ConferenciaDetalhe() {
   const [leitorLigado, setLeitorLigado] = useState(false)
   const [leitorOcupado, setLeitorOcupado] = useState(false)
   const leitorLigadoRef = useRef(false)
+  // trava do mesmo código no leitor contínuo: em coletor que apaga o feixe após cada leitura
+  // o módulo reacende na hora e a peça ainda está na frente — sem isso lançaria 2
+  const ultimaLeituraLeitor = useRef<{ codigo: string; ts: number } | null>(null)
 
   // Scanner de hardware (Zebra TC21 via DataWedge em modo teclado): um TextInput
   // sempre focado recebe os caracteres + Enter. Sem teclado virtual
@@ -581,6 +584,7 @@ export default function ConferenciaDetalhe() {
       return
     }
     leitorLigadoRef.current = true
+    ultimaLeituraLeitor.current = null
     setLeitorLigado(true)
   }
 
@@ -596,6 +600,12 @@ export default function ConferenciaDetalhe() {
     const cod = scanValue.trim()
     setScanValue('')
     if (!cod) return
+    if (leitorLigadoRef.current) {
+      const agora = Date.now()
+      const ult = ultimaLeituraLeitor.current
+      if (ult && ult.codigo === cod && agora - ult.ts < INTERVALO_REPETIR_MS) return
+      ultimaLeituraLeitor.current = { codigo: cod, ts: agora }
+    }
     processarCodigoLido(cod)
   }
 

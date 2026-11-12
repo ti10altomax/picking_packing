@@ -75,6 +75,8 @@ def _etiqueta(p):
     txt = f"{p.get('qtd_etiquetas') or '?'} etiqueta(s) · {p.get('impressora') or p.get('canal') or ''}"
     if p.get('automatica'):
         txt += ' · automática'
+    if p.get('agente'):
+        txt += f" · agente {p.get('agente')}"
     return txt
 
 
@@ -123,6 +125,7 @@ ROTULOS = {
     'conferencia_recebida': ('Conferência recebida', 'fluxo',
                              lambda p: f"de {p.get('origem_numero') or p.get('origem') or 'documento cancelado'}"),
     'etiqueta_impressa': ('Etiqueta de volume impressa', 'etiqueta', _etiqueta),
+    'etiqueta_enfileirada': ('Etiqueta na fila do agente USB', 'etiqueta', _etiqueta),
     'etiqueta_erro': ('Falha ao imprimir etiqueta', 'alerta', lambda p: p.get('erro') or ''),
     'carta_correcao': ('Carta de correção', 'fluxo', _carta),
     'carta_correcao_transmissao': ('Carta de correção transmitida', 'fluxo', _carta),

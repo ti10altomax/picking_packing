@@ -24,4 +24,4 @@ def imprimir_etiquetas(self, pedido_id: int, impressora_id: int):
     except ErroImpressao as e:
         logger.info(f'imprimir_etiquetas: {pedido} não elegível — {e.codigo}')
         return {'ok': False, 'motivo': e.codigo}
-    return {'ok': reg.status == 'ok', 'impressao_id': reg.id, 'erro': reg.erro}
+    return {'ok': reg.status in ('ok', 'na_fila'), 'status': reg.status, 'impressao_id': reg.id, 'erro': reg.erro}

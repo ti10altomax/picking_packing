@@ -308,7 +308,8 @@ export type ImpressaoEtiqueta = {
   criado_em: string
   canal: 'rede' | 'agente' | 'navegador'
   canal_label: string
-  status: 'ok' | 'erro'
+  /** na_fila = job esperando o agente USB imprimir; vira ok/erro quando ele confirma (2026-11-11) */
+  status: 'ok' | 'erro' | 'na_fila'
   impressora: string | null
   impressora_id: number | null
   qtd_etiquetas: number
@@ -345,6 +346,8 @@ export type EtiquetaPendente = {
   /** Por que não está pronta (sem_transportadora | sem_nf); null = pronta */
   bloqueio?: BloqueioEtiqueta | null
   ultimo_erro: string | null
+  /** Job esperando o agente USB (2026-11-11); null = nenhum. Não mandar de novo enquanto houver. */
+  na_fila: { impressora: string | null; desde: string } | null
 }
 
 /** Motivo de a etiqueta não poder sair agora (regra única no backend, 2026-10-27) */

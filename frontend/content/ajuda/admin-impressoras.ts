@@ -39,7 +39,7 @@ export const adminImpressoras: AjudaTela = {
     { quando: 'Teste: "offline — IP não configurado"', oQueFazer: 'Edite a impressora e preencha o IP.' },
     { quando: 'Teste: "offline — agent_id não configurado"', oQueFazer: 'Edite a impressora e cole o token do agente em Agent ID.' },
     { quando: 'Teste: "offline — agent não registrado ou sem heartbeat"', oQueFazer: 'O token não bate com nenhum agente ou o agente está parado. Confira em Print Agents.' },
-    { quando: 'Teste: "offline — último heartbeat há …"', oQueFazer: 'O agente parou de dar sinal. Ligue o computador da impressora e abra o agente.' },
+    { quando: 'Teste: "offline — último heartbeat há …"', oQueFazer: 'O agente parou de dar sinal. Ligue o computador da impressora; o serviço SeparaAgente sobe sozinho. Se não voltar, rode "SeparaAgente.exe status" e "SeparaAgente.exe iniciar" lá.' },
     { quando: 'Documento Conferido não imprime sozinho', oQueFazer: 'Confira se há Impressora padrão, se Imprimir automaticamente ao concluir está marcado, se o documento tem transportadora, se já foi faturado (com Só imprimir com NF emitida) e se os volumes batem com a nota (com Só imprimir com volumes iguais aos da NF). Gestão → Etiquetas mostra o motivo de cada um.' },
     { quando: 'Impressora padrão aparece como "nenhuma"', oQueFazer: 'Só aparecem no seletor as impressoras ativas. Cadastre ou reative uma e escolha de novo.' },
   ],

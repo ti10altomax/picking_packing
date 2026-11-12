@@ -22,6 +22,7 @@ import { adminSaude } from './admin-saude'
 import { adminApp } from './admin-app'
 import { adminImpressoras } from './admin-impressoras'
 import { adminAgents } from './admin-agents'
+import { adminAgente } from './admin-agente'
 import { etiquetaNavegador } from './etiqueta-navegador'
 
 /**
@@ -53,6 +54,7 @@ export const TELAS: AjudaTela[] = [
   adminApp,
   adminImpressoras,
   adminAgents,
+  adminAgente,
   etiquetaNavegador,
 ]
 

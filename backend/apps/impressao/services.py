@@ -166,9 +166,12 @@ def _registrar(pedido, *, canal, status, impressora=None, qtd=0, automatica=Fals
         pedido=pedido, impressora=impressora, canal=canal, status=status,
         qtd_etiquetas=qtd, automatica=automatica, usuario=usuario, erro=erro, print_job=print_job,
     )
+    acao = {
+        ImpressaoEtiqueta.Status.OK: 'etiqueta_impressa',
+        ImpressaoEtiqueta.Status.NA_FILA: 'etiqueta_enfileirada',
+    }.get(status, 'etiqueta_erro')
     PedidoLog.objects.create(
-        pedido=pedido, usuario=usuario,
-        acao='etiqueta_impressa' if status == ImpressaoEtiqueta.Status.OK else 'etiqueta_erro',
+        pedido=pedido, usuario=usuario, acao=acao,
         payload={
             'canal': canal, 'modelo': modelo_etiqueta(),
             'impressora': impressora.nome if impressora else None,
@@ -231,13 +234,56 @@ def imprimir(pedido: Pedido, *, impressora: Impressora | None = None, canal: str
             impressora=impressora, qtd=qtd, automatica=automatica, usuario=usuario,
         )
 
-    # USB via agente: enfileira; o agente local puxa em /etiquetas/agents/jobs/
+    # USB via agente: enfileira; o agente local (agente/separa_agente.py) puxa em
+    # /etiquetas/agents/jobs/ e confirma em .../ack/. Fica `na_fila` até o ack
+    # (`confirmar_job`, via signal do PrintJob) — desde 2026-11-11; antes contava `ok` aqui.
     with transaction.atomic():
         job = PrintJob.objects.create(impressora=impressora, conteudo=zpl)
         return _registrar(
-            pedido, canal=ImpressaoEtiqueta.Canal.AGENTE, status=ImpressaoEtiqueta.Status.OK,
+            pedido, canal=ImpressaoEtiqueta.Canal.AGENTE, status=ImpressaoEtiqueta.Status.NA_FILA,
             impressora=impressora, qtd=qtd, automatica=automatica, usuario=usuario, print_job=job,
         )
+
+
+def confirmar_job(job: PrintJob) -> ImpressaoEtiqueta | None:
+    """Fecha o registro `na_fila` ligado ao `PrintJob` conforme o ack do agente USB:
+    `retirado` → `ok` (etiqueta impressa de verdade), `erro` → `erro` (o pedido volta para
+    Gestão → Etiquetas com o motivo). Chamado pelo signal de `PrintJob` (apps/impressao/signals.py)
+    porque a view `ack_job` é do módulo congelado e não é alterada. Idempotente."""
+    if job.status == PrintJob.Status.PENDENTE:
+        return None
+    reg = (
+        ImpressaoEtiqueta.objects
+        .filter(print_job=job, status=ImpressaoEtiqueta.Status.NA_FILA)
+        .select_related('pedido', 'impressora')
+        .first()
+    )
+    if reg is None:
+        return None
+    ok = job.status == PrintJob.Status.RETIRADO
+    reg.status = ImpressaoEtiqueta.Status.OK if ok else ImpressaoEtiqueta.Status.ERRO
+    reg.erro = '' if ok else (job.erro or 'o agente devolveu erro sem detalhe')
+    reg.save(update_fields=['status', 'erro'])
+    agente = None
+    if reg.impressora and reg.impressora.agent_id:
+        from apps.pedidos.models import PrintAgent
+        agente = PrintAgent.objects.filter(token=reg.impressora.agent_id).values_list('hostname', flat=True).first()
+    PedidoLog.objects.create(
+        pedido=reg.pedido, usuario=None,
+        acao='etiqueta_impressa' if ok else 'etiqueta_erro',
+        payload={
+            'canal': reg.canal, 'impressora': reg.impressora.nome if reg.impressora else None,
+            'impressora_id': reg.impressora_id, 'qtd_etiquetas': reg.qtd_etiquetas,
+            'automatica': reg.automatica, 'agente': agente, 'print_job_id': job.id,
+            'erro': reg.erro or None,
+        },
+    )
+    logger.info(
+        f'etiqueta {reg.pedido}: agente {agente or "?"} {"imprimiu" if ok else "falhou"} o job {job.id}'
+        + ('' if ok else f' — {reg.erro}'),
+        extra={'pedido': reg.pedido_id, 'print_job': job.id},
+    )
+    return reg
 
 
 def completar_dados_nf(pedido: Pedido) -> bool:
@@ -300,7 +346,9 @@ def disparar_se_pendente(pedido: Pedido) -> dict | None:
     limite = timezone.now() - dt.timedelta(days=_janela_dias())
     if not pedido.conferido_em or pedido.conferido_em < limite:
         return None
-    if pedido.impressoes_etiqueta.filter(status=ImpressaoEtiqueta.Status.OK).exists():
+    if pedido.impressoes_etiqueta.filter(
+        status__in=[ImpressaoEtiqueta.Status.OK, ImpressaoEtiqueta.Status.NA_FILA],
+    ).exists():
         return None
     return disparar_automatica(pedido)
 
@@ -309,8 +357,20 @@ def disparar_se_pendente(pedido: Pedido) -> dict | None:
 # Pendentes
 # ---------------------------------------------------------------------------
 
+def na_fila_do_agente(pedido: Pedido) -> ImpressaoEtiqueta | None:
+    """Registro `na_fila` mais recente do pedido (job esperando o agente USB), ou None."""
+    return (
+        pedido.impressoes_etiqueta.filter(status=ImpressaoEtiqueta.Status.NA_FILA)
+        .select_related('impressora').order_by('-criado_em').first()
+    )
+
+
 def pendentes_qs():
     """Conferidos dentro da janela do sync sem nenhuma impressão `ok`.
+
+    Pedido com job `na_fila` do agente USB continua aqui (ainda não há etiqueta na caixa);
+    a view marca `na_fila` para a tela mostrar "na fila do agente" em vez de convidar a
+    imprimir de novo.
 
     Retira/sem frete sem transportadora nunca vão ter etiqueta (não existe
     transportadora) e ficam de fora; entrega (CIF) sem transportadora entra como
