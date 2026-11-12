@@ -33,6 +33,7 @@ export const adminAgente: AjudaTela = {
     { quando: 'Computador "offline".', oQueFazer: 'Veja se está ligado e na rede. Nele, "SeparaAgente.exe status" mostra serviço, servidor e impressora; "SeparaAgente.exe iniciar" religa o serviço.' },
   ],
   dicas: [
+    'O agente vai no computador onde a Zebra está plugada pelo cabo USB. Uma impressora compartilhada de outro computador aparece na lista de filas, mas o serviço não consegue imprimir por ela.',
     'O link /agente/ não pede login: qualquer PC da rede abre e baixa. O token de cada agente continua protegido em Print Agents.',
     'O comando "SeparaAgente.exe status" no PC avisa quando há versão mais nova publicada aqui.',
     'A impressora precisa estar cadastrada em Admin → Impressoras com tipo USB e o token do agente em Agent ID. Só então os jobs chegam a esse PC.',

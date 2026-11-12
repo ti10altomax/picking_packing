@@ -268,14 +268,17 @@ def pagina_agente(request):
       {f'<ul class="notas">{notas}</ul>' if notas else ''}
       <h2>Instalar no PC da impressora</h2>
       <ol class="passos">
-        <li>Confira que a Zebra aparece em <strong>Dispositivos e Impressoras</strong> (driver ZDesigner instalado).</li>
+        <li>Faça isto <strong>no computador onde a Zebra está plugada pelo cabo USB</strong>, com ela em
+            <strong>Dispositivos e Impressoras</strong> (driver ZDesigner instalado). Impressora compartilhada de outro
+            computador aparece na lista, mas o serviço não consegue imprimir por ela.</li>
         <li>Crie a pasta <code>C:\\SeparaAgente</code> e mova para lá os dois arquivos baixados.
             Renomeie <code>SeparaAgente-{v.versao}.exe</code> para <code>SeparaAgente.exe</code>.</li>
-        <li>Abra o <strong>Prompt de Comando como administrador</strong> e entre na pasta: <code>cd C:\\SeparaAgente</code></li>
+        <li>Abra o <strong>Prompt de Comando</strong> (comum) e entre na pasta: <code>cd C:\\SeparaAgente</code></li>
         <li><code>SeparaAgente.exe impressoras</code> — copie o nome exato da Zebra para <code>nome_windows</code> no <code>agente.ini</code> (Bloco de Notas).</li>
         <li><code>SeparaAgente.exe registrar</code> — mostra o <strong>token</strong>. No Separa, Admin → Impressoras → Nova: tipo USB, cole o token em Agent ID.</li>
         <li><code>SeparaAgente.exe teste</code> — sai uma etiqueta de teste.</li>
-        <li><code>SeparaAgente.exe instalar</code> e <code>SeparaAgente.exe iniciar</code> — o serviço sobe sozinho com o Windows.</li>
+        <li><code>SeparaAgente.exe instalar</code> e <code>SeparaAgente.exe iniciar</code> — estes dois em um Prompt de Comando
+            <strong>como administrador</strong>; o serviço sobe sozinho com o Windows.</li>
         <li><code>SeparaAgente.exe status</code> — tudo verde? Em Admin → Print Agents o PC aparece online.</li>
       </ol>
       <p class="obs">Atualizar: baixe o .exe novo, <code>SeparaAgente.exe parar</code>, troque o arquivo, <code>SeparaAgente.exe iniciar</code>. O <code>agente.ini</code> (com o token) fica.</p>"""

@@ -15,7 +15,12 @@ não pega os jobs (ficam pendentes no servidor e saem quando ela voltar); fila d
 Windows inexistente ou job que não saiu no prazo → `ack` com erro e o pedido volta
 para Gestão → Etiquetas com o motivo.
 
-Uso (console; instalar/remover o serviço pede "Executar como administrador"):
+A fila tem que ser a da Zebra plugada NESTE PC. Impressora compartilhada por outro PC
+(porta \\PC\fila) aparece na lista, mas o serviço (conta LocalSystem) e o prompt "como
+administrador" não têm acesso ao compartilhamento: o job morre com "erro no job"
+(2026-11-12, ZD220 compartilhada pelo ALT0092). `teste`, `status` e o log avisam.
+
+Uso (prompt comum; só instalar/remover/iniciar/parar pedem "Executar como administrador"):
 
   SeparaAgente.exe registrar            registra este PC no servidor e grava o token no agente.ini
   SeparaAgente.exe impressoras          lista as filas de impressão do Windows
@@ -46,7 +51,7 @@ import urllib.request
 from logging.handlers import TimedRotatingFileHandler
 from typing import Any
 
-VERSAO = '1.0.0'
+VERSAO = '1.0.1'
 NOME_SERVICO = 'SeparaAgente'
 NOME_EXIBICAO = 'Separa - Agente de impressão USB'
 DESCRICAO_SERVICO = 'Imprime as etiquetas de volume do Separa na Zebra USB deste computador.'
@@ -91,6 +96,15 @@ def _tupla(versao: str) -> tuple[int, ...]:
         return tuple(int(p) for p in str(versao).strip().split('.'))
     except ValueError:
         return (0,)
+
+
+def _elevado() -> bool:
+    """True quando o processo roda "como administrador" (UAC) — sessão sem as conexões de rede do usuário."""
+    try:
+        import ctypes
+        return bool(ctypes.windll.shell32.IsUserAnAdmin())  # type: ignore[attr-defined]
+    except Exception:
+        return False
 
 
 def pasta_base() -> str:
@@ -338,6 +352,27 @@ class ImpressoraWindows:
         finally:
             wp.ClosePrinter(h)
 
+    @staticmethod
+    def porta_remota(info: Any) -> str:
+        """Porta UNC (\\\\PC\\fila) = impressora compartilhada por OUTRO PC; '' quando é local (USB)."""
+        porta = str(info.get('pPortName', '') or '')
+        return porta if porta.startswith('\\\\') else ''
+
+    def aviso_compartilhada(self, info: Any = None) -> str:
+        """Texto de aviso quando a fila é compartilhada por outro PC (ou '' se é local).
+        O Local Port escreve no compartilhamento com a sessão de quem mandou o job: o serviço
+        (LocalSystem) e um prompt elevado não têm essa sessão → o job falha com "erro no job"."""
+        porta = self.porta_remota(info or self.info())
+        if not porta:
+            return ''
+        txt = (f'a fila "{self.nome}" é uma impressora compartilhada por outro PC ({porta}). '
+               f'O agente tem que rodar no PC onde a Zebra está plugada pelo USB: como serviço '
+               f'(conta LocalSystem) este PC não tem acesso ao compartilhamento e todo job falha com "erro no job".')
+        if _elevado():
+            txt += (' Este prompt está "como administrador" e também não tem a sessão de rede do usuário — '
+                    'para testar daqui, rode em um Prompt de Comando comum.')
+        return txt
+
     def estado(self, info: Any = None) -> tuple[bool, str]:
         """(pronta?, motivo). Offline/desligada/sem papel/tampa aberta → não pronta."""
         info = info or self.info()
@@ -390,7 +425,12 @@ class ImpressoraWindows:
                 if status & JOB_STATUS_FALHA:
                     motivos = [txt for bit, txt in JOB_STATUS.items() if status & bit]
                     self._apagar(h, job_id)
-                    return False, 'spooler: ' + (', '.join(motivos) or f'status 0x{status:x}')
+                    erro = 'spooler: ' + (', '.join(motivos) or f'status 0x{status:x}')
+                    if status & 0x2 and self.porta_remota(wp.GetPrinter(h, 2)):
+                        erro += (' — a fila é compartilhada por outro PC e esta sessão não tem acesso ao '
+                                 'compartilhamento (serviço LocalSystem ou prompt "como administrador"); '
+                                 'instale o agente no PC onde a Zebra está plugada')
+                    return False, erro
                 if time.monotonic() >= limite:
                     self._apagar(h, job_id)
                     pronta, motivo = self.estado()
@@ -532,7 +572,8 @@ class Agente:
             return
         imp = ImpressoraWindows(nome)
         try:
-            pronta, motivo = imp.estado()
+            info = imp.info()
+            pronta, motivo = imp.estado(info)
         except FilaInexistente as e:
             self._ack(job_id, f'{e} — confira o nome em "SeparaAgente.exe impressoras"')
             return
@@ -545,6 +586,8 @@ class Agente:
             return
         if self.sem_repetir.limpar(f'imp:{nome}'):
             self.log.info(f'impressora "{nome}" voltou')
+        if imp.porta_remota(info):
+            self.sem_repetir(f'unc:{nome}', logging.WARNING, imp.aviso_compartilhada(info))
 
         try:
             dados = bytes.fromhex(job['conteudo'])
@@ -722,6 +765,9 @@ def cmd_impressoras(_args) -> int:
     print(f'{"FILA (nome_windows)":<{larg}}  {"PORTA":<18} {"ESTADO":<32} DRIVER')
     for f in filas:
         print(f'{f["nome"]:<{larg}}  {f["porta"][:18]:<18} {f["estado"][:32]:<32} {f["driver"]}')
+    if any(f['porta'].startswith('\\\\') for f in filas):
+        print('\nporta \\\\PC\\fila = impressora compartilhada por outro PC: não serve para o serviço — '
+              'o agente vai no PC onde a Zebra está plugada.')
     cfg = Config.carregar()
     if cfg.nome_windows:
         achou = any(f['nome'] == cfg.nome_windows for f in filas)
@@ -743,6 +789,9 @@ def cmd_teste(args: list[str]) -> int:
         print(f'FALHOU: {e}')
         return 1
     print(f'fila "{nome}": {motivo}')
+    aviso = imp.aviso_compartilhada()
+    if aviso:
+        print(f'AVISO: {aviso}')
     if not pronta:
         print('Impressora não está pronta — ligue/conecte e tente de novo.')
         return 1
@@ -766,10 +815,15 @@ def cmd_status(_args) -> int:
         print(f'servidor       : FORA — {e}')
     try:
         pub = Servidor(cfg.url).versao_publicada()
-        if pub.get('versao') and _tupla(pub['versao']) > _tupla(VERSAO):
-            print(f'ATUALIZAÇÃO    : versão {pub["versao"]} publicada no servidor (esta é {VERSAO}) — baixe em {pub.get("pagina")}')
-        elif pub.get('versao'):
+        pv = pub.get('versao')
+        if pv and _tupla(pv) > _tupla(VERSAO):
+            print(f'ATUALIZAÇÃO    : versão {pv} publicada no servidor (esta é {VERSAO}) — baixe em {pub.get("pagina")}')
+        elif pv and _tupla(pv) == _tupla(VERSAO):
             print(f'versão         : {VERSAO} (é a publicada no servidor)')
+        elif pv:
+            print(f'versão         : {VERSAO} (mais nova que a publicada, {pv} — publique este exe em Admin → Agente de impressão)')
+        else:
+            print(f'versão         : {VERSAO} (servidor ainda sem versão publicada)')
     except ErroServidor:
         pass
     if cfg.token:
@@ -780,8 +834,13 @@ def cmd_status(_args) -> int:
             print(f'token          : {e}')
     for nome in sorted(cfg.filas()):
         try:
-            _p, motivo = ImpressoraWindows(nome).estado()
+            imp = ImpressoraWindows(nome)
+            info = imp.info()
+            _p, motivo = imp.estado(info)
             print(f'impressora     : "{nome}" — {motivo}')
+            aviso = imp.aviso_compartilhada(info)
+            if aviso:
+                print(f'AVISO          : {aviso}')
         except FilaInexistente as e:
             print(f'impressora     : {e}')
     print(f'serviço        : {_estado_servico()}')

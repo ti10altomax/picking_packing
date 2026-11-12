@@ -28,7 +28,8 @@ Código em `backend/apps/impressao/distribuicao.py` (model `VersaoAgente`, migra
    criar a pasta `C:\SeparaAgente\`, mover os dois para lá e renomear o executável para
    `SeparaAgente.exe`. (Sem o Separa: copiar `SeparaAgente.exe` + `agente.ini.exemplo`
    renomeado para `agente.ini` e ajustar a `url`.)
-3. Abrir o **Prompt de Comando como administrador** nessa pasta e rodar, nesta ordem:
+3. Abrir o **Prompt de Comando** nessa pasta (comum — só `instalar`/`iniciar` pedem
+   "como administrador") e rodar, nesta ordem:
 
 ```bat
 SeparaAgente.exe impressoras
@@ -51,7 +52,7 @@ SeparaAgente.exe instalar
 SeparaAgente.exe iniciar
 SeparaAgente.exe status
 ```
-Instala o serviço `SeparaAgente` (início automático), inicia e mostra o estado geral: servidor,
+(`instalar` e `iniciar` em prompt **como administrador**.) Instala o serviço `SeparaAgente` (início automático), inicia e mostra o estado geral: servidor,
 token aceito, impressora pronta, serviço rodando. Em Admin → Print Agents o PC deve aparecer **online**.
 
 Pronto: a impressão automática (ou o botão Etiqueta) com essa impressora passa a sair na Zebra.
@@ -66,7 +67,7 @@ Pronto: a impressão automática (ou o botão Etiqueta) com essa impressora pass
 | `status` | Configuração, servidor, token, impressora(s) e serviço |
 | `rodar` | Roda em primeiro plano, log no console (Ctrl+C sai) — para depurar |
 | `instalar` / `remover` | Cria/apaga o serviço do Windows (administrador) |
-| `iniciar` / `parar` / `reiniciar` | Controla o serviço |
+| `iniciar` / `parar` / `reiniciar` | Controla o serviço (administrador) |
 
 Sem argumentos o executável tenta rodar como serviço; aberto por duplo clique, mostra a ajuda.
 
@@ -101,6 +102,13 @@ log_dias = 14               ; retenção do agente.log
   imprimir" com "última tentativa: …" e o histórico do pedido mostra "Falha ao imprimir etiqueta".
 - **Servidor fora**: o agente continua tentando (log sem repetir a cada 3 s). Job impresso cujo
   `ack` falhou é lembrado em memória e confirmado quando o servidor voltar — não reimprime.
+- **Impressora compartilhada por outro PC** (porta `\\PC\fila` em `impressoras`): o Local Port do
+  Windows escreve no compartilhamento com a sessão de rede de quem mandou o job. O serviço
+  (LocalSystem) não tem essa sessão, e um prompt "como administrador" também não (sessão elevada
+  sem as conexões do usuário) — o job morre com **"spooler: erro no job"** enquanto a página de
+  teste do Windows, mandada pela sessão normal, sai (visto em 2026-11-12 com a ZD220 compartilhada
+  pelo ALT0092). `teste`, `status` e o log avisam. Solução: instalar o agente no PC onde a Zebra
+  está plugada; para um teste pontual a partir de outro PC, usar um prompt comum.
 - **Sem token** (serviço instalado antes do `registrar`): relê o `agente.ini` a cada minuto.
 - Log em `agente.log` ao lado do exe (rotação diária). Início/parada/queda também no Visor de
   Eventos do Windows (origem `SeparaAgente`).

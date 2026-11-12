@@ -12,12 +12,12 @@ export const adminAgents: AjudaTela = {
     { src: '/manual/admin-agents.png', legenda: 'Print Agents sem nenhum agente registrado.' },
   ],
   passos: [
-    'No computador com a Zebra USB, com o driver da Zebra instalado, copie SeparaAgente.exe e agente.ini para uma pasta (por exemplo C:\\SeparaAgente).',
-    'Abra o Prompt de Comando como administrador nessa pasta e rode "SeparaAgente.exe impressoras". Copie o nome exato da Zebra para o campo nome_windows do agente.ini.',
+    'No computador onde a Zebra está plugada pelo cabo USB, com o driver da Zebra instalado, copie SeparaAgente.exe e agente.ini para uma pasta (por exemplo C:\\SeparaAgente). Tem que ser esse computador: uma impressora compartilhada de outro não funciona com o serviço.',
+    'Abra o Prompt de Comando nessa pasta e rode "SeparaAgente.exe impressoras". Copie o nome exato da Zebra para o campo nome_windows do agente.ini.',
     'Rode "SeparaAgente.exe registrar". O programa se registra no sistema e mostra o token.',
     'Nesta tela, toque em Atualizar. O agente aparece na lista com o nome do computador. Toque em ver token e em copiar (é o mesmo token que o programa mostrou).',
     'Abra Admin → Impressoras e crie a impressora com tipo USB (ou edite a existente). Cole o token no campo Agent ID e toque em Salvar.',
-    'De volta ao computador, rode "SeparaAgente.exe teste" para sair uma etiqueta de teste, depois "SeparaAgente.exe instalar" e "SeparaAgente.exe iniciar". O serviço passa a subir sozinho com o Windows.',
+    'De volta ao computador, rode "SeparaAgente.exe teste" para sair uma etiqueta de teste. Depois, em um Prompt de Comando como administrador, "SeparaAgente.exe instalar" e "SeparaAgente.exe iniciar". O serviço passa a subir sozinho com o Windows.',
     'Volte aqui e confira se o agente está online.',
   ],
   elementos: [
@@ -32,6 +32,7 @@ export const adminAgents: AjudaTela = {
     { quando: 'Agente "offline"', oQueFazer: 'Confira se o computador da Zebra está ligado e na rede. Nele, rode "SeparaAgente.exe status": mostra se o serviço está rodando, se o servidor responde e se a impressora está pronta. "SeparaAgente.exe iniciar" religa o serviço.' },
     { quando: '"nunca conectou"', oQueFazer: 'O registro foi feito, mas o serviço ainda não subiu. No computador da Zebra, rode "SeparaAgente.exe instalar" e "SeparaAgente.exe iniciar" como administrador e aguarde um minuto.' },
     { quando: 'Agente online, mas a etiqueta não sai e o documento fica "na fila do agente USB" em Gestão → Etiquetas.', oQueFazer: 'A Zebra está desligada, sem etiquetas, com a tampa aberta ou com o cabo solto. O agente espera ela voltar e imprime sozinho. O arquivo agente.log, na pasta do programa, diz o motivo.' },
+    { quando: '"SeparaAgente.exe teste" falha com "spooler: erro no job", mas a página de teste do Windows sai.', oQueFazer: 'A fila do Windows é uma impressora compartilhada por outro computador, ou o prompt está "como administrador". O programa avisa isso na própria tela. O agente precisa ficar no computador onde a Zebra está plugada pelo USB; para um teste a partir de outro computador, use um Prompt de Comando comum.' },
     { quando: 'Documento com "última tentativa: fila de impressão … não existe neste Windows".', oQueFazer: 'O nome em nome_windows do agente.ini não é o da fila. Rode "SeparaAgente.exe impressoras", corrija o nome, reinicie o serviço e imprima de novo pelo botão Etiqueta.' },
   ],
   dicas: [
