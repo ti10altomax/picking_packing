@@ -6,7 +6,8 @@ Roda no PC onde a Zebra está plugada por cabo USB. Em loop:
   1. avisa que está vivo  — POST /api/etiquetas/agents/heartbeat/  (a cada minuto)
   2. puxa a fila          — GET  /api/etiquetas/agents/jobs/        (a cada poucos segundos)
   3. imprime cada job RAW na fila de impressão do Windows (driver ZDesigner ou
-     "Generic / Text Only") e espera o job sair do spooler
+     "Generic / Text Only"), com um `~JX` na frente (limpa formato ZPL parcial preso na
+     impressora — 2026-11-13, GC420t), e espera o job sair do spooler
   4. confirma             — POST /api/etiquetas/agents/jobs/<id>/ack/  ({erro: ""} ou o motivo)
 
 O servidor só marca a etiqueta como impressa quando o `ack` chega sem erro
@@ -51,7 +52,13 @@ import urllib.request
 from logging.handlers import TimedRotatingFileHandler
 from typing import Any
 
-VERSAO = '1.0.1'
+VERSAO = '1.0.2'
+# Vai na frente de todo job. `~JX` cancela um formato ZPL parcial que tenha ficado preso no
+# buffer da impressora (dado truncado, cabo puxado no meio de um job…) — com o buffer sujo a
+# Zebra engole todo `^XA…^XZ` seguinte em silêncio, com a luz verde, enquanto comandos
+# imediatos (`~WC`, `~PH`) e EPL continuam saindo. Sem formato preso o comando não faz nada.
+# Visto em 2026-11-13 numa GC420t: o `teste` 'saía' do spooler e nada imprimia até o `~JX`.
+PREFIXO_ZPL = b'~JX\r\n'
 NOME_SERVICO = 'SeparaAgente'
 NOME_EXIBICAO = 'Separa - Agente de impressão USB'
 DESCRICAO_SERVICO = 'Imprime as etiquetas de volume do Separa na Zebra USB deste computador.'
@@ -385,7 +392,9 @@ class ImpressoraWindows:
         return True, 'pronta'
 
     def imprimir_raw(self, dados: bytes, titulo: str) -> int:
-        """Manda os bytes como estão (datatype RAW) e devolve o id do job no spooler."""
+        """Manda os bytes como estão (datatype RAW), precedidos de `PREFIXO_ZPL` (`~JX`, limpa
+        formato parcial preso na impressora), e devolve o id do job no spooler."""
+        dados = PREFIXO_ZPL + dados
         wp = _win32print()
         h = self._abrir()
         try:

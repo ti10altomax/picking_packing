@@ -109,6 +109,11 @@ log_dias = 14               ; retenção do agente.log
   teste do Windows, mandada pela sessão normal, sai (visto em 2026-11-12 com a ZD220 compartilhada
   pelo ALT0092). `teste`, `status` e o log avisam. Solução: instalar o agente no PC onde a Zebra
   está plugada; para um teste pontual a partir de outro PC, usar um prompt comum.
+- **Todo job sai com `~JX` na frente** (1.0.2). Um formato ZPL parcial preso no buffer da Zebra
+  (dado truncado, cabo puxado no meio de um job) faz a impressora engolir **todo** `^XA…^XZ`
+  seguinte em silêncio, com a luz verde, enquanto `~WC`/`~PH` e EPL continuam saindo — o `teste`
+  "sai" do spooler e nada imprime. O `~JX` cancela esse formato e não faz nada quando não há
+  (visto em 2026-11-13 numa GC420t). Se ainda assim só EPL imprimir, mande `~PS` + `~JA` RAW.
 - **Sem token** (serviço instalado antes do `registrar`): relê o `agente.ini` a cada minuto.
 - Log em `agente.log` ao lado do exe (rotação diária). Início/parada/queda também no Visor de
   Eventos do Windows (origem `SeparaAgente`).

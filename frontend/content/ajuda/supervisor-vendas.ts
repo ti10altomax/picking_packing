@@ -17,6 +17,8 @@ export const supervisorVendas: AjudaTela = {
   passos: [
     'Abra Vendas. A lista já vem atualizada: o sistema busca no Senior sozinho, a cada poucos minutos, só os documentos dos últimos dias.',
     'Procure um documento pelo número do pedido, pelo número da NF ou pelo nome do cliente no campo "Buscar por pedido, NF ou cliente". O número do pedido também acha as notas que saíram dele.',
+    'Recebeu a relação das notas de outro setor? Toque em "Colar lista", cole os números (separados por vírgula ou um por linha) ou toque em "Abrir arquivo .txt", e depois em "Buscar". O que não estiver no Separa é trazido do Senior na hora. As notas pendentes já vêm marcadas: confira e toque em "Enviar para conferência".',
+    'Buscou um número e não achou? Se a nota for mais antiga que a janela do sistema, toque em "Buscar … no Senior" embaixo da mensagem: ela entra na lista na hora.',
     'Use os filtros para reduzir a lista: Pedidos ou Notas fiscais, Entrega, Retira ou Sem frete, Com transportadora ou Sem transportadora.',
     'Marque a caixa de cada documento que vai para o galpão. A caixa do cabeçalho marca todos os documentos que estão na tela.',
     'Confira a barra de baixo: ela mostra quantos documentos você marcou. Para desfazer, toque em "Limpar".',
@@ -24,6 +26,20 @@ export const supervisorVendas: AjudaTela = {
     'Se a lista tiver mais documentos do que a tela mostra, toque em "Carregar mais".',
   ],
   elementos: [
+    {
+      nome: 'Colar lista',
+      descricao:
+        'Abre a caixa para colar a relação de notas que vem de outro setor (ou abrir um .txt). Aceita números separados por vírgula, ponto e vírgula, espaço ou um por linha; o que não for número é ignorado. O sistema separa o resultado em "Prontas para enviar" (já marcadas), "Já em outra etapa" (com o botão Ver) e "Não encontradas".',
+    },
+    {
+      nome: 'trazida do Senior agora (azul)',
+      descricao: 'Na lista colada: a nota não estava no Separa e foi importada do Senior nesse momento, com os itens dela.',
+    },
+    {
+      nome: 'Buscar … no Senior',
+      descricao:
+        'Aparece quando a busca por um número não acha nada. Consulta o Senior na hora e, se a nota estiver fechada lá, traz para a lista. A busca normal não faz isso sozinha para não importar nota a cada número digitado pela metade.',
+    },
     {
       nome: 'Pedidos / Notas fiscais',
       descricao:
@@ -88,10 +104,26 @@ export const supervisorVendas: AjudaTela = {
     {
       quando: 'Um documento que você espera não aparece.',
       oQueFazer:
-        'O sistema só importa os últimos dias do Senior. Confirme que o documento está aberto no Senior e espere alguns minutos pela próxima atualização.',
+        'O sistema só importa sozinho os últimos dias do Senior. Digite o número na busca e toque em "Buscar … no Senior": se a nota estiver fechada lá, ela entra na lista na hora. Se não achar, confira o número — a nota pode não ter sido fechada ainda ou ter sido cancelada.',
+    },
+    {
+      quando: 'Na lista colada, uma nota ficou em "Não encontradas".',
+      oQueFazer:
+        'Ela não está no Separa nem no Senior como nota fechada. Confira o número com quem mandou a lista; se a nota ainda vai ser fechada, cole de novo mais tarde.',
+    },
+    {
+      quando: 'Na lista colada, uma nota ficou em "Já em outra etapa".',
+      oQueFazer:
+        'Alguém já enviou, ou a nota é de um pedido que já está em conferência. Não precisa enviar de novo; toque em "Ver" para abrir a lista onde ela está.',
+    },
+    {
+      quando: 'Na lista colada aparece em vermelho "O Senior não respondeu".',
+      oQueFazer:
+        'As notas que já estavam no Separa foram encontradas normalmente; só as outras não puderam ser consultadas. Toque em "Buscar" de novo daqui a pouco. Se repetir, avise o admin.',
     },
   ],
   dicas: [
+    'A relação de notas pode vir por e-mail ou de outro sistema: selecione, copie e cole em "Colar lista" — não precisa digitar uma a uma.',
     'Filtre por "Sem transportadora" antes de enviar: dá tempo de acertar o cadastro no Senior e a etiqueta sai sem espera.',
     'Documento cancelado no Senior some da lista sozinho.',
   ],

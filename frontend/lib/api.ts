@@ -306,9 +306,28 @@ export type Localizacao = {
   conferente: string | null
 }
 
+// Uma linha de `buscar_lote` (lista de notas colada em Vendas, 2026-11-13): a localização
+// mais o que se olha antes de enviar.
+export type LinhaLote = Localizacao & {
+  cliente: string
+  transportadora: string
+  frete: string
+  qtd_itens: number
+  pedidos_origem: string[]
+}
+export type BuscaLote = {
+  // origem: 'separa' já estava aqui · 'senior' foi trazida do Senior agora · 'nenhum' não achou
+  resultados: { numero: string; origem: 'separa' | 'senior' | 'nenhum'; documentos: LinhaLote[] }[]
+  invalidos: string[]
+  senior_consultadas: number
+  senior_falhou: boolean
+}
+
 export const supervisorApi = {
   localizar: (q: string) =>
     api.get('/api/pedidos/localizar/', { params: { q } }).then((r) => r.data as Localizacao[]),
+  buscarLote: (numeros: string[]) =>
+    api.post('/api/pedidos/buscar_lote/', { numeros }).then((r) => r.data as BuscaLote),
   listarPendentes: (params: { search?: string; page?: number; tipo?: string; frete?: string; transportadora?: 'com' | 'sem' | '' } = {}) =>
     api.get('/api/pedidos/', {
       params: { status: 'pendente', ...params },

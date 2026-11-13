@@ -1,3 +1,5 @@
+import logging
+
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -9,6 +11,12 @@ from django.utils import timezone
 from .models import DivergenciaBarra, Pedido, PedidoItem, PedidoLog
 from .nf_vinculo import conflito_conferencia_dupla
 from .serializers import PedidoSerializer, PedidoListSerializer
+
+logger = logging.getLogger(__name__)
+
+# Quantos números o Sup. Vendas pode colar de uma vez em `buscar_lote` (cada número que não
+# está no Separa vira uma consulta ao Senior).
+LOTE_MAX = 500
 
 
 def _localizacao(p: Pedido, numero: str) -> dict:
@@ -43,6 +51,36 @@ def _localizacao(p: Pedido, numero: str) -> dict:
         'sequencia': p.sequencia_id, 'sequencia_numero': p.sequencia.numero if p.sequencia else None,
         'conferente': conferente or None,
     }
+
+
+def _documentos_do_numero(numero: str):
+    """Documentos em andamento que respondem por um número: o próprio (pedido ou NF), o
+    pedido faturado nessa NF (`nf_numero`) ou a NF que saiu desse pedido (`pedidos_origem`).
+    Mesmo critério do `localizar`; o escopo antigo congelado fica de fora."""
+    qtd_itens = (
+        PedidoItem.objects.filter(pedido=OuterRef('pk'))
+        .order_by().values('pedido').annotate(c=Count('id')).values('c')
+    )
+    return list(
+        Pedido.objects.filter(
+            Q(numero_externo=numero) | Q(nf_numero=numero) | Q(pedidos_origem__contains=[numero]),
+        )
+        .exclude(status__in=('faturado', 'aguardando_etiquetar', 'concluido'))
+        .select_related('conferente', 'sequencia')
+        .annotate(qtd_itens=Coalesce(Subquery(qtd_itens, output_field=IntegerField()), 0))
+        .order_by('-criado_em')[:5]
+    )
+
+
+def _linha_lote(p: Pedido, numero: str) -> dict:
+    """Uma linha do `buscar_lote`: a localização mais o que o Sup. Vendas olha antes de
+    enviar (cliente, transportadora, frete, itens)."""
+    linha = _localizacao(p, numero)
+    linha.update({
+        'cliente': p.cliente, 'transportadora': p.transportadora, 'frete': p.frete,
+        'qtd_itens': p.qtd_itens, 'pedidos_origem': p.pedidos_origem or [],
+    })
+    return linha
 
 
 class PedidoViewSet(viewsets.ModelViewSet):
@@ -248,6 +286,69 @@ class PedidoViewSet(viewsets.ModelViewSet):
             .order_by('-criado_em')[:5]
         )
         return Response([_localizacao(p, numero) for p in docs])
+
+    # ------------------------------------------------------------------
+    # Lista de notas colada (2026-11-13): o setor que fatura manda a relação das NFs e o
+    # Sup. Vendas procurava uma a uma na busca. Agora cola a lista (ou abre o .txt) e o
+    # sistema acha cada número — no Separa e, quando não está aqui, no Senior na hora
+    # (`importar_nf`, mesma regra do sync: faturamento de pedido em conferência vira
+    # vínculo, o resto vira documento Pendente). O botão "Buscar no Senior" da busca vazia
+    # usa o mesmo endpoint com um número só. Só a lista pede o Senior — a busca normal
+    # não, para não importar nota a cada número digitado pela metade.
+    # ------------------------------------------------------------------
+    @action(detail=False, methods=['post'])
+    def buscar_lote(self, request):
+        if request.user.perfil not in ('supervisor_vendas', 'admin'):
+            return Response({'erro': 'restrito ao Supervisor de Vendas'}, status=status.HTTP_403_FORBIDDEN)
+        brutos = request.data.get('numeros')
+        if not isinstance(brutos, list) or not brutos:
+            return Response({'erro': 'numeros (lista) obrigatório'}, status=status.HTTP_400_BAD_REQUEST)
+
+        numeros, invalidos, vistos = [], [], set()
+        for bruto in brutos:
+            s = str(bruto).strip()
+            if not s:
+                continue
+            if not s.isdigit():
+                invalidos.append(s)
+                continue
+            n = str(int(s))
+            if n not in vistos:
+                vistos.add(n)
+                numeros.append(n)
+        if len(numeros) > LOTE_MAX:
+            return Response({'erro': f'no máximo {LOTE_MAX} números por vez'}, status=status.HTTP_400_BAD_REQUEST)
+
+        from apps.senior.tasks import importar_nf  # lazy: tasks importa models de vários apps
+
+        resultados, senior_consultadas, senior_falhou = [], 0, False
+        for numero in numeros:
+            docs = _documentos_do_numero(numero)
+            origem = 'separa' if docs else 'nenhum'
+            if not docs and not senior_falhou:
+                senior_consultadas += 1
+                try:
+                    importar_nf(numero)
+                except Exception:
+                    # Oracle fora: não insistir nos próximos (cada um esperaria o timeout)
+                    logger.exception('buscar_lote: falha ao consultar a NF no Senior', extra={'nf': numero})
+                    senior_falhou = True
+                else:
+                    docs = _documentos_do_numero(numero)
+                    if docs:
+                        origem = 'senior'
+            resultados.append({
+                'numero': numero, 'origem': origem,
+                'documentos': [_linha_lote(p, numero) for p in docs],
+            })
+        logger.info(
+            'buscar_lote: %d número(s), %d consultado(s) no Senior', len(numeros), senior_consultadas,
+            extra={'usuario': request.user.username, 'senior_falhou': senior_falhou},
+        )
+        return Response({
+            'resultados': resultados, 'invalidos': invalidos,
+            'senior_consultadas': senior_consultadas, 'senior_falhou': senior_falhou,
+        })
 
     # ------------------------------------------------------------------
     # Sup. Vendas — seleção em lote (Pendente → Selecionado)

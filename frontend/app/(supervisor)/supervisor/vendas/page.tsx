@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { supervisorApi, type Paginado } from '@/lib/api'
 import { DocBadges } from '@/components/ui/DocBadges'
 import { OndeEsta } from '@/components/pedidos/OndeEsta'
+import { ListaNotasModal } from '@/components/pedidos/ListaNotas'
 import { useToast } from '@/components/Toast'
 
 type Pedido = {
@@ -28,6 +29,9 @@ export default function SupervisorVendasPage() {
   const [carregandoMais, setCarregandoMais] = useState(false)
   const [selecionados, setSelecionados] = useState<Set<number>>(new Set())
   const [enviando, setEnviando] = useState(false)
+  // "Colar lista" (2026-11-13): a relação de notas que vem de outro setor, de uma vez
+  const [listaAberta, setListaAberta] = useState(false)
+  const [buscandoSenior, setBuscandoSenior] = useState(false)
   const [busca, setBusca] = useState('')
   const [buscaAtiva, setBuscaAtiva] = useState('')
   const [tipo, setTipo] = useState('')      // '' | 'pedido' | 'nota_fiscal'
@@ -100,11 +104,11 @@ export default function SupervisorVendasPage() {
     if (proximaPagina) await carregar(buscaAtiva, proximaPagina, true)
   }
 
-  async function enviarParaConferencia() {
-    if (selecionados.size === 0) return
+  /** Envia `ids` (da barra de seleção ou do modal "Colar lista"). Devolve se deu certo. */
+  async function enviarParaConferencia(ids: number[]): Promise<boolean> {
+    if (ids.length === 0) return false
     setEnviando(true)
     try {
-      const ids = Array.from(selecionados)
       const res = await supervisorApi.selecionar(ids)
       setSelecionados(new Set())
       // conflitos = pedido × NF dele (faturamento parcial): o servidor barra conferir os dois
@@ -129,10 +133,45 @@ export default function SupervisorVendasPage() {
         toast.info('Nenhum documento enviado', { detalhe: 'Eles já tinham saído da lista de pendentes.' })
       }
       await carregar(buscaAtiva, 1, false)
+      return true
     } catch {
       toast.erro('Erro ao enviar pedidos')
+      return false
     } finally {
       setEnviando(false)
+    }
+  }
+
+  // Busca vazia com um número: o sync só traz os últimos dias; a pessoa pede o Senior
+  // de propósito (botão), não a cada número digitado pela metade — por isso não é
+  // automático. Mesmo endpoint da lista colada, com um número só.
+  async function buscarNoSenior() {
+    const numero = buscaAtiva.trim()
+    if (!/^\d+$/.test(numero) || buscandoSenior) return
+    setBuscandoSenior(true)
+    try {
+      const r = await supervisorApi.buscarLote([numero])
+      const docs = r.resultados[0]?.documentos ?? []
+      const pendente = docs.find((d) => d.status === 'pendente')
+      if (r.senior_falhou) {
+        toast.erro('O Senior não respondeu', { detalhe: 'Tente de novo daqui a pouco.' })
+      } else if (pendente) {
+        const rotulo = `${pendente.tipo === 'nota_fiscal' ? 'NF' : 'Pedido'} ${pendente.numero_externo}`
+        toast.ok(r.resultados[0].origem === 'senior' ? `${rotulo} trazida do Senior` : `${rotulo} já estava na lista`, {
+          detalhe: pendente.cliente || undefined,
+        })
+        await carregar(buscaAtiva, 1, false)
+      } else if (docs.length) {
+        toast.info(`${numero} já está em outra etapa`, { detalhe: docs[0].descricao })
+      } else {
+        toast.aviso(`${numero} não está no Senior como nota fechada`, {
+          detalhe: 'Confira o número; a nota pode não ter sido fechada ainda ou ter sido cancelada.',
+        })
+      }
+    } catch {
+      toast.erro('Não foi possível consultar o Senior')
+    } finally {
+      setBuscandoSenior(false)
     }
   }
 
@@ -145,12 +184,21 @@ export default function SupervisorVendasPage() {
           <h1 className="text-2xl font-semibold text-ink">Pedidos pendentes</h1>
           <p className="text-sm text-ink-muted">Selecione os pedidos e notas fiscais que vão para conferência</p>
         </div>
-        <button
-          onClick={() => carregar(buscaAtiva, 1, false)}
-          className="text-sm text-blue-600 dark:text-blue-400 min-h-[44px] px-2"
-        >
-          Atualizar
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setListaAberta(true)}
+            className="bg-surface-card hover:bg-surface-elev border border-surface-border text-ink rounded-lg px-4 min-h-[44px] text-sm font-medium transition-colors"
+            title="Colar a relação de notas recebida de outro setor ou abrir um .txt"
+          >
+            Colar lista
+          </button>
+          <button
+            onClick={() => carregar(buscaAtiva, 1, false)}
+            className="text-sm text-blue-600 dark:text-blue-400 min-h-[44px] px-2"
+          >
+            Atualizar
+          </button>
+        </div>
       </div>
 
       <div className="mb-3">
@@ -188,6 +236,19 @@ export default function SupervisorVendasPage() {
           <div className="py-6 space-y-4">
             <p className="text-ink-subtle text-center">Nada encontrado para “{buscaAtiva}” nesta lista.</p>
             <OndeEsta busca={buscaAtiva} lista="vendas" />
+            {/^\d+$/.test(buscaAtiva.trim()) && (
+              <div className="text-center">
+                <button
+                  type="button"
+                  onClick={buscarNoSenior}
+                  disabled={buscandoSenior}
+                  className="bg-orange-500 hover:bg-orange-400 text-white rounded-xl px-6 py-3 text-sm font-semibold min-h-[44px] disabled:opacity-50 transition-colors"
+                >
+                  {buscandoSenior ? 'Consultando o Senior…' : `Buscar ${buscaAtiva.trim()} no Senior`}
+                </button>
+                <p className="text-xs text-ink-subtle mt-2">O sistema só importa sozinho os últimos dias; aqui ele traz a nota na hora.</p>
+              </div>
+            )}
           </div>
         ) : (
           <p className="text-ink-subtle text-center py-12">Nenhum documento pendente com esses filtros.</p>
@@ -275,7 +336,7 @@ export default function SupervisorVendasPage() {
                 Limpar
               </button>
               <button
-                onClick={enviarParaConferencia}
+                onClick={() => enviarParaConferencia(Array.from(selecionados))}
                 disabled={enviando}
                 className="bg-orange-500 hover:bg-orange-400 text-white px-5 py-2 rounded-lg text-sm font-semibold min-h-[44px] disabled:opacity-50 shadow-lg shadow-orange-500/30 transition-all"
               >
@@ -284,6 +345,10 @@ export default function SupervisorVendasPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {listaAberta && (
+        <ListaNotasModal onClose={() => setListaAberta(false)} onEnviar={enviarParaConferencia} />
       )}
     </div>
   )

@@ -9,8 +9,8 @@ import { supervisorApi, type Localizacao } from '@/lib/api'
  * Mostrar no lugar do "nenhum resultado" quando a busca é um número.
  */
 
-// Paleta de status do CLAUDE.md
-const COR: Record<string, string> = {
+// Paleta de status do CLAUDE.md (também usada pelo modal "Colar lista" de Vendas)
+export const COR_STATUS: Record<string, string> = {
   pendente: 'bg-zinc-200 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200',
   selecionado: 'bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300',
   atribuido: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-500/15 dark:text-yellow-300',
@@ -29,6 +29,11 @@ const ROTA: Record<string, (l: Localizacao) => string> = {
   conferidos: () => '/supervisor/conferidos',
   nao_conformes: () => '/supervisor/nao-conformes',
   cancelados: () => '/supervisor/cancelados',
+}
+
+/** Rota da lista em que o documento está (ou undefined). */
+export function rotaDaLocalizacao(l: Localizacao): string | undefined {
+  return ROTA[l.lista]?.(l)
 }
 
 export function OndeEsta({ busca, lista }: { busca: string; lista: Localizacao['lista'] }) {
@@ -54,13 +59,13 @@ export function OndeEsta({ busca, lista }: { busca: string; lista: Localizacao['
       </p>
       <ul className="mt-3 space-y-2">
         {fora.map((l) => {
-          const rota = ROTA[l.lista]?.(l)
+          const rota = rotaDaLocalizacao(l)
           return (
             <li key={l.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl bg-surface-card px-3 py-2.5 border border-surface-border">
               <span className="font-mono font-bold text-ink">
                 {l.tipo === 'nota_fiscal' ? 'NF ' : 'Pedido '}{l.numero_externo}
               </span>
-              <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${COR[l.status] ?? COR.pendente}`}>
+              <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${COR_STATUS[l.status] ?? COR_STATUS.pendente}`}>
                 {l.status_label}
               </span>
               <span className="text-sm text-ink-muted min-w-0 flex-1 basis-48">

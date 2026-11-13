@@ -1,0 +1,15 @@
+[servidor]
+url = http://localhost:8000
+token = a17072cf6d0058a657eb1f9968cb8bd43ce683e01fd1c706dc5893dd4f585b00
+
+[impressora]
+nome_windows = OneNote (Desktop)
+
+[agente]
+intervalo_jobs = 2
+confirmar_saida_s = 20
+
+
+[impressoras]
+6 = OneNote (Desktop)
+7 = Fila Que Nao Existe
