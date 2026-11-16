@@ -9,6 +9,9 @@ import { HistoricoBotao } from '@/components/pedidos/HistoricoPedido'
 import { TrocarTransportadora } from '@/components/cce/TrocarTransportadora'
 import { useCcePermissao } from '@/lib/useCcePermissao'
 import { ItensPorVolume, type ItemDoc, type VolumeDoc } from '@/components/pedidos/ItensPorVolume'
+import { useAuthStore } from '@/stores/authStore'
+import { useDialog } from '@/components/Dialog'
+import { useToast } from '@/components/Toast'
 
 type Pedido = {
   id: number
@@ -48,6 +51,11 @@ export default function ConferidosPage() {
   const transportadoraRef = useRef<'' | 'com' | 'sem'>('')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const podeCce = useCcePermissao() === true   // Corrigir NF só para os perfis em Configuracao.cce_perfis
+  const { user } = useAuthStore()
+  const ehAdmin = user?.perfil === 'admin'     // Devolver para Vendas é só do admin (2026-11-16)
+  const dialog = useDialog()
+  const toast = useToast()
+  const [devolvendo, setDevolvendo] = useState<number | null>(null)
 
   // Acordeão: quais estão abertos + cache + estado de loading por pedido
   const [expandidos, setExpandidos] = useState<Set<number>>(new Set())
@@ -98,6 +106,30 @@ export default function ConferidosPage() {
 
   async function carregarMais() {
     if (proximaPagina) await carregar(buscaAtiva, proximaPagina, true)
+  }
+
+  // Conferência que não vale (teste, documento errado): volta a Pendente do zero —
+  // volumes apagados, separado zerado, etiqueta esquecida. Só admin; sempre confirmado.
+  async function devolver(p: Pedido) {
+    const ok = await dialog.confirm({
+      title: 'Devolver para Vendas?',
+      message: `${p.tipo === 'nota_fiscal' ? 'A NF' : 'O pedido'} ${p.numero_externo} volta a Pendente como se nunca tivesse sido conferido: os volumes são apagados, as quantidades zeradas e a etiqueta terá que sair de novo. O histórico fica guardado.`,
+      variant: 'danger',
+      confirmText: 'Devolver',
+    })
+    if (!ok) return
+    setDevolvendo(p.id)
+    try {
+      await supervisorApi.devolverConferido(p.id)
+      toast.ok(`${p.numero_externo} voltou para Vendas`, { detalhe: 'Está em Pendente, sem volumes.' })
+      setPedidos((prev) => prev.filter((x) => x.id !== p.id))
+      setCount((c) => Math.max(0, c - 1))
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { erro?: string } } })?.response?.data?.erro
+      toast.erro('Não deu para devolver', { detalhe: msg })
+    } finally {
+      setDevolvendo(null)
+    }
   }
 
   async function alternarExpansao(id: number) {
@@ -250,6 +282,20 @@ export default function ConferidosPage() {
                             ...(a.etiqueta_bloqueio !== undefined ? { etiqueta_bloqueio: a.etiqueta_bloqueio } : {}),
                           })}
                         />
+                      )}
+                      {ehAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => devolver(p)}
+                          disabled={devolvendo === p.id}
+                          title="Volta o documento para Pendente (tela de Vendas), apagando volumes e quantidades"
+                          className="inline-flex items-center gap-1 text-xs text-red-700 dark:text-red-300 border border-red-200 dark:border-red-500/30 rounded-lg px-2 min-h-[32px] hover:bg-red-50 dark:hover:bg-red-500/10 disabled:opacity-50 transition-colors"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3" />
+                          </svg>
+                          {devolvendo === p.id ? 'Devolvendo…' : 'Devolver para Vendas'}
+                        </button>
                       )}
                     </div>
                     </div>

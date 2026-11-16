@@ -119,6 +119,14 @@ ROTULOS = {
     'pedido_nao_conforme': ('Marcado não conforme', 'alerta', _nc),
     'nao_conforme_retornado': ('Voltou para a fila', 'fluxo',
                                lambda p: f"era {MOTIVOS_NC.get(p.get('motivo_anterior'), p.get('motivo_anterior') or '')}".strip()),
+    # Devolver para Vendas (admin, 2026-11-16) — também usado pelo acerto manual de 16/11
+    'conferido_retornado': ('Devolvido para Vendas', 'alerta',
+                            lambda p: ' · '.join(x for x in (
+                                f"era {p.get('status_anterior') or 'conferido'}",
+                                f"{len(p.get('volumes_apagados') or [])} volume(s) apagado(s)",
+                                p.get('motivo') or '',
+                            ) if x)),
+    'selecao_retornada': ('Seleção desfeita', 'alerta', lambda p: f"era {p.get('status_anterior') or 'selecionado'}"),
     'cancelado': ('Cancelado', 'alerta', _cancelado),
     'conferencia_transferida': ('Conferência transferida', 'fluxo',
                                 lambda p: f"para {p.get('destino_numero') or p.get('destino') or 'documento reemitido'}"),

@@ -326,8 +326,9 @@ export type BuscaLote = {
 export const supervisorApi = {
   localizar: (q: string) =>
     api.get('/api/pedidos/localizar/', { params: { q } }).then((r) => r.data as Localizacao[]),
-  buscarLote: (numeros: string[]) =>
-    api.post('/api/pedidos/buscar_lote/', { numeros }).then((r) => r.data as BuscaLote),
+  // `para`: 'vendas' (default, busca no Senior o que falta) | 'patio' (só o que já está no Separa)
+  buscarLote: (numeros: string[], para: 'vendas' | 'patio' = 'vendas') =>
+    api.post('/api/pedidos/buscar_lote/', { numeros, para }).then((r) => r.data as BuscaLote),
   listarPendentes: (params: { search?: string; page?: number; tipo?: string; frete?: string; transportadora?: 'com' | 'sem' | '' } = {}) =>
     api.get('/api/pedidos/', {
       params: { status: 'pendente', ...params },
@@ -358,6 +359,9 @@ export const supervisorApi = {
     api.get('/api/pedidos/', {
       params: { status: 'conferido', ...params },
     }).then((r) => r.data),
+  // Devolver para Vendas (admin, 2026-11-16): Conferido → Pendente, apaga volumes e zera o separado
+  devolverConferido: (id: number, motivo?: string) =>
+    api.post(`/api/conferidos/${id}/devolver/`, { motivo: motivo ?? '' }).then((r) => r.data),
 }
 
 export const adminApi = {

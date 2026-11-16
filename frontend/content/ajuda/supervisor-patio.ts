@@ -21,6 +21,7 @@ export const supervisorPatio: AjudaTela = {
     'Na barra que aparece embaixo, escolha o destino: "Nova sequência" ou uma sequência já aberta.',
     'Toque em "Criar sequência" (ou "Adicionar à sequência"). Ao criar uma nova, a tela da sequência abre sozinha.',
     'Para dar andamento, toque no card da sequência e atribua os pedidos a um conferente.',
+    'Recebeu a relação das notas pronta? Toque em "Colar lista", cole os números (separados por vírgula ou um por linha; "151281-151290" vale pelo intervalo inteiro) ou toque em "Abrir arquivo .txt", e depois em "Buscar". O que está aguardando sequência já vem marcado: escolha o destino no rodapé e toque em "Enviar para a sequência".',
   ],
   elementos: [
     {
@@ -56,6 +57,11 @@ export const supervisorPatio: AjudaTela = {
     {
       nome: 'Atualizar',
       descricao: 'Recarrega sequências e fila. Use quando o Sup. Vendas acabou de enviar documentos.',
+    },
+    {
+      nome: 'Colar lista',
+      descricao:
+        'Abre a caixa para colar a relação de notas (ou abrir um .txt) e mandar tudo de uma vez para uma sequência. Aceita números separados por vírgula, ponto e vírgula, espaço ou um por linha, e intervalos com traço ("151281-151290" vira os dez números). O resultado vem em "Prontas para a sequência" (já marcadas), "Já em outra etapa" (com o botão Ver — inclui o que ainda está Pendente em Vendas) e "Não encontradas". Diferente de Vendas, aqui o Senior não é consultado: o Pátio só sequencia o que já foi selecionado.',
     },
   ],
   situacoes: [

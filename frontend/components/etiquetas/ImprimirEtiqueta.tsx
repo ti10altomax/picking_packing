@@ -1,5 +1,6 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { createPortal } from 'react-dom'
 import { impressaoApi, type BloqueioEtiqueta, type ImpressoraEtiqueta } from '@/lib/api'
 import { useToast } from '@/components/Toast'
 
@@ -63,7 +64,36 @@ export function ImprimirEtiqueta({
   const [enviando, setEnviando] = useState(false)
   const [feedback, setFeedback] = useState<{ ok: boolean; msg: string } | null>(null)
   const ref = useRef<HTMLDivElement>(null)
+  // O seletor sai num portal com posição fixa (2026-11-16): dentro da linha ele era cortado
+  // pelo `overflow-hidden` do card quando a lista tinha poucas linhas (busca por um pedido).
+  const popRef = useRef<HTMLDivElement>(null)
+  const [posicao, setPosicao] = useState<CSSProperties | null>(null)
   const toast = useToast()
+
+  useLayoutEffect(() => {
+    if (!aberto) { setPosicao(null); return }
+    const LARGURA = 288  // w-72
+    const ALTURA_MAX = 360
+    const calcular = () => {
+      const r = ref.current?.getBoundingClientRect()
+      if (!r) return
+      const right = Math.max(8, window.innerWidth - r.right)
+      const left = window.innerWidth - right - LARGURA < 8 ? 8 : undefined
+      const abreParaCima = r.bottom + ALTURA_MAX > window.innerHeight && r.top > ALTURA_MAX
+      setPosicao(
+        abreParaCima
+          ? { position: 'fixed', bottom: window.innerHeight - r.top + 4, right, left }
+          : { position: 'fixed', top: r.bottom + 4, right, left },
+      )
+    }
+    calcular()
+    window.addEventListener('scroll', calcular, true)
+    window.addEventListener('resize', calcular)
+    return () => {
+      window.removeEventListener('scroll', calcular, true)
+      window.removeEventListener('resize', calcular)
+    }
+  }, [aberto])
 
   useEffect(() => {
     if (!aberto) return
@@ -76,7 +106,9 @@ export function ImprimirEtiqueta({
   useEffect(() => {
     if (!aberto) return
     const fora = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setAberto(false)
+      const alvo = e.target as Node
+      if (ref.current?.contains(alvo) || popRef.current?.contains(alvo)) return
+      setAberto(false)
     }
     document.addEventListener('mousedown', fora)
     return () => document.removeEventListener('mousedown', fora)
@@ -135,8 +167,8 @@ export function ImprimirEtiqueta({
         <span className="text-[11px] text-ink-subtle mt-0.5 whitespace-nowrap">impressa {quando}</span>
       )}
 
-      {aberto && (
-        <div className="absolute right-0 top-full mt-1 z-30 w-72 bg-surface-card border border-surface-border rounded-xl shadow-xl dark:shadow-black/40 p-3 text-left">
+      {aberto && posicao && typeof document !== 'undefined' && createPortal(
+        <div ref={popRef} style={posicao} className="z-50 w-72 bg-surface-card border border-surface-border rounded-xl shadow-xl dark:shadow-black/40 p-3 text-left">
           <p className="text-xs font-semibold text-ink-subtle uppercase tracking-wider mb-2">Imprimir em</p>
           {impressoras === null ? (
             <p className="text-sm text-ink-muted">Carregando…</p>
@@ -183,7 +215,8 @@ export function ImprimirEtiqueta({
               {feedback.msg}
             </p>
           )}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )

@@ -17,7 +17,7 @@ export const supervisorVendas: AjudaTela = {
   passos: [
     'Abra Vendas. A lista já vem atualizada: o sistema busca no Senior sozinho, a cada poucos minutos, só os documentos dos últimos dias.',
     'Procure um documento pelo número do pedido, pelo número da NF ou pelo nome do cliente no campo "Buscar por pedido, NF ou cliente". O número do pedido também acha as notas que saíram dele.',
-    'Recebeu a relação das notas de outro setor? Toque em "Colar lista", cole os números (separados por vírgula ou um por linha) ou toque em "Abrir arquivo .txt", e depois em "Buscar". O que não estiver no Separa é trazido do Senior na hora. As notas pendentes já vêm marcadas: confira e toque em "Enviar para conferência".',
+    'Recebeu a relação das notas de outro setor? Toque em "Colar lista", cole os números (separados por vírgula ou um por linha; "151281-151290" vale pelo intervalo inteiro) ou toque em "Abrir arquivo .txt", e depois em "Buscar". O que não estiver no Separa é trazido do Senior na hora. As notas pendentes já vêm marcadas: confira e toque em "Enviar para conferência".',
     'Buscou um número e não achou? Se a nota for mais antiga que a janela do sistema, toque em "Buscar … no Senior" embaixo da mensagem: ela entra na lista na hora.',
     'Use os filtros para reduzir a lista: Pedidos ou Notas fiscais, Entrega, Retira ou Sem frete, Com transportadora ou Sem transportadora.',
     'Marque a caixa de cada documento que vai para o galpão. A caixa do cabeçalho marca todos os documentos que estão na tela.',
@@ -29,7 +29,7 @@ export const supervisorVendas: AjudaTela = {
     {
       nome: 'Colar lista',
       descricao:
-        'Abre a caixa para colar a relação de notas que vem de outro setor (ou abrir um .txt). Aceita números separados por vírgula, ponto e vírgula, espaço ou um por linha; o que não for número é ignorado. O sistema separa o resultado em "Prontas para enviar" (já marcadas), "Já em outra etapa" (com o botão Ver) e "Não encontradas".',
+        'Abre a caixa para colar a relação de notas que vem de outro setor (ou abrir um .txt). Aceita números separados por vírgula, ponto e vírgula, espaço ou um por linha, e intervalos com traço ("151281-151290" vira os dez números; um intervalo com mais de 500 números é ignorado e avisado); o que não for número é ignorado. O sistema separa o resultado em "Prontas para enviar" (já marcadas), "Já em outra etapa" (com o botão Ver) e "Não encontradas".',
     },
     {
       nome: 'trazida do Senior agora (azul)',

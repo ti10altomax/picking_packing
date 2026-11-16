@@ -1416,6 +1416,80 @@ def retornar_nao_conforme(request, pk):
     return Response({'ok': True, 'status': pedido.status})
 
 
+
+# ---------------------------------------------------------------------------
+# Conferidos — "Devolver para Vendas" (admin, 2026-11-16)
+# Conferência que não vale (teste, documento errado): o documento volta a Pendente
+# como se nunca tivesse entrado no fluxo. Só admin, de propósito: apaga volumes e
+# zera o separado; o rastro fica no PedidoLog (`conferido_retornado`).
+# ---------------------------------------------------------------------------
+
+@api_view(['POST'])
+def devolver_conferido(request, pk):
+    """Conferido → Pendente: apaga volumes, zera `qtd_separada`, limpa seleção, sequência,
+    conferente, separador, campos do Senior e impressões da etiqueta (senão o botão diria
+    "Reimprimir" e os beats não imprimiriam a próxima). Nada foi gravado no Senior (WS de
+    volumes ainda é placeholder), então não há o que desfazer lá.
+    """
+    if request.user.perfil != 'admin':
+        return Response({'erro': 'restrito ao Admin'}, status=http_status.HTTP_403_FORBIDDEN)
+
+    with transaction.atomic():
+        pedido = get_object_or_404(Pedido.objects.select_for_update(of=('self',)), pk=pk)
+        if pedido.status != Pedido.Status.CONFERIDO:
+            return Response(
+                {'erro': f'pedido em status "{pedido.get_status_display()}", só Conferido pode ser devolvido'},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        sequencia_anterior = pedido.sequencia
+        payload = {
+            'motivo': (request.data.get('motivo') or '').strip()[:500],
+            'status_anterior': pedido.status,
+            'conferido_em': pedido.conferido_em.isoformat() if pedido.conferido_em else None,
+            'conferente': pedido.conferente.username if pedido.conferente else None,
+            'sequencia': sequencia_anterior.numero if sequencia_anterior else None,
+            'volumes_apagados': list(pedido.volumes.values_list('id', 'tipo', 'identificador', 'op')),
+            'itens_zerados': list(pedido.itens.values_list('sku', 'qtd_separada')),
+            'etiquetas_apagadas': pedido.impressoes_etiqueta.count(),
+        }
+
+        pedido.volumes.all().delete()
+        pedido.itens.update(qtd_separada=0)
+        pedido.impressoes_etiqueta.all().delete()
+
+        pedido.status = Pedido.Status.PENDENTE
+        pedido.selecionado_em = None
+        pedido.selecionado_por = None
+        pedido.atribuido_em = None
+        pedido.atribuido_por = None
+        pedido.sequencia = None
+        pedido.conferente = None
+        pedido.conferencia_iniciada_em = None
+        pedido.separado_por = None
+        pedido.separador_nao_identificado = False
+        pedido.conferido_em = None
+        pedido.senior_atualizado_em = None
+        pedido.senior_tentativas = 0
+        pedido.senior_ultimo_erro = ''
+        pedido.save(update_fields=[
+            'status', 'selecionado_em', 'selecionado_por',
+            'atribuido_em', 'atribuido_por', 'sequencia', 'conferente', 'conferencia_iniciada_em',
+            'separado_por', 'separador_nao_identificado', 'conferido_em',
+            'senior_atualizado_em', 'senior_tentativas', 'senior_ultimo_erro',
+        ])
+        if sequencia_anterior:
+            sequencia_anterior.recalcular_status()
+        PedidoLog.objects.create(
+            pedido=pedido, usuario=request.user, acao='conferido_retornado', payload=payload,
+        )
+
+    logger.info(
+        f'{pedido} devolvido para Vendas por {request.user.username}',
+        extra={'pedido': pedido.id, 'volumes': len(payload['volumes_apagados'])},
+    )
+    return Response({'ok': True, 'status': pedido.status})
+
 # ---------------------------------------------------------------------------
 # Lista de Cancelados — transferência de conferência (2026-09-30)
 # Documento cancelado no Senior (ou pelo supervisor) com volumes já montados:

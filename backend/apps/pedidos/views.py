@@ -298,8 +298,18 @@ class PedidoViewSet(viewsets.ModelViewSet):
     # ------------------------------------------------------------------
     @action(detail=False, methods=['post'])
     def buscar_lote(self, request):
-        if request.user.perfil not in ('supervisor_vendas', 'admin'):
-            return Response({'erro': 'restrito ao Supervisor de Vendas'}, status=status.HTTP_403_FORBIDDEN)
+        # `para` (2026-11-16): 'vendas' (default) — Sup. Vendas, o que falta vem do Senior;
+        # 'patio' — Sup. Pátio cola a lista para montar a sequência: só o que já está no
+        # Separa (o que não está nem foi enviado por Vendas, então não há o que sequenciar).
+        para = (request.data.get('para') or 'vendas').strip()
+        if para == 'vendas':
+            perfis, consultar_senior, restrito = ('supervisor_vendas', 'admin'), True, 'Supervisor de Vendas'
+        elif para == 'patio':
+            perfis, consultar_senior, restrito = ('supervisor_patio', 'admin'), False, 'Supervisor de Pátio'
+        else:
+            return Response({'erro': "para deve ser 'vendas' ou 'patio'"}, status=status.HTTP_400_BAD_REQUEST)
+        if request.user.perfil not in perfis:
+            return Response({'erro': f'restrito ao {restrito}'}, status=status.HTTP_403_FORBIDDEN)
         brutos = request.data.get('numeros')
         if not isinstance(brutos, list) or not brutos:
             return Response({'erro': 'numeros (lista) obrigatório'}, status=status.HTTP_400_BAD_REQUEST)
@@ -325,7 +335,7 @@ class PedidoViewSet(viewsets.ModelViewSet):
         for numero in numeros:
             docs = _documentos_do_numero(numero)
             origem = 'separa' if docs else 'nenhum'
-            if not docs and not senior_falhou:
+            if not docs and consultar_senior and not senior_falhou:
                 senior_consultadas += 1
                 try:
                     importar_nf(numero)
@@ -343,7 +353,7 @@ class PedidoViewSet(viewsets.ModelViewSet):
             })
         logger.info(
             'buscar_lote: %d número(s), %d consultado(s) no Senior', len(numeros), senior_consultadas,
-            extra={'usuario': request.user.username, 'senior_falhou': senior_falhou},
+            extra={'usuario': request.user.username, 'senior_falhou': senior_falhou, 'para': para},
         )
         return Response({
             'resultados': resultados, 'invalidos': invalidos,

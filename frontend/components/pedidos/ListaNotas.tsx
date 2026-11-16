@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { supervisorApi, type BuscaLote, type LinhaLote } from '@/lib/api'
 import { DocBadges } from '@/components/ui/DocBadges'
@@ -11,12 +11,81 @@ import { COR_STATUS, rotaDaLocalizacao } from '@/components/pedidos/OndeEsta'
  * lista inteira — separada por vírgula, ponto e vírgula, espaço ou uma por linha — ou abre
  * o .txt; o servidor acha cada número no Separa e, se não está aqui, traz do Senior na
  * hora (`POST /api/pedidos/buscar_lote/`). O que está Pendente já vem marcado para enviar.
+ *
+ * Desde 2026-11-16 o mesmo modal serve o Pátio (`modo="patio"`): a lista vira sequência.
+ * Lá só vale o que já está no Separa (Selecionado sem sequência vem marcado); o servidor
+ * não vai ao Senior. E "151281-151290" vira o intervalo inteiro, nos dois modos.
  */
 
-/** Pedaços da lista colada, sem repetição. O servidor é quem separa número de lixo
- * ("NF:", "abc") e devolve o lixo em `invalidos`. */
+/** Quantos números o servidor aceita por busca (LOTE_MAX no backend). */
+export const LOTE_MAX = 500
+
+export type ListaAnalisada = {
+  numeros: string[]
+  /** Intervalos "a-b" maiores que LOTE_MAX, deixados de fora (erro de digitação quase sempre). */
+  intervalosGrandes: string[]
+}
+
+/** Pedaços da lista colada, sem repetição. "151281-151290" (com ou sem espaços ao redor do
+ * traço) vira os dez números; vírgula, ponto e vírgula, espaço e quebra de linha separam.
+ * O servidor é quem separa número de lixo ("NF:", "abc") e devolve o lixo em `invalidos`. */
+export function analisarLista(texto: string): ListaAnalisada {
+  const vistos = new Set<string>()
+  const intervalosGrandes: string[] = []
+  // "151281 - 151290" → "151281-151290" antes de separar (senão o traço vira um pedaço solto)
+  const normalizado = texto.replace(/(\d)\s*[-–—]\s*(\d)/g, '$1-$2')
+  for (const pedaco of normalizado.split(/[\s,;]+/)) {
+    const t = pedaco.trim()
+    if (!t) continue
+    const m = /^(\d+)-(\d+)$/.exec(t)
+    if (!m) {
+      vistos.add(t)
+      continue
+    }
+    let a = Number(m[1]), b = Number(m[2])
+    if (a > b) [a, b] = [b, a]
+    if (b - a + 1 > LOTE_MAX) {
+      intervalosGrandes.push(t)
+      continue
+    }
+    for (let n = a; n <= b; n++) vistos.add(String(n))
+  }
+  return { numeros: Array.from(vistos), intervalosGrandes }
+}
+
 export function separarNumeros(texto: string): string[] {
-  return Array.from(new Set(texto.split(/[\s,;]+/).map((t) => t.trim()).filter(Boolean)))
+  return analisarLista(texto).numeros
+}
+
+export type ModoLista = 'vendas' | 'patio'
+
+/** O que já pode ir: Vendas envia Pendente; Pátio sequencia Selecionado ainda sem sequência. */
+function pronto(d: LinhaLote, modo: ModoLista): boolean {
+  return modo === 'vendas' ? d.status === 'pendente' : d.status === 'selecionado' && !d.sequencia
+}
+
+const TEXTOS: Record<ModoLista, {
+  setor: string; descricao: string; prontas: string; nenhuma: string; enviar: (n: number) => string
+  naoEncontradas: string; cor: string; corFraca: string; sombra: string; accent: string
+}> = {
+  vendas: {
+    setor: 'Vendas',
+    descricao: 'Cole os números separados por vírgula ou um por linha, ou abra o arquivo .txt. Um intervalo como 151281-151290 vale pelos dez números. O que não estiver no Separa é buscado no Senior.',
+    prontas: 'Prontas para enviar',
+    nenhuma: 'Nenhum documento pendente nessa lista.',
+    enviar: (n) => n ? `Enviar ${n} para conferência` : 'Enviar para conferência',
+    naoEncontradas: 'Não estão no Separa nem no Senior como nota fechada — confira o número; a nota pode não ter sido fechada ainda ou ter sido cancelada.',
+    cor: 'bg-orange-500 hover:bg-orange-400', corFraca: 'bg-orange-50 dark:bg-orange-500/10', sombra: 'shadow-orange-500/30', accent: 'accent-orange-500',
+  },
+  patio: {
+    setor: 'Pátio',
+    descricao: 'Cole os números separados por vírgula ou um por linha, ou abra o arquivo .txt. Um intervalo como 151281-151290 vale pelos dez números. O que está aguardando sequência já vem marcado.',
+    prontas: 'Prontas para a sequência',
+    nenhuma: 'Nenhum documento aguardando sequência nessa lista.',
+    enviar: (n) => n ? `Enviar ${n} para a sequência` : 'Enviar para a sequência',
+    naoEncontradas: 'Não estão no Separa. Se a nota ainda não foi enviada por Vendas, peça lá — o Pátio só sequencia o que já foi selecionado.',
+    cor: 'bg-amber-500 hover:bg-amber-400', corFraca: 'bg-amber-50 dark:bg-amber-500/10', sombra: 'shadow-amber-500/30', accent: 'accent-amber-500',
+  },
 }
 
 type Origem = BuscaLote['resultados'][number]['origem']
@@ -41,15 +110,15 @@ function agrupar(r: BuscaLote): { docs: Doc[]; semDocumento: string[] } {
   return { docs: Array.from(porId.values()), semDocumento }
 }
 
-/** Pendentes que vêm marcados: o próprio documento do número (`via` vazio); quando um número
+/** Prontos que vêm marcados: o próprio documento do número (`via` vazio); quando um número
  * só achou documentos "por tabela" (o pedido faturado nessa NF, a NF que saiu desse pedido),
  * esses. Pedido e NF dele não vêm os dois marcados — o servidor barraria o envio. */
-function sugeridos(r: BuscaLote): Set<number> {
+function sugeridos(r: BuscaLote, modo: ModoLista): Set<number> {
   const ids = new Set<number>()
   for (const res of r.resultados) {
-    const pendentes = res.documentos.filter((d) => d.status === 'pendente')
-    const diretos = pendentes.filter((d) => !d.via)
-    for (const d of (diretos.length ? diretos : pendentes)) ids.add(d.id)
+    const prontos = res.documentos.filter((d) => pronto(d, modo))
+    const diretos = prontos.filter((d) => !d.via)
+    for (const d of (diretos.length ? diretos : prontos)) ids.add(d.id)
   }
   return ids
 }
@@ -58,10 +127,17 @@ function rotulo(d: LinhaLote) {
   return `${d.tipo === 'nota_fiscal' ? 'NF' : 'Pedido'} ${d.numero_externo}`
 }
 
-// onEnviar devolve se deu certo (a tela de Vendas já mostra o toast); só então o modal fecha.
-type Props = { onClose: () => void; onEnviar: (ids: number[]) => Promise<boolean> }
+// onEnviar devolve se deu certo (a tela já mostra o toast); só então o modal fecha.
+// `rodape`: o Pátio põe aqui o seletor "Nova sequência / Sequência N".
+type Props = {
+  onClose: () => void
+  onEnviar: (ids: number[]) => Promise<boolean>
+  modo?: ModoLista
+  rodape?: ReactNode
+}
 
-export function ListaNotasModal({ onClose, onEnviar }: Props) {
+export function ListaNotasModal({ onClose, onEnviar, modo = 'vendas', rodape }: Props) {
+  const T = TEXTOS[modo]
   const [texto, setTexto] = useState('')
   const [resultado, setResultado] = useState<BuscaLote | null>(null)
   const [buscando, setBuscando] = useState(false)
@@ -76,10 +152,11 @@ export function ListaNotasModal({ onClose, onEnviar }: Props) {
     return () => window.removeEventListener('keydown', esc)
   }, [onClose])
 
-  const numeros = useMemo(() => separarNumeros(texto), [texto])
+  const { numeros, intervalosGrandes } = useMemo(() => analisarLista(texto), [texto])
+  const excesso = numeros.length > LOTE_MAX
   const grupos = useMemo(() => (resultado ? agrupar(resultado) : null), [resultado])
-  const pendentes = grupos?.docs.filter((d) => d.status === 'pendente') ?? []
-  const outros = grupos?.docs.filter((d) => d.status !== 'pendente') ?? []
+  const pendentes = grupos?.docs.filter((d) => pronto(d, modo)) ?? []
+  const outros = grupos?.docs.filter((d) => !pronto(d, modo)) ?? []
 
   async function abrirArquivo(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0]
@@ -91,14 +168,14 @@ export function ListaNotasModal({ onClose, onEnviar }: Props) {
   }
 
   async function buscar() {
-    if (!numeros.length || buscando) return
+    if (!numeros.length || excesso || buscando) return
     setBuscando(true)
     setErro('')
     setResultado(null)
     try {
-      const r = await supervisorApi.buscarLote(numeros)
+      const r = await supervisorApi.buscarLote(numeros, modo)
       setResultado(r)
-      setMarcados(sugeridos(r))
+      setMarcados(sugeridos(r, modo))
     } catch (e) {
       const msg = (e as { response?: { data?: { erro?: string } } })?.response?.data?.erro
       setErro(msg || 'Não foi possível buscar a lista. Tente de novo.')
@@ -134,11 +211,9 @@ export function ListaNotasModal({ onClose, onEnviar }: Props) {
       >
         <div className="px-5 pt-4 pb-3 border-b border-surface-border flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-subtle">Vendas</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-subtle">{T.setor}</p>
             <h2 className="text-lg font-semibold text-ink leading-tight">Colar lista de notas</h2>
-            <p className="text-sm text-ink-muted">
-              Cole os números separados por vírgula ou um por linha, ou abra o arquivo .txt. O que não estiver no Separa é buscado no Senior.
-            </p>
+            <p className="text-sm text-ink-muted">{T.descricao}</p>
           </div>
           <button onClick={onClose} className="text-ink-subtle hover:text-ink min-h-[44px] min-w-[44px] text-xl leading-none" aria-label="Fechar">×</button>
         </div>
@@ -147,14 +222,15 @@ export function ListaNotasModal({ onClose, onEnviar }: Props) {
           <textarea
             value={texto}
             onChange={(e) => { setTexto(e.target.value); setResultado(null) }}
-            placeholder={'151281, 151282, 151283\nou um por linha'}
+            placeholder={'151281, 151282, 151283\n151290-151299\nou um por linha'}
             rows={resultado ? 3 : 7}
             spellCheck={false}
             className="w-full font-mono text-sm bg-surface-elev/40 border border-surface-border text-ink placeholder:text-ink-subtle rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-300"
           />
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm text-ink-muted mr-auto">
+            <span className={`text-sm mr-auto ${excesso ? 'text-red-600 dark:text-red-400 font-medium' : 'text-ink-muted'}`}>
               {numeros.length ? `${numeros.length} número(s)` : 'Nenhum número ainda'}
+              {excesso && ` — no máximo ${LOTE_MAX} por vez, reduza a lista`}
             </span>
             <input ref={arquivoRef} type="file" accept=".txt,.csv,text/plain" className="hidden" onChange={abrirArquivo} />
             <button
@@ -167,12 +243,17 @@ export function ListaNotasModal({ onClose, onEnviar }: Props) {
             <button
               type="button"
               onClick={buscar}
-              disabled={!numeros.length || buscando}
-              className="bg-orange-500 hover:bg-orange-400 text-white rounded-lg px-5 min-h-[44px] text-sm font-semibold disabled:opacity-50 transition-colors"
+              disabled={!numeros.length || excesso || buscando}
+              className={`${T.cor} text-white rounded-lg px-5 min-h-[44px] text-sm font-semibold disabled:opacity-50 transition-colors`}
             >
               {buscando ? 'Buscando…' : 'Buscar'}
             </button>
           </div>
+          {intervalosGrandes.length > 0 && (
+            <p className="text-sm text-amber-700 dark:text-amber-400">
+              Intervalo grande demais, ignorado (mais de {LOTE_MAX} números): <span className="font-mono">{intervalosGrandes.join(', ')}</span>. Confira os números.
+            </p>
+          )}
           {erro && <p className="text-sm text-red-600 dark:text-red-400">{erro}</p>}
 
           {resultado && grupos && (
@@ -185,10 +266,10 @@ export function ListaNotasModal({ onClose, onEnviar }: Props) {
 
               <section>
                 <h3 className="text-sm font-semibold text-ink mb-1.5">
-                  Prontas para enviar <span className="text-ink-muted font-normal">· {pendentes.length}</span>
+                  {T.prontas} <span className="text-ink-muted font-normal">· {pendentes.length}</span>
                 </h3>
                 {pendentes.length === 0 ? (
-                  <p className="text-sm text-ink-subtle">Nenhum documento pendente nessa lista.</p>
+                  <p className="text-sm text-ink-subtle">{T.nenhuma}</p>
                 ) : (
                   <ul className="rounded-xl border border-surface-border overflow-hidden">
                     {pendentes.map((d) => {
@@ -197,9 +278,9 @@ export function ListaNotasModal({ onClose, onEnviar }: Props) {
                         <li
                           key={d.id}
                           onClick={() => toggle(d.id)}
-                          className={`flex items-center gap-3 px-3 py-2.5 border-b border-surface-border last:border-b-0 cursor-pointer ${marcado ? 'bg-orange-50 dark:bg-orange-500/10' : 'hover:bg-surface-elev/60'}`}
+                          className={`flex items-center gap-3 px-3 py-2.5 border-b border-surface-border last:border-b-0 cursor-pointer ${marcado ? T.corFraca : 'hover:bg-surface-elev/60'}`}
                         >
-                          <input type="checkbox" checked={marcado} onChange={() => toggle(d.id)} onClick={(e) => e.stopPropagation()} className="w-5 h-5 accent-orange-500" />
+                          <input type="checkbox" checked={marcado} onChange={() => toggle(d.id)} onClick={(e) => e.stopPropagation()} className={`w-5 h-5 ${T.accent}`} />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-semibold text-ink">{rotulo(d)}</span>
@@ -261,7 +342,7 @@ export function ListaNotasModal({ onClose, onEnviar }: Props) {
                   <p className="text-xs text-ink-subtle mt-1">
                     {resultado.senior_falhou
                       ? 'Não estão no Separa; o Senior não pôde ser consultado.'
-                      : 'Não estão no Separa nem no Senior como nota fechada — confira o número; a nota pode não ter sido fechada ainda ou ter sido cancelada.'}
+                      : T.naoEncontradas}
                   </p>
                 </section>
               )}
@@ -275,8 +356,11 @@ export function ListaNotasModal({ onClose, onEnviar }: Props) {
           )}
         </div>
 
-        <div className="px-5 py-3 border-t border-surface-border flex items-center justify-between gap-3">
-          <span className="text-sm text-ink-muted">{resultado ? `${marcados.size} marcado(s)` : ''}</span>
+        <div className="px-5 py-3 border-t border-surface-border flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm text-ink-muted">{resultado ? `${marcados.size} marcado(s)` : ''}</span>
+            {resultado && marcados.size > 0 && rodape}
+          </div>
           <div className="flex gap-2">
             <button type="button" onClick={onClose} className="text-sm text-ink-muted hover:text-ink px-3 min-h-[44px] transition-colors">
               Fechar
@@ -285,9 +369,9 @@ export function ListaNotasModal({ onClose, onEnviar }: Props) {
               type="button"
               onClick={enviar}
               disabled={!marcados.size || enviando}
-              className="bg-orange-500 hover:bg-orange-400 text-white px-5 rounded-lg text-sm font-semibold min-h-[44px] disabled:opacity-50 shadow-lg shadow-orange-500/30 transition-all"
+              className={`${T.cor} text-white px-5 rounded-lg text-sm font-semibold min-h-[44px] disabled:opacity-50 shadow-lg ${T.sombra} transition-all`}
             >
-              {enviando ? 'Enviando…' : marcados.size ? `Enviar ${marcados.size} para conferência` : 'Enviar para conferência'}
+              {enviando ? 'Enviando…' : T.enviar(marcados.size)}
             </button>
           </div>
         </div>

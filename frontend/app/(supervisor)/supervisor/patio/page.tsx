@@ -5,6 +5,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supervisorApi, sequenciasApi, type Paginado, type SequenciaResumo } from '@/lib/api'
 import { useToast } from '@/components/Toast'
+import { ListaNotasModal } from '@/components/pedidos/ListaNotas'
 
 type Pedido = {
   id: number
@@ -59,6 +60,8 @@ export default function SupervisorPatioPage() {
   const [enviando, setEnviando] = useState(false)
   const [busca, setBusca] = useState('')
   const [buscaAtiva, setBuscaAtiva] = useState('')
+  // "Colar lista" (2026-11-16): a relação de notas vira sequência de uma vez
+  const [listaAberta, setListaAberta] = useState(false)
   const toast = useToast()
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const inicializadoRef = useRef(false)
@@ -130,16 +133,17 @@ export default function SupervisorPatioPage() {
     if (proximaPagina) await carregar(buscaAtiva, proximaPagina, true)
   }
 
-  async function enviarParaSequencia() {
-    if (selecionados.size === 0) return
+  /** Manda `ids` (da seleção da lista ou do modal "Colar lista") para `destino`:
+   * nova sequência (abre a tela dela) ou uma aberta. Devolve se deu certo. */
+  async function enviarIdsParaSequencia(ids: number[]): Promise<boolean> {
+    if (ids.length === 0) return false
     setEnviando(true)
-    const ids = Array.from(selecionados)
     try {
       if (destino === 'nova') {
         const seq = await sequenciasApi.criar(ids)
         setSelecionados(new Set())
         router.push(`/supervisor/patio/${seq.id}`)
-        return
+        return true
       }
       const res = await sequenciasApi.adicionar(destino, ids)
       setSelecionados(new Set())
@@ -147,16 +151,36 @@ export default function SupervisorPatioPage() {
           res.ignorados.length ? ` · ${res.ignorados.length} ignorado(s)` : ''
         }`)
       await Promise.all([carregarSequencias(), carregar(buscaAtiva, 1, false)])
+      return true
     } catch {
       toast.erro('Erro ao montar a sequência')
+      return false
     } finally {
       setEnviando(false)
     }
   }
 
+  function enviarParaSequencia() {
+    return enviarIdsParaSequencia(Array.from(selecionados))
+  }
+
   const todosMarcadosNaPagina = pedidos.length > 0 && selecionados.size >= pedidos.length
   const linhas = agruparPorTransportadora(pedidos)
   const sequenciasAbertas = sequencias.filter((s) => s.status !== 'concluida')
+
+  // O mesmo seletor de destino da barra inferior, reaproveitado no rodapé do modal
+  const seletorDestino = (
+    <select
+      value={destino === 'nova' ? 'nova' : String(destino)}
+      onChange={(e) => setDestino(e.target.value === 'nova' ? 'nova' : Number(e.target.value))}
+      className="bg-surface-elev border border-surface-border text-ink rounded-lg px-2 py-2 text-sm min-h-[40px]"
+    >
+      <option value="nova">Nova sequência</option>
+      {sequenciasAbertas.map((s) => (
+        <option key={s.id} value={s.id}>Sequência {s.numero}</option>
+      ))}
+    </select>
+  )
 
   return (
     <div className="p-4 pb-32">
@@ -168,12 +192,21 @@ export default function SupervisorPatioPage() {
           <h1 className="text-2xl font-semibold text-ink">Sequências</h1>
           <p className="text-sm text-ink-muted">Monte sequências e atribua os pedidos dentro delas</p>
         </div>
-        <button
-          onClick={() => { carregarSequencias(); carregar(buscaAtiva, 1, false) }}
-          className="text-sm text-blue-600 dark:text-blue-400 min-h-[44px] px-2"
-        >
-          Atualizar
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setListaAberta(true)}
+            className="bg-surface-card hover:bg-surface-elev border border-surface-border text-ink rounded-lg px-4 min-h-[44px] text-sm font-medium transition-colors"
+            title="Colar a relação de notas (ou abrir um .txt) e mandar tudo para uma sequência"
+          >
+            Colar lista
+          </button>
+          <button
+            onClick={() => { carregarSequencias(); carregar(buscaAtiva, 1, false) }}
+            className="text-sm text-blue-600 dark:text-blue-400 min-h-[44px] px-2"
+          >
+            Atualizar
+          </button>
+        </div>
       </div>
 
       {sequenciasAbertas.length === 0 ? (
@@ -310,16 +343,7 @@ export default function SupervisorPatioPage() {
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-2">
               <span className="text-sm text-ink-muted">{selecionados.size} pedido(s) →</span>
-              <select
-                value={destino === 'nova' ? 'nova' : String(destino)}
-                onChange={(e) => setDestino(e.target.value === 'nova' ? 'nova' : Number(e.target.value))}
-                className="bg-surface-elev border border-surface-border text-ink rounded-lg px-2 py-2 text-sm min-h-[40px]"
-              >
-                <option value="nova">Nova sequência</option>
-                {sequenciasAbertas.map((s) => (
-                  <option key={s.id} value={s.id}>Sequência {s.numero}</option>
-                ))}
-              </select>
+              {seletorDestino}
             </div>
             <div className="flex gap-2">
               <button
@@ -340,6 +364,15 @@ export default function SupervisorPatioPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {listaAberta && (
+        <ListaNotasModal
+          modo="patio"
+          onClose={() => setListaAberta(false)}
+          onEnviar={enviarIdsParaSequencia}
+          rodape={<><span className="text-sm text-ink-muted">→</span>{seletorDestino}</>}
+        />
       )}
     </div>
   )

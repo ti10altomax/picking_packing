@@ -23,6 +23,7 @@ export const supervisorConferidos: AjudaTela = {
     'Para imprimir a etiqueta de volume, toque em "Etiqueta", escolha a impressora e toque em "Imprimir". Se já foi impressa, o botão vira "Reimprimir" e mostra quando.',
     'Para ver o que aconteceu com o documento, toque em "Histórico".',
     'Para trocar transportadora, frete ou volumes da NF, toque em "Corrigir NF".',
+    'Se você é admin e a conferência não vale (teste, documento conferido por engano), toque em "Devolver para Vendas" e confirme. O documento volta a Pendente do zero.',
     'Se a lista tiver mais documentos, toque em "Carregar mais".',
   ],
   elementos: [
@@ -69,6 +70,11 @@ export const supervisorConferidos: AjudaTela = {
       descricao:
         'Abre a carta de correção da nota: transportadora, frete e quantidade de volumes. Só aparece para os perfis liberados pelo admin. Veja Cartas de correção.',
     },
+    {
+      nome: 'Devolver para Vendas (vermelho, só admin)',
+      descricao:
+        'Desfaz a conferência: o documento volta a Pendente na tela de Vendas, os volumes são apagados, as quantidades separadas zeradas e a etiqueta precisa sair de novo quando for conferido outra vez. O histórico guarda quem devolveu, quando e o que havia nos volumes. Use para conferência de teste ou documento conferido por engano.',
+    },
   ],
   situacoes: [
     {
@@ -89,6 +95,7 @@ export const supervisorConferidos: AjudaTela = {
     },
   ],
   dicas: [
+    '"Devolver para Vendas" não mexe no Senior: a conferência ainda não é gravada lá. Se a etiqueta já estava colada na caixa, descarte-a — ao conferir de novo sai uma etiqueta nova.',
     'Depois de uma carta de correção que troca a transportadora, use "Reimprimir" para a etiqueta sair com o nome novo.',
     'O código de barras da etiqueta é a chave de acesso do DANFE (44 dígitos), a mesma que a transportadora bipa na nota. A mesma chave sai em QR Code no canto direito do rodapé, para leitores 2D e câmeras.',
   ],

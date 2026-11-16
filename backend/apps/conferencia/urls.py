@@ -28,6 +28,8 @@ urlpatterns = [
     path('nao-conformes/', views.listar_nao_conformes, name='listar_nao_conformes'),
     path('nao-conformes/<int:pk>/cancelar/', views.cancelar_nao_conforme, name='cancelar_nao_conforme'),
     path('nao-conformes/<int:pk>/retornar/', views.retornar_nao_conforme, name='retornar_nao_conforme'),
+    # Devolver para Vendas (admin, 2026-11-16): Conferido → Pendente, do zero
+    path('conferidos/<int:pk>/devolver/', views.devolver_conferido, name='devolver_conferido'),
 
     # Lista de Cancelados + transferência de conferência para o documento reemitido
     path('cancelados/', views.listar_cancelados, name='listar_cancelados'),
