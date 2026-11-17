@@ -43,7 +43,24 @@ export default function SequenciaDetalhePage() {
   const [carregando, setCarregando] = useState(true)
   const [selecionados, setSelecionados] = useState<Set<number>>(new Set())
   const [agindo, setAgindo] = useState(false)
+  // Nome livre da sequência (2026-11-17): edição inline no cabeçalho
+  const [editandoNome, setEditandoNome] = useState(false)
+  const [nome, setNome] = useState('')
   const toast = useToast()
+
+  async function salvarNome() {
+    if (!seq) return
+    const novo = nome.trim()
+    setEditandoNome(false)
+    if (novo === (seq.descricao ?? '')) return
+    try {
+      const r = await sequenciasApi.renomear(sequenciaId, novo)
+      setSeq({ ...seq, descricao: r.descricao })
+      toast.ok(novo ? `Sequência ${seq.numero} agora se chama "${r.descricao}"` : 'Nome da sequência removido')
+    } catch {
+      toast.erro('Erro ao salvar o nome da sequência')
+    }
+  }
 
   const carregar = useCallback(async () => {
     try {
@@ -153,6 +170,32 @@ export default function SequenciaDetalhePage() {
             ←
           </button>
           <h1 className="text-2xl font-semibold text-ink">Sequência {seq.numero}</h1>
+          {editandoNome ? (
+            <input
+              autoFocus
+              type="text"
+              value={nome}
+              maxLength={120}
+              onChange={(e) => setNome(e.target.value)}
+              onBlur={salvarNome}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') salvarNome()
+                if (e.key === 'Escape') setEditandoNome(false)
+              }}
+              placeholder="Nome (ex.: aba da planilha)"
+              className="bg-surface-elev border border-surface-border text-ink placeholder:text-ink-subtle rounded-lg px-2 py-1 text-base min-h-[40px] w-56"
+            />
+          ) : (
+            <button
+              onClick={() => { setNome(seq.descricao ?? ''); setEditandoNome(true) }}
+              title="Renomear a sequência"
+              className={`text-base min-h-[40px] px-2 rounded-lg hover:bg-surface-elev transition-colors ${
+                seq.descricao ? 'text-ink' : 'text-ink-subtle italic'
+              }`}
+            >
+              {seq.descricao ? `· ${seq.descricao}` : '+ nome'}
+            </button>
+          )}
           <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${st.cor}`}>{st.label}</span>
         </div>
         <div className="flex items-center gap-1">

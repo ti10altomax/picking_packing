@@ -148,7 +148,7 @@ export default function SequenciaDetalhe() {
 
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-surface-bg">
-      <Header title={`Sequência ${seq.numero}`} />
+      <Header title={seq.descricao ? `Seq. ${seq.numero} · ${seq.descricao}` : `Sequência ${seq.numero}`} />
 
       <View className="px-4 pt-3 pb-2 gap-2">
         <View className="flex-row items-center justify-between">

@@ -140,7 +140,7 @@ def painel() -> dict:
             seq.pedidos.filter(conferente__isnull=False).values_list('conferente__username', flat=True)
         ))
         sequencias.append({
-            'id': seq.id, 'numero': seq.numero, 'status': seq.status,
+            'id': seq.id, 'numero': seq.numero, 'descricao': seq.descricao, 'status': seq.status,
             'total': sum(por_status.values()),
             'selecionados': por_status.get(S.SELECIONADO, 0),
             'atribuidos': por_status.get(S.ATRIBUIDO, 0),

@@ -41,10 +41,15 @@ def _com_contagens(qs):
     )
 
 
+def _descricao_limpa(valor) -> str:
+    return ' '.join(str(valor or '').split())[:120]
+
+
 def _serializar_sequencia(seq) -> dict:
     return {
         'id': seq.id,
         'numero': seq.numero,
+        'descricao': seq.descricao,
         'status': seq.status,
         'criado_em': seq.criado_em,
         'concluida_em': seq.concluida_em,
@@ -87,9 +92,10 @@ def listar_ou_criar(request):
         if not isinstance(ids, list):
             return Response({'erro': 'pedido_ids deve ser uma lista'}, status=http_status.HTTP_400_BAD_REQUEST)
 
+        descricao = _descricao_limpa(request.data.get('descricao'))
         with transaction.atomic():
             numero = (Sequencia.objects.aggregate(m=Max('numero'))['m'] or 0) + 1
-            seq = Sequencia.objects.create(numero=numero, criado_por=request.user)
+            seq = Sequencia.objects.create(numero=numero, descricao=descricao, criado_por=request.user)
             adicionados, ignorados = _adicionar_pedidos(seq, ids, request.user)
 
         seq = _com_contagens(Sequencia.objects.filter(pk=seq.pk)).first()
@@ -111,13 +117,21 @@ def listar_ou_criar(request):
 # Detalhe / excluir
 # ---------------------------------------------------------------------------
 
-@api_view(['GET', 'DELETE'])
+@api_view(['GET', 'PATCH', 'DELETE'])
 def detalhe_ou_excluir(request, pk):
     err = _exige_patio(request)
     if err:
         return err
 
     seq = get_object_or_404(_com_contagens(Sequencia.objects.all()), pk=pk)
+
+    if request.method == 'PATCH':
+        # Só a descrição é editável (2026-11-17) — número e status são do sistema
+        if 'descricao' not in request.data:
+            return Response({'erro': 'informe descricao'}, status=http_status.HTTP_400_BAD_REQUEST)
+        seq.descricao = _descricao_limpa(request.data.get('descricao'))
+        seq.save(update_fields=['descricao'])
+        return Response(_serializar_sequencia(seq))
 
     if request.method == 'DELETE':
         if seq.status != Sequencia.Status.ABERTA or seq.pedidos.exists():

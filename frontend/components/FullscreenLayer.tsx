@@ -5,14 +5,15 @@ import { useFullscreen } from '@/lib/useFullscreen'
 /**
  * Botão pequeno que entra/sai de fullscreen.
  * O navegador exige gesto do usuário, então não dá pra forçar no load —
- * o usuário toca uma vez e a partir daí fica em tela cheia.
+ * o usuário toca uma vez e a partir daí fica em tela cheia (preferência
+ * guardada neste navegador, 2026-11-17; desligada por padrão).
  */
 export function FullscreenToggle() {
   const { isFs, toggle } = useFullscreen()
   return (
     <button
       onClick={toggle}
-      title={isFs ? 'Sair de tela cheia' : 'Tela cheia'}
+      title={isFs ? 'Sair de tela cheia (desliga a tela cheia automática neste navegador)' : 'Tela cheia (fica ligada neste navegador até você sair por aqui)'}
       className="text-gray-400 hover:text-gray-700 min-h-[44px] min-w-[44px] flex items-center justify-center"
       aria-label="Tela cheia"
     >
@@ -36,12 +37,17 @@ export function FullscreenToggle() {
  *
  * O re-entrar acontece "carona" no próprio toque que o usuário deu pra
  * navegar/clicar — assim a regra de "exige gesto" continua sendo satisfeita.
+ *
+ * Só age quando a preferência "tela cheia" está ligada neste navegador
+ * (2026-11-17): a equipe pediu para tirar o automático, mas quem gosta liga
+ * pelo botão do cabeçalho e ela fica.
  */
 export function FullscreenOnFirstTap() {
-  const { isFs, enter } = useFullscreen()
+  const { isFs, manter, enter } = useFullscreen()
   const ultimaTentativa = useRef(0)
 
   useEffect(() => {
+    if (!manter) return
     const tentar = () => {
       // Throttle — evita disparar várias vezes pelo mesmo gesto
       const agora = Date.now()
@@ -51,7 +57,7 @@ export function FullscreenOnFirstTap() {
     }
     window.addEventListener('pointerdown', tentar)
     return () => window.removeEventListener('pointerdown', tentar)
-  }, [isFs, enter])
+  }, [isFs, manter, enter])
 
   return null
 }

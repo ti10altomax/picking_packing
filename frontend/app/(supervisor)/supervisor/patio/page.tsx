@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { supervisorApi, sequenciasApi, type Paginado, type SequenciaResumo } from '@/lib/api'
 import { useToast } from '@/components/Toast'
 import { ListaNotasModal } from '@/components/pedidos/ListaNotas'
+import { rotuloSequencia } from '@/lib/sequencia'
 
 type Pedido = {
   id: number
@@ -57,6 +58,8 @@ export default function SupervisorPatioPage() {
   const [carregandoMais, setCarregandoMais] = useState(false)
   const [selecionados, setSelecionados] = useState<Set<number>>(new Set())
   const [destino, setDestino] = useState<'nova' | number>('nova')
+  // Nome da nova sequência (2026-11-17): o Pátio põe a aba da planilha que usa em paralelo
+  const [descricaoNova, setDescricaoNova] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [busca, setBusca] = useState('')
   const [buscaAtiva, setBuscaAtiva] = useState('')
@@ -140,8 +143,9 @@ export default function SupervisorPatioPage() {
     setEnviando(true)
     try {
       if (destino === 'nova') {
-        const seq = await sequenciasApi.criar(ids)
+        const seq = await sequenciasApi.criar(ids, descricaoNova.trim())
         setSelecionados(new Set())
+        setDescricaoNova('')
         router.push(`/supervisor/patio/${seq.id}`)
         return true
       }
@@ -168,18 +172,32 @@ export default function SupervisorPatioPage() {
   const linhas = agruparPorTransportadora(pedidos)
   const sequenciasAbertas = sequencias.filter((s) => s.status !== 'concluida')
 
-  // O mesmo seletor de destino da barra inferior, reaproveitado no rodapé do modal
+  // O mesmo seletor de destino da barra inferior, reaproveitado no rodapé do modal.
+  // Em "Nova sequência" aparece o campo do nome (opcional).
   const seletorDestino = (
-    <select
-      value={destino === 'nova' ? 'nova' : String(destino)}
-      onChange={(e) => setDestino(e.target.value === 'nova' ? 'nova' : Number(e.target.value))}
-      className="bg-surface-elev border border-surface-border text-ink rounded-lg px-2 py-2 text-sm min-h-[40px]"
-    >
-      <option value="nova">Nova sequência</option>
-      {sequenciasAbertas.map((s) => (
-        <option key={s.id} value={s.id}>Sequência {s.numero}</option>
-      ))}
-    </select>
+    <>
+      <select
+        value={destino === 'nova' ? 'nova' : String(destino)}
+        onChange={(e) => setDestino(e.target.value === 'nova' ? 'nova' : Number(e.target.value))}
+        className="bg-surface-elev border border-surface-border text-ink rounded-lg px-2 py-2 text-sm min-h-[40px] max-w-[260px]"
+      >
+        <option value="nova">Nova sequência</option>
+        {sequenciasAbertas.map((s) => (
+          <option key={s.id} value={s.id}>{rotuloSequencia(s)}</option>
+        ))}
+      </select>
+      {destino === 'nova' && (
+        <input
+          type="text"
+          value={descricaoNova}
+          onChange={(e) => setDescricaoNova(e.target.value)}
+          maxLength={120}
+          placeholder="Nome (aba da planilha)"
+          title="Nome livre da sequência — opcional. Dá para mudar depois na tela da sequência."
+          className="bg-surface-elev border border-surface-border text-ink placeholder:text-ink-subtle rounded-lg px-2 py-2 text-sm min-h-[40px] w-56"
+        />
+      )}
+    </>
   )
 
   return (
@@ -223,8 +241,9 @@ export default function SupervisorPatioPage() {
                 onClick={() => router.push(`/supervisor/patio/${s.id}`)}
                 className="bg-surface-card border border-surface-border rounded-xl p-4 text-left hover:border-amber-400 dark:hover:border-amber-500/60 hover:shadow-md transition-all"
               >
-                <div className="flex items-center gap-2 mb-1">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
                   <span className="font-bold text-ink">Sequência {s.numero}</span>
+                  {s.descricao && <span className="text-sm text-ink truncate max-w-full">· {s.descricao}</span>}
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${st.cor}`}>{st.label}</span>
                 </div>
                 <p className="text-sm text-ink-muted">

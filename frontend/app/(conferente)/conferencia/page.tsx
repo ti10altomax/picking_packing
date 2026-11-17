@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { conferenciaApi } from '@/lib/api'
 import { useToast } from '@/components/Toast'
+import { rotuloSequencia } from '@/lib/sequencia'
 
 type PedidoLista = {
   id: number
@@ -16,16 +17,16 @@ type PedidoLista = {
   qtd_itens: number
   percent_conferido: number
   atribuido_em: string | null
-  sequencia: { id: number; numero: number } | null
+  sequencia: { id: number; numero: number; descricao?: string } | null
   transportadora?: string
 }
 
 type ListaResposta = {
-  sequencia: { id: number; numero: number } | null
-  aguardando_sequencia: { id: number; numero: number } | null
+  sequencia: { id: number; numero: number; descricao?: string } | null
+  aguardando_sequencia: { id: number; numero: number; descricao?: string } | null
   pedidos: PedidoLista[]
   outras_sequencias_pendentes: number
-  sequencia_disponivel: { id: number; numero: number } | null
+  sequencia_disponivel: { id: number; numero: number; descricao?: string } | null
   disponiveis: PedidoLista[]
 }
 
@@ -33,7 +34,7 @@ type ListaResposta = {
 type Opcao = {
   id: number; tipo: string; numero_externo: string; codsnf: string; cliente: string
   status: string; status_label: string; conferente: string | null
-  sequencia: { id: number; numero: number } | null
+  sequencia: { id: number; numero: number; descricao?: string } | null
 }
 
 function tempoDesde(iso: string | null): string {
@@ -51,12 +52,12 @@ export default function ConferenciaListaPage() {
   const router = useRouter()
   const toast = useToast()
   const [pedidos, setPedidos] = useState<PedidoLista[]>([])
-  const [sequencia, setSequencia] = useState<{ id: number; numero: number } | null>(null)
-  const [aguardando, setAguardando] = useState<{ id: number; numero: number } | null>(null)
+  const [sequencia, setSequencia] = useState<{ id: number; numero: number; descricao?: string } | null>(null)
+  const [aguardando, setAguardando] = useState<{ id: number; numero: number; descricao?: string } | null>(null)
   const [outras, setOutras] = useState(0)
   const [loading, setLoading] = useState(true)
   const [lastSync, setLastSync] = useState<Date | null>(null)
-  const [seqDisponivel, setSeqDisponivel] = useState<{ id: number; numero: number } | null>(null)
+  const [seqDisponivel, setSeqDisponivel] = useState<{ id: number; numero: number; descricao?: string } | null>(null)
   const [disponiveis, setDisponiveis] = useState<PedidoLista[]>([])
 
   // Barra de bipagem da nota — mesma barra da tela do pedido: recebe o leitor do coletor
@@ -140,7 +141,7 @@ export default function ConferenciaListaPage() {
             <h1 className="text-2xl font-semibold text-ink">Atribuídos a mim</h1>
             {sequencia && (
               <span className="text-xs px-2 py-0.5 rounded-full font-semibold bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
-                Sequência {sequencia.numero}
+                {rotuloSequencia(sequencia)}
               </span>
             )}
           </div>
@@ -223,7 +224,7 @@ export default function ConferenciaListaPage() {
           <div className="text-center py-20 px-6">
             <p className="text-ink font-semibold mb-1">Você terminou os seus pedidos 🎉</p>
             <p className="text-sm text-ink-subtle">
-              Aguardando a conclusão da <strong>sequência {aguardando.numero}</strong> para liberar a próxima.
+              Aguardando a conclusão da <strong>{rotuloSequencia(aguardando).replace('Sequência', 'sequência')}</strong> para liberar a próxima.
             </p>
           </div>
         )}
@@ -271,7 +272,7 @@ export default function ConferenciaListaPage() {
         {seqDisponivel && disponiveis.length > 0 && (
           <div className="pt-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-2">
-              Disponíveis na sequência {seqDisponivel.numero} · {disponiveis.length} · bipe a nota ou toque para pegar
+              Disponíveis na {rotuloSequencia(seqDisponivel).replace('Sequência', 'sequência')} · {disponiveis.length} · bipe a nota ou toque para pegar
             </p>
             <div className="space-y-2">
               {disponiveis.map((p) => (

@@ -159,7 +159,7 @@ export default function Agora() {
                   className="bg-surface-card rounded-xl border border-surface-border p-3"
                 >
                   <View className="flex-row items-center justify-between">
-                    <Text className="font-semibold text-ink">Sequência {s.numero}</Text>
+                    <Text className="font-semibold text-ink flex-1 mr-2" numberOfLines={1}>Sequência {s.numero}{s.descricao ? ` · ${s.descricao}` : ''}</Text>
                     <Text className="text-xs bg-surface-elev text-ink-muted px-2 py-0.5 rounded">{s.status === 'aberta' ? 'aberta' : 'em andamento'}</Text>
                   </View>
                   <View className="mt-2 h-2 rounded-full bg-surface-elev overflow-hidden flex-row">

@@ -16,6 +16,7 @@ import { Header } from '@/components/Header'
 import { DocBadges } from '@/components/DocBadges'
 import { CameraScanner } from '@/components/CameraScanner'
 import { conferenciaApi } from '@/lib/api'
+import { rotuloSequencia } from '@/lib/sequencia'
 
 type Pedido = {
   id: number
@@ -28,16 +29,16 @@ type Pedido = {
   qtd_itens: number
   percent_conferido: number
   atribuido_em: string | null
-  sequencia: { id: number; numero: number } | null
+  sequencia: { id: number; numero: number; descricao?: string } | null
   transportadora?: string
 }
 
 type ListaResposta = {
-  sequencia: { id: number; numero: number } | null
-  aguardando_sequencia: { id: number; numero: number } | null
+  sequencia: { id: number; numero: number; descricao?: string } | null
+  aguardando_sequencia: { id: number; numero: number; descricao?: string } | null
   pedidos: Pedido[]
   outras_sequencias_pendentes: number
-  sequencia_disponivel: { id: number; numero: number } | null
+  sequencia_disponivel: { id: number; numero: number; descricao?: string } | null
   disponiveis: Pedido[]
 }
 
@@ -45,7 +46,7 @@ type ListaResposta = {
 type Opcao = {
   id: number; tipo: string; numero_externo: string; codsnf: string; cliente: string
   status: string; status_label: string; conferente: string | null
-  sequencia: { id: number; numero: number } | null
+  sequencia: { id: number; numero: number; descricao?: string } | null
 }
 
 function tempoDesde(iso: string | null): string {
@@ -63,13 +64,13 @@ export default function ConferenciaLista() {
   const router = useRouter()
   const toast = useToast()
   const [pedidos, setPedidos] = useState<Pedido[]>([])
-  const [sequencia, setSequencia] = useState<{ id: number; numero: number } | null>(null)
-  const [aguardando, setAguardando] = useState<{ id: number; numero: number } | null>(null)
+  const [sequencia, setSequencia] = useState<{ id: number; numero: number; descricao?: string } | null>(null)
+  const [aguardando, setAguardando] = useState<{ id: number; numero: number; descricao?: string } | null>(null)
   const [outras, setOutras] = useState(0)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [lastSync, setLastSync] = useState<Date | null>(null)
-  const [seqDisponivel, setSeqDisponivel] = useState<{ id: number; numero: number } | null>(null)
+  const [seqDisponivel, setSeqDisponivel] = useState<{ id: number; numero: number; descricao?: string } | null>(null)
   const [disponiveis, setDisponiveis] = useState<Pedido[]>([])
 
   // Barra de bipagem da nota — mesma barra da tela do pedido: recebe o leitor do TC21
@@ -172,7 +173,7 @@ export default function ConferenciaLista() {
         <View className="flex-row items-center gap-2 flex-1">
           {sequencia ? (
             <View className="px-2 py-0.5 rounded-full bg-blue-500/15">
-              <Text className="text-xs font-semibold text-blue-300">Sequência {sequencia.numero}</Text>
+              <Text className="text-xs font-semibold text-blue-300" numberOfLines={1}>{rotuloSequencia(sequencia)}</Text>
             </View>
           ) : null}
           <Text className="text-sm text-ink-subtle" numberOfLines={1}>
@@ -293,7 +294,7 @@ export default function ConferenciaLista() {
               <View className="py-20 items-center px-6">
                 <Text className="text-ink font-semibold mb-1">Você terminou os seus pedidos 🎉</Text>
                 <Text className="text-sm text-ink-subtle text-center">
-                  Aguardando a conclusão da sequência {aguardando.numero} para liberar a próxima.
+                  Aguardando a conclusão da {rotuloSequencia(aguardando).replace('Sequência', 'sequência')} para liberar a próxima.
                 </Text>
               </View>
             ) : disponiveis.length === 0 ? (
@@ -306,7 +307,7 @@ export default function ConferenciaLista() {
             seqDisponivel && disponiveis.length > 0 ? (
               <View className="pt-3">
                 <Text className="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-2">
-                  Disponíveis na sequência {seqDisponivel.numero} · {disponiveis.length} · bipe a nota ou toque para pegar
+                  Disponíveis na {rotuloSequencia(seqDisponivel).replace('Sequência', 'sequência')} · {disponiveis.length} · bipe a nota ou toque para pegar
                 </Text>
                 {disponiveis.map((p) => (
                   <Pressable

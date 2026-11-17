@@ -25,6 +25,11 @@ export const supervisorSequencia: AjudaTela = {
   ],
   elementos: [
     {
+      nome: 'Nome da sequência (ao lado do número)',
+      descricao:
+        'Texto livre do Pátio — hoje, a aba da planilha paralela. Toque nele (ou em "+ nome") para escrever ou trocar; Enter salva, Esc cancela. Aparece nos cards do Pátio, no seletor de destino, no coletor do conferente e no relatório.',
+    },
+    {
       nome: 'Sem conferente (laranja)',
       descricao:
         'Documento Selecionado, ainda sem conferente. O conferente pode pegá-lo sozinho bipando a nota, então atribuir é opcional.',

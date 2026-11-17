@@ -18,7 +18,7 @@ export const supervisorPatio: AjudaTela = {
     'Veja em "Pedidos aguardando sequência" os documentos Selecionados que ainda não têm sequência.',
     'Use a busca "Buscar por número ou cliente" para achar um documento específico.',
     'Marque os documentos que vão juntos. A caixa do topo da lista marca todos os que estão na tela.',
-    'Na barra que aparece embaixo, escolha o destino: "Nova sequência" ou uma sequência já aberta.',
+    'Na barra que aparece embaixo, escolha o destino: "Nova sequência" ou uma sequência já aberta. Em "Nova sequência" aparece um campo de nome (opcional): escreva, por exemplo, o nome da aba da planilha que vocês usam, para achar a sequência pelos dois lados. Dá para mudar depois na tela da sequência.',
     'Toque em "Criar sequência" (ou "Adicionar à sequência"). Ao criar uma nova, a tela da sequência abre sozinha.',
     'Para dar andamento, toque no card da sequência e atribua os pedidos a um conferente.',
     'Recebeu a relação das notas pronta? Toque em "Colar lista", cole os números (separados por vírgula ou um por linha; "151281-151290" vale pelo intervalo inteiro) ou toque em "Abrir arquivo .txt", e depois em "Buscar". O que está aguardando sequência já vem marcado: escolha o destino no rodapé e toque em "Enviar para a sequência".',

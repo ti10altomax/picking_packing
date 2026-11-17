@@ -198,7 +198,7 @@ export type RelatorioDocumento = {
 }
 
 export type RelatorioSequencia = {
-  sequencia: { id: number; numero: number; status: string; criado_em: string; concluida_em: string | null }
+  sequencia: { id: number; numero: number; descricao?: string; status: string; criado_em: string; concluida_em: string | null }
   documentos: RelatorioDocumento[]
   linhas: { sku: string; descricao: string; caixa: number; fardo: number; outro: number; total: number }[]
   totais: { caixa: number; fardo: number; outro: number; total: number }
@@ -208,6 +208,8 @@ export type RelatorioSequencia = {
 export type SequenciaResumo = {
   id: number
   numero: number
+  /** Nome livre do Pátio — hoje, a aba da planilha paralela (2026-11-17) */
+  descricao: string
   status: 'aberta' | 'em_andamento' | 'concluida'
   criado_em: string
   concluida_em: string | null
@@ -236,9 +238,11 @@ export const sequenciasApi = {
   listar: (status?: string) =>
     api.get('/api/sequencias/', { params: status ? { status } : {} })
       .then((r) => r.data as SequenciaResumo[]),
-  criar: (pedidoIds: number[]) =>
-    api.post('/api/sequencias/', { pedido_ids: pedidoIds })
+  criar: (pedidoIds: number[], descricao = '') =>
+    api.post('/api/sequencias/', { pedido_ids: pedidoIds, descricao })
       .then((r) => r.data as SequenciaResumo & { adicionados: number[]; ignorados: number[] }),
+  renomear: (id: number, descricao: string) =>
+    api.patch(`/api/sequencias/${id}/`, { descricao }).then((r) => r.data as SequenciaResumo),
   detalhe: (id: number) =>
     api.get(`/api/sequencias/${id}/`)
       .then((r) => r.data as SequenciaResumo & { pedidos: SequenciaPedido[] }),
@@ -743,7 +747,7 @@ export type AgoraPainel = {
     cancelados_hoje: number
   }
   sequencias: {
-    id: number; numero: number; status: string; total: number; selecionados: number; atribuidos: number
+    id: number; numero: number; descricao?: string; status: string; total: number; selecionados: number; atribuidos: number
     em_conferencia: number; finalizados: number; outros: number; conferentes: string[]; criado_em: string
   }[]
   por_hora: { hora: string; bips: number; conferidos: number }[]

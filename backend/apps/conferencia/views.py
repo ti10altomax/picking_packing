@@ -296,7 +296,7 @@ def _serializar_pedido(p: Pedido, com_volumes: bool = False) -> dict:
         'atribuido_em': p.atribuido_em,
         'conferencia_iniciada_em': p.conferencia_iniciada_em,
         'sequencia': (
-            {'id': p.sequencia.id, 'numero': p.sequencia.numero} if p.sequencia else None
+            {'id': p.sequencia.id, 'numero': p.sequencia.numero, 'descricao': p.sequencia.descricao} if p.sequencia else None
         ),
         'separado_por': (
             {'id': p.separado_por.id, 'nome': p.separado_por.nome, 'apelido': p.separado_por.apelido}
@@ -372,14 +372,14 @@ def listar_atribuidos(request):
     disponiveis = list(_disponiveis(seq_pegar)) if seq_pegar else []
 
     return Response({
-        'sequencia': {'id': ativa.id, 'numero': ativa.numero} if ativa else None,
+        'sequencia': {'id': ativa.id, 'numero': ativa.numero, 'descricao': ativa.descricao} if ativa else None,
         'aguardando_sequencia': (
-            {'id': aguardando.id, 'numero': aguardando.numero} if aguardando else None
+            {'id': aguardando.id, 'numero': aguardando.numero, 'descricao': aguardando.descricao} if aguardando else None
         ),
         'pedidos': [_serializar_pedido(p) for p in pedidos],
         'outras_sequencias_pendentes': outras,
         'sequencia_disponivel': (
-            {'id': seq_pegar.id, 'numero': seq_pegar.numero} if seq_pegar else None
+            {'id': seq_pegar.id, 'numero': seq_pegar.numero, 'descricao': seq_pegar.descricao} if seq_pegar else None
         ),
         'disponiveis': [_serializar_pedido(p) for p in disponiveis],
     })
@@ -1539,7 +1539,7 @@ def _serializar_cancelado(p: Pedido) -> dict:
         'cancelado_origem_label': p.get_cancelado_origem_display() if p.cancelado_origem else '',
         'status_anterior': p.status_anterior,
         'status_anterior_label': status_label.get(p.status_anterior, p.status_anterior),
-        'sequencia': {'id': p.sequencia.id, 'numero': p.sequencia.numero} if p.sequencia else None,
+        'sequencia': {'id': p.sequencia.id, 'numero': p.sequencia.numero, 'descricao': p.sequencia.descricao} if p.sequencia else None,
         'conferente': p.conferente.username if p.conferente else None,
         'separado_por': str(p.separado_por) if p.separado_por else None,
         'qtd_itens': p.qtd_itens,
@@ -1654,7 +1654,7 @@ def transferir_conferencia(request, pk):
             'numero_externo': destino.numero_externo,
             'status': destino.status,
             'sequencia': (
-                {'id': destino.sequencia.id, 'numero': destino.sequencia.numero}
+                {'id': destino.sequencia.id, 'numero': destino.sequencia.numero, 'descricao': destino.sequencia.descricao}
                 if destino.sequencia else None
             ),
         },
@@ -1670,7 +1670,7 @@ def _opcao(p):
         'id': p.id, 'tipo': p.tipo, 'numero_externo': p.numero_externo, 'codsnf': p.codsnf,
         'nf_numero': p.nf_numero, 'cliente': p.cliente, 'status': p.status, 'status_label': p.get_status_display(),
         'conferente': p.conferente.username if p.conferente else None,
-        'sequencia': {'id': p.sequencia.id, 'numero': p.sequencia.numero} if p.sequencia else None,
+        'sequencia': {'id': p.sequencia.id, 'numero': p.sequencia.numero, 'descricao': p.sequencia.descricao} if p.sequencia else None,
     }
 
 

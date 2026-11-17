@@ -19,6 +19,7 @@ import { useDialog } from '@/components/Dialog'
 import { DocBadges } from '@/components/DocBadges'
 import { OndeEsta } from '@/components/OndeEsta'
 import { CabecalhoLista } from '@/components/CabecalhoLista'
+import { rotuloSequencia } from '@/lib/sequencia'
 import { supervisorApi, sequenciasApi, SequenciaResumo } from '@/lib/api'
 
 type Pedido = {
@@ -75,6 +76,8 @@ export default function SupervisorPatio() {
   const [refreshing, setRefreshing] = useState(false)
   const [selecionados, setSelecionados] = useState<Set<number>>(new Set())
   const [destino, setDestino] = useState<'nova' | number>('nova')
+  // Nome da nova sequência (2026-11-17): a aba da planilha que o Pátio usa em paralelo
+  const [descricaoNova, setDescricaoNova] = useState('')
   const [pickerAberto, setPickerAberto] = useState(false)
   const [enviando, setEnviando] = useState(false)
   const [busca, setBusca] = useState('')
@@ -139,7 +142,8 @@ export default function SupervisorPatio() {
     const ids = Array.from(selecionados)
     try {
       if (destino === 'nova') {
-        const seq = await sequenciasApi.criar(ids)
+        const seq = await sequenciasApi.criar(ids, descricaoNova.trim())
+        setDescricaoNova('')
         setSelecionados(new Set())
         router.push(`/supervisor/sequencia/${seq.id}` as never)
         return
@@ -162,8 +166,8 @@ export default function SupervisorPatio() {
   const sequenciasAbertas = sequencias.filter((s) => s.status !== 'concluida')
   const linhas = agruparPorTransportadora(pedidos)
   const labelDestino = destino === 'nova'
-    ? 'Nova sequência'
-    : `Sequência ${sequenciasAbertas.find((s) => s.id === destino)?.numero ?? destino}`
+    ? (descricaoNova.trim() ? `Nova: ${descricaoNova.trim()}` : 'Nova sequência')
+    : (rotuloSequencia(sequenciasAbertas.find((s) => s.id === destino)) || `Sequência ${destino}`)
 
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-surface-bg">
@@ -193,7 +197,7 @@ export default function SupervisorPatio() {
                   className="bg-surface-card border border-surface-border rounded-xl p-3 w-52 active:bg-surface-elev"
                 >
                   <View className="flex-row items-center gap-2 mb-1">
-                    <Text className="font-bold text-ink">Seq. {s.numero}</Text>
+                    <Text className="font-bold text-ink" numberOfLines={1}>{rotuloSequencia(s, true)}</Text>
                     <View className={`px-2 py-0.5 rounded-full ${st.cor}`}>
                       <Text className={`text-xs font-medium ${st.texto}`}>{st.label}</Text>
                     </View>
@@ -371,6 +375,16 @@ export default function SupervisorPatio() {
                 Nova sequência
               </Text>
             </Pressable>
+            {destino === 'nova' ? (
+              <TextInput
+                value={descricaoNova}
+                onChangeText={setDescricaoNova}
+                maxLength={120}
+                placeholder="Nome (ex.: aba da planilha) — opcional"
+                placeholderTextColor="#71717a"
+                className="mx-3 mb-2 h-11 px-3 bg-surface-elev border border-surface-border rounded-lg text-ink text-sm"
+              />
+            ) : null}
             {sequenciasAbertas.map((s) => {
               const ativo = destino === s.id
               return (
@@ -379,8 +393,8 @@ export default function SupervisorPatio() {
                   onPress={() => { setDestino(s.id); setPickerAberto(false) }}
                   className={`px-3 py-3 rounded-lg ${ativo ? 'bg-blue-500/15' : 'active:bg-surface-elev'}`}
                 >
-                  <Text className={`text-base font-medium ${ativo ? 'text-blue-300' : 'text-ink'}`}>
-                    Sequência {s.numero}
+                  <Text className={`text-base font-medium ${ativo ? 'text-blue-300' : 'text-ink'}`} numberOfLines={1}>
+                    {rotuloSequencia(s)}
                   </Text>
                   <Text className="text-xs text-ink-subtle">
                     {s.qtd_pedidos} pedido(s) · {s.qtd_sem_conferente} sem conferente

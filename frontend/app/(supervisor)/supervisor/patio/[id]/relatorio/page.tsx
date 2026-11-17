@@ -54,7 +54,7 @@ export default function RelatorioSequenciaPage() {
           >
             ←
           </button>
-          <h1 className="text-2xl font-semibold text-ink">Relatório — Sequência {sequencia.numero}</h1>
+          <h1 className="text-2xl font-semibold text-ink">Relatório — Sequência {sequencia.numero}{sequencia.descricao ? ` · ${sequencia.descricao}` : ''}</h1>
         </div>
         <button
           onClick={() => window.print()}
@@ -66,7 +66,7 @@ export default function RelatorioSequenciaPage() {
 
       {/* Cabeçalho de impressão */}
       <div className="hidden print:block mb-4">
-        <h1 className="text-xl font-bold">Separa — Relatório de separação · Sequência {sequencia.numero}</h1>
+        <h1 className="text-xl font-bold">Separa — Relatório de separação · Sequência {sequencia.numero}{sequencia.descricao ? ` · ${sequencia.descricao}` : ''}</h1>
       </div>
 
       <p className="text-sm text-ink-muted mb-4">

@@ -175,9 +175,9 @@ class VolumeAdmin(ModelAdmin):
 
 @admin.register(Sequencia)
 class SequenciaAdmin(ModelAdmin):
-    list_display = ('numero', 'status', 'qtd_pedidos', 'criado_em', 'criado_por', 'concluida_em')
+    list_display = ('numero', 'descricao', 'status', 'qtd_pedidos', 'criado_em', 'criado_por', 'concluida_em')
     list_filter = (('status', ChoicesDropdownFilter), ('criado_em', RangeDateFilter))
-    search_fields = ('numero',)
+    search_fields = ('numero', 'descricao')
     readonly_fields = ('criado_em', 'criado_por', 'concluida_em')
 
     @display(description="Pedidos")

@@ -274,6 +274,9 @@ class Sequencia(models.Model):
         CONCLUIDA = 'concluida', 'Concluída'
 
     numero = models.IntegerField(unique=True)
+    # Nome livre do Pátio (2026-11-17): enquanto o controle paralelo na planilha existir,
+    # eles põem aqui o nome da aba do Excel para achar a sequência pelos dois lados.
+    descricao = models.CharField(max_length=120, blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.ABERTA)
     criado_em = models.DateTimeField(auto_now_add=True)
     criado_por = models.ForeignKey(

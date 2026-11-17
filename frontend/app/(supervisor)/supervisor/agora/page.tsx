@@ -183,7 +183,7 @@ export default function AgoraPage() {
               {d.sequencias.map((s) => (
                 <Link key={s.id} href={`/supervisor/patio/sequencia/${s.id}`} className="bg-surface-card rounded-xl border border-surface-border p-4 hover:-translate-y-0.5 hover:shadow-lg dark:hover:shadow-black/30 transition-all">
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold text-ink">Sequência {s.numero}</span>
+                    <span className="font-semibold text-ink truncate">Sequência {s.numero}{s.descricao ? ` · ${s.descricao}` : ''}</span>
                     <span className="text-xs bg-surface-elev text-ink-muted px-2 py-0.5 rounded">{s.status === 'aberta' ? 'aberta' : 'em andamento'}</span>
                   </div>
                   <div className="mt-2 flex h-2 rounded-full overflow-hidden bg-surface-elev">
