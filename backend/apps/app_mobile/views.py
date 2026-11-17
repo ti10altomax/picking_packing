@@ -8,7 +8,8 @@ página de download é aberta pelo navegador do aparelho):
 
 Admin:
   GET  /api/app/versoes/      histórico + inventário de dispositivos
-  POST /api/app/versoes/      multipart: arquivo, versao, version_code, notas, obrigatoria
+  POST /api/app/versoes/      multipart: arquivo, [versao], [version_code], notas, obrigatoria
+                              (versão/versionCode saem do manifest do APK; se digitados, têm que bater)
   DELETE /api/app/versoes/<id>/
 """
 import logging
@@ -53,8 +54,11 @@ def versoes(request):
         arquivo = request.FILES.get('arquivo')
         if not arquivo:
             return Response({'erro': 'envie o arquivo .apk'}, status=http_status.HTTP_400_BAD_REQUEST)
+        # versionCode e versão digitados são opcionais desde 2026-11-17 — o manifest do APK
+        # é a fonte da verdade (services.publicar compara quando vêm preenchidos).
+        bruto = str(request.data.get('version_code') or '').strip()
         try:
-            version_code = int(request.data.get('version_code') or 0)
+            version_code = int(bruto) if bruto else None
         except (TypeError, ValueError):
             return Response({'erro': 'versionCode inválido'}, status=http_status.HTTP_400_BAD_REQUEST)
         obrigatoria = str(request.data.get('obrigatoria') or '').lower() in ('1', 'true', 'sim', 'on')

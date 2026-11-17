@@ -8,6 +8,7 @@ import zipfile
 
 from django.utils import timezone
 
+from .manifest import ManifestInvalido, versao_do_apk
 from .models import DispositivoApp, VersaoApp
 
 logger = logging.getLogger(__name__)
@@ -53,8 +54,23 @@ def validar_apk(arquivo) -> tuple[int, str]:
     return tamanho, h.hexdigest()
 
 
-def publicar(arquivo, versao: str, version_code: int, notas: str, obrigatoria: bool, usuario) -> VersaoApp:
-    versao = str(versao or '').strip()
+def publicar(arquivo, versao: str | None, version_code: int | None, notas: str, obrigatoria: bool, usuario) -> VersaoApp:
+    """`versao`/`version_code` digitados são opcionais: o manifest do APK é a fonte da
+    verdade. Se vierem preenchidos e não baterem com o arquivo, recusa — em 2026-11-17 o
+    APK de 10/11 (0.14.2/25) foi publicado como 0.15.0/26 e o coletor nunca parava de
+    pedir atualização."""
+    try:
+        code_apk, versao_apk = versao_do_apk(arquivo)
+    except ManifestInvalido as e:
+        raise ErroVersao(f'não consegui ler a versão do APK: {e}')
+    versao = str(versao or '').strip() or versao_apk
+    if version_code is None:
+        version_code = code_apk
+    if versao != versao_apk or version_code != code_apk:
+        raise ErroVersao(
+            f'o arquivo é a versão {versao_apk} (versionCode {code_apk}), não {versao} ({version_code}) — '
+            'confira se escolheu o APK certo ou deixe os campos vazios para usar o que está no arquivo'
+        )
     if not RE_VERSAO.match(versao):
         raise ErroVersao('versão no formato X.Y.Z (ex.: 0.9.0)')
     if version_code <= 0:

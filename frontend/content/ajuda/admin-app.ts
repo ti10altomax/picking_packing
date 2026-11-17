@@ -13,11 +13,10 @@ export const adminApp: AjudaTela = {
   ],
   passos: [
     'Em Arquivo .apk, toque em Escolher arquivo e selecione o APK novo.',
-    'Confira Versão. Use o formato X.Y.Z, por exemplo 0.9.0. O campo pode vir preenchido pelo nome do arquivo.',
-    'Preencha versionCode com o número do build do app (por exemplo 15).',
+    'Versão e versionCode são lidos de dentro do APK. Os campos são opcionais: se preencher, o sistema confere com o arquivo e recusa quando não bate (evita publicar um APK antigo com número novo).',
     'Em O que mudou, escreva uma linha por novidade. O texto aparece no coletor.',
     'Marque Obrigatória só se o app precisa bloquear até atualizar. Sem marcar, o aviso pode ser fechado.',
-    'Toque em Publicar. O botão só libera com arquivo, versão e versionCode preenchidos.',
+    'Toque em Publicar. O botão libera assim que o arquivo é escolhido.',
     'Em Versão atual, confira o número e o link. Toque em Copiar para levar o link.',
   ],
   elementos: [
@@ -34,6 +33,7 @@ export const adminApp: AjudaTela = {
     { quando: '"o arquivo não é um APK válido"', oQueFazer: 'O arquivo escolhido não é um APK do app. Confira se é o arquivo gerado no build e escolha de novo.' },
     { quando: '"versão no formato X.Y.Z (ex.: 0.9.0)"', oQueFazer: 'Escreva a versão com três números separados por ponto.' },
     { quando: '"a versão … não é maior que a atual"', oQueFazer: 'A versão nova precisa ser maior que a publicada. Corrija o número.' },
+    { quando: '"o arquivo é a versão X (versionCode N), não Y (M)"', oQueFazer: 'O APK escolhido não é o que você digitou. Pegue o arquivo certo da pasta de build ou apague os campos para usar a versão que está dentro do arquivo.' },
     { quando: '"a versão … já foi publicada" ou "o versionCode … já foi publicado"', oQueFazer: 'Use uma versão e um versionCode que ainda não existam. Se publicou errado, apague a versão antiga e envie de novo.' },
     { quando: 'No coletor aparece uma faixa "Nova versão … disponível" com o botão Atualizar', oQueFazer: 'É a publicação normal. O conferente toca em Atualizar, baixa o arquivo e instala por cima. Não precisa desinstalar.' },
     { quando: 'No coletor aparece a tela "Atualize o Separa"', oQueFazer: 'É a publicação obrigatória. O conferente só volta a usar o app depois de tocar em Baixar e instalar.' },

@@ -260,13 +260,18 @@ export default function Conferidos() {
                     onPress={() => setPedidoImprimir(p.id)}
                     disabled={!!bloqueioEtiqueta(p)}
                     className={`h-10 px-3 rounded-lg border items-center justify-center ${
-                      bloqueioEtiqueta(p) ? 'border-surface-border opacity-40'
+                      bloqueioEtiqueta(p)?.codigo === 'volumes_divergentes' ? 'border-amber-500/60 bg-amber-500/15'
+                        : bloqueioEtiqueta(p) ? 'border-surface-border opacity-40'
                         : p.etiqueta_volume_em ? 'border-surface-border bg-surface-card'
                         : 'border-emerald-500/40 bg-emerald-500/15'
                     }`}
                   >
-                    <Text className={`text-sm font-semibold ${p.etiqueta_volume_em || bloqueioEtiqueta(p) ? 'text-ink-muted' : 'text-emerald-300'}`}>
-                      {p.etiqueta_volume_em ? 'Reimprimir' : 'Etiqueta'}
+                    {/* Volumes ≠ NF em âmbar (2026-11-17): precisa de ação (Corrigir NF no web) */}
+                    <Text className={`text-sm font-semibold ${
+                      bloqueioEtiqueta(p)?.codigo === 'volumes_divergentes' ? 'text-amber-300'
+                        : p.etiqueta_volume_em || bloqueioEtiqueta(p) ? 'text-ink-muted' : 'text-emerald-300'
+                    }`}>
+                      {bloqueioEtiqueta(p)?.codigo === 'volumes_divergentes' ? 'Volumes ≠ NF' : p.etiqueta_volume_em ? 'Reimprimir' : 'Etiqueta'}
                     </Text>
                   </Pressable>
                 </View>

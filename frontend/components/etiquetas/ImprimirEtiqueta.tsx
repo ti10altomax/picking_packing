@@ -154,10 +154,16 @@ export function ImprimirEtiqueta({
         disabled={!!bloqueio}
         title={bloqueio?.mensagem}
         onClick={() => setAberto((v) => !v)}
-        className={`inline-flex items-center gap-1.5 rounded-lg border text-sm font-medium min-h-[40px] px-3 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-          impressaEm
-            ? 'border-surface-border bg-surface-card text-ink-muted hover:bg-surface-elev hover:text-ink'
-            : 'border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-300'
+        className={`inline-flex items-center gap-1.5 rounded-lg border text-sm font-medium min-h-[40px] px-3 transition-colors disabled:cursor-not-allowed ${
+          bloqueio?.codigo === 'volumes_divergentes'
+            // Alerta (2026-11-17): volumes do Separa ≠ volumes da NF — alguém precisa agir
+            // (Corrigir NF). Verde desabilitado passava despercebido.
+            ? 'border-amber-400 bg-amber-50 text-amber-800 dark:border-amber-500/50 dark:bg-amber-500/15 dark:text-amber-300'
+            : bloqueio
+              ? 'border-surface-border bg-surface-card text-ink-muted opacity-60'
+              : impressaEm
+                ? 'border-surface-border bg-surface-card text-ink-muted hover:bg-surface-elev hover:text-ink'
+                : 'border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-300'
         }`}
       >
         <IconeEtiqueta />

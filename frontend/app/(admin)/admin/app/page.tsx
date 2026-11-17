@@ -178,13 +178,16 @@ export default function AppColetorPage() {
             <p className="text-xs text-ink-subtle mt-1">Sai do <code>gradlew assembleRelease</code> em <code>mobile/android/app/build/outputs/apk/release/</code>.{arquivo ? ` Selecionado: ${arquivo.name} (${mb(arquivo.size)})` : ''}</p>
           </div>
           <div>
-            <label className={LABEL}>Versão (app.json)</label>
-            <input value={versao} onChange={(e) => setVersao(e.target.value)} placeholder="0.9.0" className={INPUT} />
+            <label className={LABEL}>Versão (opcional — confere com o APK)</label>
+            <input value={versao} onChange={(e) => setVersao(e.target.value)} placeholder="lida do arquivo" className={INPUT} />
           </div>
           <div>
-            <label className={LABEL}>versionCode (build.gradle)</label>
-            <input value={versionCode} onChange={(e) => setVersionCode(e.target.value.replace(/\D/g, ''))} placeholder="15" inputMode="numeric" className={INPUT} />
+            <label className={LABEL}>versionCode (opcional — confere com o APK)</label>
+            <input value={versionCode} onChange={(e) => setVersionCode(e.target.value.replace(/\D/g, ''))} placeholder="lido do arquivo" inputMode="numeric" className={INPUT} />
           </div>
+          <p className="sm:col-span-2 text-xs text-ink-subtle -mt-2">
+            A versão e o versionCode saem do manifest do próprio APK. Se você preencher, o sistema confere e recusa quando o arquivo é outro.
+          </p>
           <div className="sm:col-span-2">
             <label className={LABEL}>O que mudou (uma linha por item, aparece no coletor)</label>
             <textarea value={notas} onChange={(e) => setNotas(e.target.value)} rows={3} className={INPUT} />
@@ -197,7 +200,7 @@ export default function AppColetorPage() {
           <div className="sm:col-span-2">
             <button
               onClick={publicar}
-              disabled={enviando || !arquivo || !versao || !versionCode}
+              disabled={enviando || !arquivo}
               className="bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 px-4 py-2 rounded-lg text-sm font-medium min-h-[44px] disabled:opacity-40"
             >
               {enviando ? 'Enviando…' : 'Publicar'}

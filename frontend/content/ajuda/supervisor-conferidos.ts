@@ -55,7 +55,7 @@ export const supervisorConferidos: AjudaTela = {
     {
       nome: 'Volumes ≠ NF',
       descricao:
-        'Botão apagado. A quantidade de volumes fechados na conferência é diferente da quantidade de volumes da nota fiscal. Corrija a nota em "Corrigir NF" (volumes). A etiqueta sai sozinha quando a carta é gravada.',
+        'Botão em âmbar (cor de alerta). A quantidade de volumes fechados na conferência é diferente da quantidade de volumes da nota fiscal. Corrija a nota em "Corrigir NF" (volumes). A etiqueta sai sozinha quando a carta é gravada.',
     },
     {
       nome: 'Todos / Com transportadora / Sem transportadora',
