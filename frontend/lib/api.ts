@@ -110,6 +110,8 @@ export type Divergencia = {
   codigo_bipado: string
   qtd: number
   observacao: string
+  /** 'alias' = entrou pelo código alternativo cadastrado no Django Admin, sem liberação à mão (2026-11-17) */
+  origem?: 'alias' | 'supervisor'
   vinculado_por: string | null
   sku: string
   descricao: string

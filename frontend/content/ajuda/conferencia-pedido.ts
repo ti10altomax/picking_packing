@@ -136,6 +136,11 @@ export const conferenciaPedido: AjudaTela = {
         'Você bipou outro produto. Separe o produto certo e bipe de novo. Se o produto está certo mas o código não passa, só o supervisor libera, pelo web.',
     },
     {
+      quando: 'O "+1" verde veio com "barra errada da fábrica (registrada)".',
+      oQueFazer:
+        'A etiqueta desse produto vem impressa errada da fábrica e o código errado já está cadastrado no sistema: a leitura conta normalmente e fica registrada para a cobrança. Se o mesmo produto trava sempre no vermelho, avise a TI para cadastrar o código.',
+    },
+    {
       quando: 'Amarelo: "Só restam N unidade(s)" ou "Excede a quantidade pedida".',
       oQueFazer: 'Diminua a quantidade para o que falta. O sistema não deixa passar do pedido.',
     },

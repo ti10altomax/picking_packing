@@ -272,7 +272,12 @@ def _serializar_volume(v: Volume) -> dict:
 
 
 def _serializar_pedido(p: Pedido, com_volumes: bool = False) -> dict:
+    from apps.pedidos.alias_barra import alternativos_por_ean
+
     itens = list(p.itens.all())
+    # Barras erradas da fábrica cadastradas como alternativas (2026-11-17): web e coletor
+    # casam o código bipado localmente, então precisam saber o que mais é aceito por item.
+    alternativos = alternativos_por_ean(i.ean for i in itens)
     total_pedido = sum(i.qtd_pedida for i in itens if i.status == PedidoItem.Status.OK)
     total_conferido = sum(i.qtd_separada for i in itens if i.status == PedidoItem.Status.OK)
     percent = round(total_conferido / total_pedido * 100, 1) if total_pedido else 0
@@ -307,6 +312,7 @@ def _serializar_pedido(p: Pedido, com_volumes: bool = False) -> dict:
         'itens': [
             {
                 'id': i.id, 'sku': i.sku, 'descricao': i.descricao, 'ean': i.ean,
+                'codigos_alternativos': alternativos.get(i.ean, []),
                 'qtd_pedida': i.qtd_pedida, 'qtd_separada': i.qtd_separada,
                 'status': i.status,
             }
@@ -601,7 +607,13 @@ def bipar(request, pk):
             status=http_status.HTTP_409_CONFLICT,
         )
 
+    # Barra errada da fábrica cadastrada como alternativa (2026-11-17): passa, mas vira
+    # DivergenciaBarra para a cobrança, igual à liberada pelo supervisor.
+    alias = None
     if codigo != item.ean and codigo != item.sku:
+        from apps.pedidos.alias_barra import alias_para
+        alias = alias_para(codigo, item)
+    if codigo != item.ean and codigo != item.sku and not alias:
         PedidoLog.objects.create(
             pedido=pedido, usuario=request.user,
             acao='bip_codigo_divergente',
@@ -633,13 +645,18 @@ def bipar(request, pk):
         item.qtd_separada = models.F('qtd_separada') + qtd
         item.save(update_fields=['qtd_separada'])
         item.refresh_from_db(fields=['qtd_separada'])
+        payload = {
+            'item_id': item.id, 'sku': item.sku, 'qtd': qtd,
+            'qtd_separada_total': item.qtd_separada, 'volume_id': volume.id,
+        }
+        if alias:
+            DivergenciaBarra.objects.create(
+                pedido_item=item, codigo_bipado=codigo, qtd=qtd, alias=alias,
+                observacao=f'código alternativo cadastrado ({alias.codigo_lido} → {alias.codigo_certo})',
+            )
+            payload.update({'codigo_lido': codigo, 'alias_id': alias.id})
         PedidoLog.objects.create(
-            pedido=pedido, usuario=request.user,
-            acao='item_bipado',
-            payload={
-                'item_id': item.id, 'sku': item.sku, 'qtd': qtd,
-                'qtd_separada_total': item.qtd_separada, 'volume_id': volume.id,
-            },
+            pedido=pedido, usuario=request.user, acao='item_bipado', payload=payload,
         )
 
     return Response({
@@ -648,6 +665,7 @@ def bipar(request, pk):
         'qtd_separada': item.qtd_separada,
         'qtd_pedida': item.qtd_pedida,
         'volume_id': volume.id,
+        'codigo_alternativo': bool(alias),
     })
 
 
@@ -1072,6 +1090,12 @@ def liberar_divergencia(request, pk):
             {'erro': 'o código bate com o item — não é divergência, bipe normalmente no coletor'},
             status=http_status.HTTP_400_BAD_REQUEST,
         )
+    from apps.pedidos.alias_barra import alias_para
+    if alias_para(codigo, item):
+        return Response(
+            {'erro': 'este código já está cadastrado como alternativo do item — o coletor aceita direto, bipe normalmente'},
+            status=http_status.HTTP_400_BAD_REQUEST,
+        )
 
     if item.qtd_separada + qtd > item.qtd_pedida:
         return Response(
@@ -1133,6 +1157,8 @@ def listar_divergencias(request):
             'codigo_bipado': d.codigo_bipado,
             'qtd': d.qtd,
             'observacao': d.observacao,
+            # 'alias' = entrou pelo código alternativo cadastrado, sem ninguém liberar (2026-11-17)
+            'origem': 'alias' if d.alias_id else 'supervisor',
             'vinculado_por': d.vinculado_por.username if d.vinculado_por else None,
             'sku': d.pedido_item.sku,
             'descricao': d.pedido_item.descricao,

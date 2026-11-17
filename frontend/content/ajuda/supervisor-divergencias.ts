@@ -73,6 +73,7 @@ export const supervisorDivergencias: AjudaTela = {
   ],
   dicas: [
     'Use esta tela só quando a mercadoria está certa. Se o produto é outro, o conferente deve marcar o documento como Não conforme.',
+    'Produto que vem SEMPRE com a mesma barra errada da fábrica não precisa de liberação a cada peça: a TI cadastra o código errado como alternativo (Django Admin → Códigos de barras alternativos) e o coletor passa a aceitar. Cada leitura continua aparecendo aqui como "aceito automaticamente", para a cobrança.',
     'O registro serve para cobrar a fábrica pela etiquetagem errada. Escreva uma observação clara, com o lote quando souber.',
   ],
   relacionadas: ['supervisor-agora', 'supervisor-nao-conformes', 'supervisor-erros', 'conferencia-pedido'],

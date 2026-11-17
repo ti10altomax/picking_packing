@@ -16,9 +16,16 @@ type ItemPedido = {
   sku: string
   descricao: string
   ean: string
+  /** Barras erradas da fábrica cadastradas como alternativas do EAN (2026-11-17) */
+  codigos_alternativos?: string[]
   qtd_pedida: number
   qtd_separada: number
   status: 'ok' | 'cancelado' | 'falta'
+}
+
+/** O código bipado é deste item? EAN e SKU exatos, ou uma barra errada cadastrada para o EAN. */
+function codigoDoItem(i: ItemPedido, cod: string) {
+  return i.ean === cod || i.sku === cod || (i.codigos_alternativos ?? []).includes(cod)
 }
 
 type VolumeItem = {
@@ -453,14 +460,14 @@ export default function ConferenciaPedidoPage() {
   // OP do Sisplan: só dígitos, sem tamanho fixo (vai crescer), sempre menor que os 13 do EAN.
   // Código que é de algum item do documento nunca vira OP (SKU tem hífen, não colide).
   function ehOp(p: Pedido, cod: string) {
-    return /^\d{1,12}$/.test(cod) && !p.itens.some((i) => i.ean === cod)
+    return /^\d{1,12}$/.test(cod) && !p.itens.some((i) => codigoDoItem(i, cod))
   }
 
   function itemPendente(p: Pedido, cod: string) {
     return p.itens.find(
       (i) => i.status === 'ok'
         && i.qtd_separada < i.qtd_pedida
-        && (i.ean === cod || i.sku === cod),
+        && codigoDoItem(i, cod),
     )
   }
 
@@ -530,7 +537,7 @@ export default function ConferenciaPedidoPage() {
         toast.ok(`+1 ${item.sku}`, {
           detalhe: `${item.descricao ? `${item.descricao} · ` : ''}${r.qtd_separada} de ${r.qtd_pedida}${
             r.qtd_separada >= r.qtd_pedida ? ' — item completo' : ''
-          }`,
+          }${r.codigo_alternativo ? ' · barra errada da fábrica (registrada)' : ''}`,
           chave: 'leitor',
           duracao: 2500,
         })

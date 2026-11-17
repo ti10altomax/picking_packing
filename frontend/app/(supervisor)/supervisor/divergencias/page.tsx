@@ -259,8 +259,10 @@ export default function DivergenciasPage() {
                   {new Date(d.criado_em).toLocaleString('pt-BR', {
                     day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
                   })}
-                  {d.vinculado_por && ` · liberado por ${d.vinculado_por}`}
-                  {d.observacao && ` · "${d.observacao}"`}
+                  {d.origem === 'alias'
+                    ? ' · aceito automaticamente (código alternativo cadastrado)'
+                    : d.vinculado_por && ` · liberado por ${d.vinculado_por}`}
+                  {d.origem !== 'alias' && d.observacao && ` · "${d.observacao}"`}
                 </p>
               </li>
             ))}

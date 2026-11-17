@@ -11,7 +11,7 @@ from .models import (
     Pedido, PedidoItem, Marketplace, Impressora, Lote,
     PrintAgent, PrintJob, Volume, VolumeItem, PedidoLog,
     Separador, SeparadorLiberacao, Sequencia,
-    DivergenciaBarra, ErroSeparacao,
+    DivergenciaBarra, ErroSeparacao, CodigoBarrasAlias,
 )
 
 
@@ -222,14 +222,43 @@ class SeparadorLiberacaoAdmin(ModelAdmin):
 
 @admin.register(DivergenciaBarra)
 class DivergenciaBarraAdmin(ModelAdmin):
-    list_display = ('criado_em', 'codigo_bipado', 'item_sku', 'qtd', 'vinculado_por', 'observacao')
-    list_filter = (('criado_em', RangeDateFilter),)
+    list_display = ('criado_em', 'codigo_bipado', 'item_sku', 'qtd', 'origem', 'vinculado_por', 'observacao')
+    list_filter = (('criado_em', RangeDateFilter), ('alias', admin.RelatedOnlyFieldListFilter))
     search_fields = ('codigo_bipado', 'pedido_item__sku', 'pedido_item__pedido__numero_externo')
-    readonly_fields = ('pedido_item', 'codigo_bipado', 'qtd', 'vinculado_por', 'criado_em')
+    readonly_fields = ('pedido_item', 'codigo_bipado', 'qtd', 'vinculado_por', 'alias', 'criado_em')
 
     @display(description="Item")
     def item_sku(self, obj):
         return obj.pedido_item.sku
+
+    @display(description="Origem")
+    def origem(self, obj):
+        return 'código alternativo' if obj.alias_id else 'liberada pelo supervisor'
+
+
+@admin.register(CodigoBarrasAlias)
+class CodigoBarrasAliasAdmin(ModelAdmin):
+    """Barra errada da fábrica em série (2026-11-17). Cadastro só aqui, de propósito."""
+    list_display = ('codigo_lido', 'codigo_certo', 'produto_certo', 'ativo', 'qtd_bips', 'criado_por', 'criado_em')
+    list_filter = ('ativo',)
+    search_fields = ('codigo_lido', 'codigo_certo', 'observacao')
+    readonly_fields = ('produto_certo', 'qtd_bips', 'criado_por', 'criado_em', 'atualizado_em')
+    fields = ('codigo_lido', 'codigo_certo', 'produto_certo', 'ativo', 'observacao',
+              'qtd_bips', 'criado_por', 'criado_em', 'atualizado_em')
+
+    @display(description="Produto do código certo")
+    def produto_certo(self, obj):
+        p = obj.produto() if obj.codigo_certo else None
+        return f'{p[0]} — {p[1]}' if p else '(nenhum item importado com esse EAN ainda)'
+
+    @display(description="Bips registrados")
+    def qtd_bips(self, obj):
+        return obj.divergencias.count() if obj.pk else 0
+
+    def save_model(self, request, obj, form, change):
+        if not change and not obj.criado_por_id:
+            obj.criado_por = request.user
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(ErroSeparacao)

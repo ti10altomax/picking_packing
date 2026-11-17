@@ -468,6 +468,12 @@ class DivergenciaBarra(models.Model):
         on_delete=models.SET_NULL, related_name='divergencias_liberadas',
     )
     observacao = models.TextField(blank=True)
+    # Preenchido quando o bip entrou por um código alternativo cadastrado (2026-11-17):
+    # ninguém liberou à mão, mas a etiqueta errada continua contando para a cobrança.
+    alias = models.ForeignKey(
+        'CodigoBarrasAlias', null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='divergencias',
+    )
     criado_em = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -477,6 +483,74 @@ class DivergenciaBarra(models.Model):
 
     def __str__(self):
         return f'{self.codigo_bipado} → {self.pedido_item.sku} (x{self.qtd})'
+
+
+class CodigoBarrasAlias(models.Model):
+    """Barra impressa errada na fábrica, em série, aceita como se fosse a certa (2026-11-17).
+
+    Diferente da `DivergenciaBarra` (uma ocorrência liberada pelo supervisor), aqui a
+    etiqueta errada está em TODAS as peças de um produto há anos (vem errada da China)
+    e nunca vai ser corrigida — travar o conferente a cada peça não resolve nada.
+    O Senior está certo: `codigo_certo` é o EAN efetivo do item (`PedidoItem.ean`).
+
+    Cada bip que entra por aqui continua virando `DivergenciaBarra` (com `alias`
+    preenchido) para a cobrança da fábrica — o registro não some, só não trava.
+    Cadastro só no Django Admin de propósito: não é para qualquer um.
+    """
+
+    codigo_lido = models.CharField(
+        'código lido (errado)', max_length=100, unique=True,
+        help_text='O que a etiqueta da peça tem impresso e o coletor lê.',
+    )
+    codigo_certo = models.CharField(
+        'código certo (EAN do Senior)', max_length=100, db_index=True,
+        help_text='O código de barras cadastrado no Senior para o produto — o EAN que aparece no item do documento.',
+    )
+    ativo = models.BooleanField(default=True, help_text='Desligue quando a fábrica corrigir a etiqueta.')
+    observacao = models.TextField(blank=True, help_text='Produto, desde quando vem errado, quem informou.')
+    criado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='aliases_barra_criados',
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-ativo', 'codigo_certo']
+        verbose_name = 'Código de barras alternativo'
+        verbose_name_plural = 'Códigos de barras alternativos'
+
+    def __str__(self):
+        return f'{self.codigo_lido} → {self.codigo_certo}'
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+
+        self.codigo_lido = (self.codigo_lido or '').strip()
+        self.codigo_certo = (self.codigo_certo or '').strip()
+        if not self.codigo_lido or not self.codigo_certo:
+            return
+        if self.codigo_lido == self.codigo_certo:
+            raise ValidationError({'codigo_lido': 'O código lido é igual ao certo — não há o que substituir.'})
+        # O código "errado" pode ser o EAN verdadeiro de outro produto: aí bipar esse outro
+        # produto viraria o item errado em silêncio. Bloqueia e mostra qual item é.
+        dono = (
+            PedidoItem.objects.filter(ean=self.codigo_lido)
+            .order_by('-id').values_list('sku', 'descricao').first()
+        )
+        if dono:
+            raise ValidationError({
+                'codigo_lido': f'Este código já é o EAN de um produto importado do Senior '
+                               f'({dono[0]} — {dono[1]}). Cadastrá-lo como alternativo faria esse '
+                               f'produto ser lido como outro.',
+            })
+
+    def produto(self):
+        """SKU e descrição do último item importado com o EAN certo — só para conferir no admin."""
+        return (
+            PedidoItem.objects.filter(ean=self.codigo_certo)
+            .order_by('-id').values_list('sku', 'descricao').first()
+        )
 
 
 class ErroSeparacao(models.Model):

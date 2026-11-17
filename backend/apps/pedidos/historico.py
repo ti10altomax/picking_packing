@@ -99,7 +99,8 @@ ROTULOS = {
     'volume_criado': ('Volume aberto', 'fluxo', _vol),
     'volume_removido': ('Volume removido', 'alerta', _vol),
     'item_bipado': ('Item bipado', 'bip',
-                    lambda p: f"{p.get('sku')} × {p.get('qtd')} · total {p.get('qtd_separada_total')}"),
+                    lambda p: f"{p.get('sku')} × {p.get('qtd')} · total {p.get('qtd_separada_total')}"
+                              + (f" · barra errada {p.get('codigo_lido')} (código alternativo)" if p.get('codigo_lido') else '')),
     'bip_manual': ('Bip manual', 'bip', lambda p: f"{p.get('sku') or ''} × {p.get('qtd') or ''}".strip(' ×')),
     'bip_codigo_divergente': ('Código divergente', 'alerta',
                               lambda p: f"{p.get('codigo')} não bate com {p.get('sku')}"),
