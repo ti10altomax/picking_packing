@@ -816,6 +816,30 @@ def remover_volume(request, pk, volume_id):
 # Concluir conferência (Em conferência → Conferido, chama WS Senior placeholder)
 # ---------------------------------------------------------------------------
 
+_ROTULO_TIPO_VOLUME = {'caixa': 'Caixa', 'fardo': 'Fardo', 'outro': 'Volume'}
+
+
+def _volumes_vazios(pedido: Pedido) -> list[tuple[Volume, str]]:
+    """Volumes do pedido sem nenhum lançamento, com o rótulo que as telas mostram
+    (`tituloVolume` do web/coletor: "Caixa 4" = 4º volume na ordem de criação)."""
+    volumes = list(pedido.volumes.all().order_by('criado_em', 'id').prefetch_related('itens'))
+    saida = []
+    for indice, v in enumerate(volumes):
+        if v.itens.exists():
+            continue
+        base = _ROTULO_TIPO_VOLUME.get(v.tipo, 'Volume')
+        if v.op:
+            rotulo = f'{base} OP {v.op}'
+        elif v.identificador and v.identificador.lower().startswith(base.lower()):
+            rotulo = v.identificador
+        elif v.identificador:
+            rotulo = f'{base} {v.identificador}'
+        else:
+            rotulo = f'{base} {indice + 1}'
+        saida.append((v, rotulo))
+    return saida
+
+
 def _enviar_volumes_ao_senior(pedido: Pedido) -> tuple[bool, str]:
     """Placeholder — o WS exato ainda não foi definido.
 
@@ -922,6 +946,20 @@ def concluir(request, pk):
     if not pedido.volumes.exists():
         return Response(
             {'erro': 'pedido sem nenhum volume — abra ao menos um volume antes de concluir'},
+            status=http_status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Volume vazio não conclui (2026-11-18): a NF 150297 saiu Conferida com uma "Caixa 4"
+    # sem nenhum lançamento — ninguém viu e a etiqueta/cubagem não batem com as caixas
+    # reais. O conferente apaga o volume (botão "Apagar volume" no web e no coletor) ou
+    # lança os itens nele. O rótulo segue o das telas: tipo + identificador, ou tipo + posição.
+    vazios = _volumes_vazios(pedido)
+    if vazios:
+        nomes = ', '.join(r for _, r in vazios)
+        return Response(
+            {'erro': f'{"volume vazio" if len(vazios) == 1 else "volumes vazios"}: {nomes} — '
+                     'apague o volume ou lance itens nele antes de concluir',
+             'volumes_vazios': [{'id': v.id, 'rotulo': r} for v, r in vazios]},
             status=http_status.HTTP_400_BAD_REQUEST,
         )
 

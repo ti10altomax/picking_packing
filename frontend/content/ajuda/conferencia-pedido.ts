@@ -131,6 +131,10 @@ export const conferenciaPedido: AjudaTela = {
       oQueFazer: 'Abra o volume e toque na lixeira ao lado do lançamento de 1×.',
     },
     {
+      quando: 'Ao concluir: "volume vazio: Caixa N — apague o volume ou lance itens nele".',
+      oQueFazer: 'Abriu um volume e não colocou nada nele. Abra esse volume na lista e toque em "Apagar volume", ou lance os itens que faltam nele. Depois conclua de novo.',
+    },
+    {
       quando: 'Vermelho: "Código não corresponde ao item escolhido".',
       oQueFazer:
         'Você bipou outro produto. Separe o produto certo e bipe de novo. Se o produto está certo mas o código não passa, só o supervisor libera, pelo web.',

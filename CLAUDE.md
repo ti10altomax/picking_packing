@@ -48,6 +48,8 @@ Sistema interno para **separação de pedidos no galpão da Altomax**. Não é m
 
 > **Linha do item dentro do volume mostra o SKU (2026-11-18, APK 0.15.4)** — no acordeão de volumes (web e coletor), a linha ao lado da lixeira mostrava a descrição, que é igual entre as derivações do mesmo produto (`sku` = `codpro-codder`): não dava para saber qual lançamento apagar. Agora mostra o SKU em mono. A lista de itens do pedido continua com descrição + SKU.
 
+> **Concluir recusa volume vazio (2026-11-18)** — a NF 150297 saiu Conferida com uma "Caixa 4" sem lançamento (ninguém viu; o volume vazio não entra na etiqueta nem na contagem de volumes, mas confunde quem olha Conferidos). `concluir` agora devolve 400 `volumes_vazios` (`[{id, rotulo}]`, rótulo igual ao das telas: "Caixa 2", "Fardo F-7", "Caixa OP N") e o conferente apaga pelo botão "Apagar volume" que já existia no web e no coletor, ou lança itens. Só backend — os dois clientes já mostram o `erro` do concluir em diálogo; sem APK novo.
+
 Atores principais: **Supervisor de Vendas**, **Supervisor de Pátio**, **Conferente** e **Admin**.
 
 ### Fluxo geral
