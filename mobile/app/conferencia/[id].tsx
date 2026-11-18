@@ -853,19 +853,6 @@ export default function ConferenciaDetalhe() {
         </>
       ) : null}
 
-      {/* Lista de volumes (acordeão) */}
-      {volumes.length > 0 && pedido ? (
-        <ListaVolumes
-          volumes={volumes}
-          itens={pedido.itens}
-          ativoId={volumeAtivo?.id ?? null}
-          permiteEdicao={pedido.status === 'conferindo'}
-          onAtivar={setAtivoIdManual}
-          onRemoverItem={aoRemoverItem}
-          onRemoverVolume={aoRemoverVolume}
-        />
-      ) : null}
-
       {/* Erro global */}
       {erro ? (
         <View className="bg-red-500/10 border-b border-red-500/30 px-4 py-2 flex-row items-center justify-between">
@@ -876,11 +863,27 @@ export default function ConferenciaDetalhe() {
         </View>
       ) : null}
 
-      {/* Lista de itens */}
+      {/* Volumes + itens numa área só que rola. Os volumes ficavam fora do ScrollView,
+          empilhados no bloco fixo de cima: com 7 volumes o cabeçalho passava da altura da
+          tela do TC21, a lista de itens ficava com altura zero e o rodapé com o Concluir
+          saía da tela sem ter como rolar (2026-11-17, chamado de um conferente). */}
       <ScrollView
         className="flex-1"
-        contentContainerStyle={{ padding: 16, paddingBottom: 100, gap: 8 }}
+        contentContainerStyle={{ paddingBottom: 100 }}
       >
+        {volumes.length > 0 && pedido ? (
+          <ListaVolumes
+            volumes={volumes}
+            itens={pedido.itens}
+            ativoId={volumeAtivo?.id ?? null}
+            permiteEdicao={pedido.status === 'conferindo'}
+            onAtivar={setAtivoIdManual}
+            onRemoverItem={aoRemoverItem}
+            onRemoverVolume={aoRemoverVolume}
+          />
+        ) : null}
+
+        <View style={{ padding: 16, gap: 8 }}>
         {pedido.itens.map((item) => {
           const completo = item.status !== 'ok' || item.qtd_separada >= item.qtd_pedida
           const desabilitado = item.status !== 'ok' || completo
@@ -928,6 +931,7 @@ export default function ConferenciaDetalhe() {
             </Pressable>
           )
         })}
+        </View>
       </ScrollView>
 
       {/* Botões inferiores — paddingBottom respeita a navigation bar do Android */}
@@ -1386,8 +1390,10 @@ function ListaVolumes({
                     const item = itemMap.get(vi.pedido_item_id)
                     return (
                       <View key={vi.id} className="flex-row items-center gap-2">
-                        <Text className="flex-1 text-sm text-ink" numberOfLines={1}>
-                          {item ? (item.descricao || item.sku) : `item #${vi.pedido_item_id}`}
+                        {/* SKU = código-derivação (2026-11-18): a descrição é igual entre as
+                            derivações do mesmo produto e não dava para saber qual apagar */}
+                        <Text className="flex-1 text-sm font-mono text-ink" numberOfLines={1}>
+                          {item ? item.sku : `item #${vi.pedido_item_id}`}
                         </Text>
                         <Text className="text-sm font-bold text-ink">{vi.qtd}×</Text>
                         {permiteEdicao && !v.fechado_em ? (

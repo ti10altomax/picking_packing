@@ -1078,8 +1078,9 @@ function ListaVolumes({
                     const item = itemMap.get(vi.pedido_item_id)
                     return (
                       <div key={vi.id} className="flex items-center gap-2 text-sm">
-                        <span className="flex-1 min-w-0 truncate text-ink">
-                          {item ? (item.descricao || item.sku) : `item #${vi.pedido_item_id}`}
+                        <span className="flex-1 min-w-0 truncate font-mono text-ink">
+                          {/* SKU = código-derivação (2026-11-18): a descrição não distingue as derivações */}
+                          {item ? item.sku : `item #${vi.pedido_item_id}`}
                         </span>
                         <span className="font-bold text-ink">{vi.qtd}×</span>
                         {permiteEdicao && !v.fechado_em && (
