@@ -34,6 +34,11 @@ export const supervisorSequencia: AjudaTela = {
       descricao:
         'Documento Selecionado, ainda sem conferente. O conferente pode pegá-lo sozinho bipando a nota, então atribuir é opcional.',
     },
+    {
+      nome: 'Busca e filtros de status (acima da lista)',
+      descricao:
+        'Digite parte do número, do cliente, da transportadora ou do conferente para filtrar a lista na hora. Os botões redondos filtram por status e mostram quantos documentos há em cada um; toque de novo para desfazer. "Todos" volta à lista inteira. Nada disso muda o que está no servidor.',
+    },
     { nome: 'Atribuído (amarelo)', descricao: 'Tem conferente, que ainda não começou a conferir.' },
     { nome: 'Em conferência (azul)', descricao: 'O conferente já abriu volume. Não dá mais para atribuir nem remover.' },
     {

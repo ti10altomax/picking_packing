@@ -80,6 +80,9 @@ export const conferenciaApi = {
   // Ponto 4 (leitura B): bipa a nota (chave do DANFE ou número) e pega/abre o pedido
   pegarDocumento: (body: { codigo?: string; pedido_id?: number }) =>
     api.post('/api/conferencia/pegar/', body).then((r) => r.data),
+  // Devolve documento Atribuído (pegou sem querer / Pátio errou) — volta a Selecionado na sequência
+  devolverAtribuicao: (id: number) =>
+    api.post(`/api/conferencia/pedidos/${id}/devolver_atribuicao/`).then((r) => r.data),
   detalhe: (id: number) =>
     api.get(`/api/conferencia/pedidos/${id}/`).then((r) => r.data),
   iniciar: (id: number, apontamento: { separado_por?: number; nao_identificado?: boolean }) =>
@@ -368,6 +371,16 @@ export const supervisorApi = {
   // Devolver para Vendas (admin, 2026-11-16): Conferido → Pendente, apaga volumes e zera o separado
   devolverConferido: (id: number, motivo?: string) =>
     api.post(`/api/conferidos/${id}/devolver/`, { motivo: motivo ?? '' }).then((r) => r.data),
+  // Mover lançamentos inteiros entre volumes de um Conferido / Aguardando fechamento (2026-11-19)
+  moverLancamentos: (id: number, body: {
+    volume_item_ids: number[]
+    destino: { volume_id: number } | { novo: { tipo: 'caixa' | 'fardo' | 'outro'; identificador?: string } }
+  }) =>
+    api.post(`/api/conferidos/${id}/mover_lancamentos/`, body).then((r) => r.data as {
+      ok: boolean; movidos: number; destino_id: number; volumes_apagados: number[]
+      volumes: import('@/components/pedidos/ItensPorVolume').VolumeDoc[]
+      etiqueta_bloqueio: BloqueioEtiqueta | null; etiqueta_impressa: boolean
+    }),
 }
 
 export const adminApi = {

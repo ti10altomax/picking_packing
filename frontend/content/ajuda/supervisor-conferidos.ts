@@ -71,6 +71,11 @@ export const supervisorConferidos: AjudaTela = {
         'Abre a carta de correção da nota: transportadora, frete e quantidade de volumes. Só aparece para os perfis liberados pelo admin. Veja Cartas de correção.',
     },
     {
+      nome: 'Mover itens entre volumes (dentro da linha aberta)',
+      descricao:
+        'O conferente esqueceu de abrir um volume novo e concluiu com tudo numa caixa só? Abra a linha, toque em "Mover itens entre volumes", marque os lançamentos (vão inteiros, sem dividir quantidade) e escolha um volume existente ou "Novo volume". Caixa ou fardo da fábrica (OP) não entra. Volume que ficar vazio some. A etiqueta já impressa fica velha: reimprima pelo botão Etiqueta. Se a quantidade de volumes ficar diferente da NF, o botão vira "Volumes ≠ NF" até a carta de correção. Sup. Pátio e admin.',
+    },
+    {
       nome: 'Devolver para Vendas (vermelho, só admin)',
       descricao:
         'Desfaz a conferência: o documento volta a Pendente na tela de Vendas, os volumes são apagados, as quantidades separadas zeradas e a etiqueta precisa sair de novo quando for conferido outra vez. O histórico guarda quem devolveu, quando e o que havia nos volumes. Use para conferência de teste ou documento conferido por engano.',

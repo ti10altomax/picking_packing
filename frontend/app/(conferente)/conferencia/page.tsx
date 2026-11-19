@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { conferenciaApi } from '@/lib/api'
 import { useToast } from '@/components/Toast'
+import { useDialog } from '@/components/Dialog'
 import { rotuloSequencia } from '@/lib/sequencia'
 
 type PedidoLista = {
@@ -51,6 +52,38 @@ function tempoDesde(iso: string | null): string {
 export default function ConferenciaListaPage() {
   const router = useRouter()
   const toast = useToast()
+  const dialog = useDialog()
+
+  // Toque em "Disponíveis" confirma antes de pegar (2026-11-19): toque sem querer levava
+  // a nota para o conferente. Bipar a nota continua direto — bipar já é intencional.
+  async function confirmarPegar(p: { id: number; numero_externo: string; cliente: string | null; qtd_itens: number }) {
+    const ok = await dialog.confirm({
+      title: `Pegar ${p.numero_externo}?`,
+      message: `${p.cliente || 'Sem cliente'} · ${p.qtd_itens} ${p.qtd_itens === 1 ? 'item' : 'itens'}. O documento passa a ser seu.`,
+      confirmText: 'Pegar',
+      variant: 'question',
+    })
+    if (ok) pegar({ pedido_id: p.id })
+  }
+
+  // Devolver documento Atribuído (antes de abrir volume): volta para a sequência sem conferente
+  async function devolver(p: { id: number; numero_externo: string }) {
+    const ok = await dialog.confirm({
+      title: `Devolver ${p.numero_externo}?`,
+      message: 'O documento volta para a sequência sem conferente. O Pátio pode atribuir de novo ou outro conferente pode pegar.',
+      confirmText: 'Devolver',
+      variant: 'warning',
+    })
+    if (!ok) return
+    try {
+      await conferenciaApi.devolverAtribuicao(p.id)
+      toast.ok(`${p.numero_externo} devolvido`, { detalhe: 'Voltou para a sequência sem conferente.' })
+      carregar()
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { erro?: string } } })?.response?.data?.erro
+      toast.erro('Não foi possível devolver', { detalhe: msg ?? 'Tente de novo.' })
+    }
+  }
   const [pedidos, setPedidos] = useState<PedidoLista[]>([])
   const [sequencia, setSequencia] = useState<{ id: number; numero: number; descricao?: string } | null>(null)
   const [aguardando, setAguardando] = useState<{ id: number; numero: number; descricao?: string } | null>(null)
@@ -259,10 +292,21 @@ export default function ConferenciaListaPage() {
                   {p.qtd_itens} {p.qtd_itens === 1 ? 'item' : 'itens'} · {tempoDesde(p.atribuido_em)}
                 </p>
               </div>
-              {p.status === 'conferindo' && (
+              {p.status === 'conferindo' ? (
                 <div className="text-right shrink-0">
                   <p className="text-lg font-bold text-blue-600 dark:text-blue-400">{p.percent_conferido}%</p>
                 </div>
+              ) : (
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => { e.stopPropagation(); devolver(p) }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); devolver(p) } }}
+                  className="shrink-0 min-h-[40px] px-3 inline-flex items-center rounded-lg border border-surface-border text-xs font-semibold text-ink-muted hover:bg-surface-elev hover:text-ink"
+                  title="Devolver para a sequência (pegou sem querer ou foi atribuído por engano)"
+                >
+                  Devolver
+                </span>
               )}
             </div>
           </button>
@@ -278,7 +322,7 @@ export default function ConferenciaListaPage() {
               {disponiveis.map((p) => (
                 <button
                   key={`d-${p.id}`}
-                  onClick={() => pegar({ pedido_id: p.id })}
+                  onClick={() => confirmarPegar(p)}
                   disabled={pegando}
                   className="w-full bg-surface-card border border-dashed border-surface-border rounded-xl p-3 text-left hover:border-amber-400 dark:hover:border-amber-500/60 disabled:opacity-50 transition-all"
                 >

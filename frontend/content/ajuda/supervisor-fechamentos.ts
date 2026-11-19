@@ -35,6 +35,11 @@ export const supervisorFechamentos: AjudaTela = {
       descricao: 'Lista "2× produto". A sobra também fica registrada em Gestão → Erros de separação.',
     },
     {
+      nome: 'Mover itens entre volumes',
+      descricao:
+        'Antes de fechar, dá para reorganizar os volumes: marque os lançamentos e mande para outro volume ou para um volume novo (o lançamento vai inteiro). Use quando o conferente esqueceu de abrir um volume. Caixa ou fardo da fábrica (OP) não entra.',
+    },
+    {
       nome: 'Fechar e enviar ao Senior',
       descricao:
         'Marca o pedido como Conferido (verde) e envia os volumes ao Senior. A etiqueta de volume sai como ao concluir uma conferência: na impressora padrão, se o documento tem transportadora e, com a regra "Só imprimir com NF emitida" ligada, se já foi faturado.',

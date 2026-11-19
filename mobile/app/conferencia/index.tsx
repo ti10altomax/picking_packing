@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useToast } from '@/components/Toast'
+import { useDialog } from '@/components/Dialog'
 import {
   View,
   Text,
@@ -63,6 +64,7 @@ function tempoDesde(iso: string | null): string {
 export default function ConferenciaLista() {
   const router = useRouter()
   const toast = useToast()
+  const dialog = useDialog()
   const [pedidos, setPedidos] = useState<Pedido[]>([])
   const [sequencia, setSequencia] = useState<{ id: number; numero: number; descricao?: string } | null>(null)
   const [aguardando, setAguardando] = useState<{ id: number; numero: number; descricao?: string } | null>(null)
@@ -135,6 +137,37 @@ export default function ConferenciaLista() {
       setPegando(false)
     }
   }, [pegando, router])
+
+  // Toque em "Disponíveis" confirma antes de pegar (2026-11-19): toque sem querer levava a
+  // nota para o conferente. Bipar continua direto — bipar já é intencional.
+  async function confirmarPegar(p: { id: number; numero_externo: string; cliente: string | null; qtd_itens: number }) {
+    const ok = await dialog.confirm({
+      variant: 'question',
+      title: `Pegar ${p.numero_externo}?`,
+      message: `${p.cliente || 'Sem cliente'} · ${p.qtd_itens} ${p.qtd_itens === 1 ? 'item' : 'itens'}. O documento passa a ser seu.`,
+      confirmText: 'Pegar',
+    })
+    if (ok) pegar({ pedido_id: p.id })
+  }
+
+  // Devolver documento Atribuído (antes de abrir volume): volta para a sequência sem conferente
+  async function devolver(p: { id: number; numero_externo: string }) {
+    const ok = await dialog.confirm({
+      variant: 'warning',
+      title: `Devolver ${p.numero_externo}?`,
+      message: 'O documento volta para a sequência sem conferente. O Pátio pode atribuir de novo ou outro conferente pode pegar.',
+      confirmText: 'Devolver',
+    })
+    if (!ok) return
+    try {
+      await conferenciaApi.devolverAtribuicao(p.id)
+      toast.ok(`${p.numero_externo} devolvido`, { detalhe: 'Voltou para a sequência sem conferente.' })
+      carregar(true)
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { erro?: string } } })?.response?.data?.erro
+      toast.erro('Não foi possível devolver', { detalhe: msg ?? 'Tente de novo.' })
+    }
+  }
 
   function handleScan() {
     const cod = scanValue.trim()
@@ -312,7 +345,7 @@ export default function ConferenciaLista() {
                 {disponiveis.map((p) => (
                   <Pressable
                     key={`d-${p.id}`}
-                    onPress={() => pegar({ pedido_id: p.id })}
+                    onPress={() => confirmarPegar(p)}
                     disabled={pegando}
                     className="bg-surface-card border border-dashed border-surface-border rounded-xl p-3 mb-2 active:border-amber-400"
                   >
@@ -367,7 +400,15 @@ export default function ConferenciaLista() {
                   <Text className="text-lg font-bold text-blue-400">
                     {p.percent_conferido}%
                   </Text>
-                ) : null}
+                ) : (
+                  <Pressable
+                    onPress={() => devolver(p)}
+                    hitSlop={6}
+                    className="h-10 px-3 rounded-lg border border-surface-border items-center justify-center active:bg-surface-elev"
+                  >
+                    <Text className="text-xs font-semibold text-ink-muted">Devolver</Text>
+                  </Pressable>
+                )}
               </View>
             </Pressable>
           )}

@@ -106,6 +106,10 @@ export const conferenciaPedido: AjudaTela = {
       oQueFazer: 'Toque em + Volume e crie o volume. Depois bipe de novo.',
     },
     {
+      quando: 'Aviso escuro "Lido SKU · registrando…".',
+      oQueFazer: 'A barra foi lida. Pode tirar a peça da frente do leitor: o aviso vira o verde "+1" quando o servidor confirmar. Enquanto não confirma, ler a mesma barra de novo não faz nada. Para lançar outra unidade do mesmo produto, espere o verde e uns 3 segundos.',
+    },
+    {
       quando: 'Aviso verde "+1" com o SKU e "N de M".',
       oQueFazer: 'A leitura entrou: 1 unidade no volume ativo. Siga bipando.',
     },

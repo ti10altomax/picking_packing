@@ -154,6 +154,14 @@ export default function ConferenciaPedidoPage() {
   // bipadas rápidas do último item pendente passariam pela checagem local.
   const pedidoRef = useRef<Pedido | null>(null)
   const filaBip = useRef<Promise<void>>(Promise.resolve())
+  // Leitura em voo (2026-11-18): códigos cuja leitura ainda não voltou do servidor, e até
+  // quando cada código fica bloqueado depois da resposta. Com a rede lenta o conferente
+  // ficava mirando a mesma barra achando que não leu; os 3 s do leitor/câmera venciam antes
+  // da resposta e a peça entrava duas vezes. Agora: aviso "Lido … registrando…" na hora da
+  // leitura, e o mesmo código só vale de novo depois da resposta + INTERVALO_REPETIR_MS.
+  const emVoo = useRef<Set<string>>(new Set())
+  const bloqueioCodigo = useRef<Map<string, number>>(new Map())
+  const INTERVALO_REPETIR_MS = 3000
   const recargaTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -513,11 +521,19 @@ export default function ConferenciaPedidoPage() {
 
   // Leitura sem "Qtd" armado: 1 unidade no volume ativo, sem modal
   function registrarUm(cod: string, volumeId: number) {
+    const ate = bloqueioCodigo.current.get(cod)
+    if (emVoo.current.has(cod) || (ate !== undefined && Date.now() < ate)) return
+    const itemLido = pedidoRef.current ? itemPendente(pedidoRef.current, cod) : null
+    if (itemLido) {
+      emVoo.current.add(cod)
+      toast.info(`Lido ${itemLido.sku}`, { detalhe: 'registrando…', chave: 'leitor', duracao: 15000 })
+    }
     filaBip.current = filaBip.current.then(async () => {
       const p = pedidoRef.current
-      if (!p) return
+      if (!p) { emVoo.current.delete(cod); return }
       const item = itemPendente(p, cod)
       if (!item) {
+        emVoo.current.delete(cod)
         erroItemNaoPendente(cod)
         return
       }
@@ -554,6 +570,9 @@ export default function ConferenciaPedidoPage() {
           erroScan('A leitura não foi registrada', e?.response?.data?.erro ?? 'Bipe de novo.', cod)
         }
         await carregar(true)
+      } finally {
+        emVoo.current.delete(cod)
+        bloqueioCodigo.current.set(cod, Date.now() + INTERVALO_REPETIR_MS)
       }
     }).catch(() => {})
   }

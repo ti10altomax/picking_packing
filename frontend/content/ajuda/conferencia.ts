@@ -48,7 +48,12 @@ export const conferencia: AjudaTela = {
     {
       nome: 'Disponíveis na sequência N',
       descricao:
-        'Documentos da sua sequência que ainda não têm conferente. Toque no cartão ou bipe a nota para pegar. A transportadora aparece embaixo do cliente.',
+        'Documentos da sua sequência que ainda não têm conferente. Toque no cartão e confirme em "Pegar", ou bipe a nota (bipar pega direto, sem confirmação). A transportadora aparece embaixo do cliente.',
+    },
+    {
+      nome: 'Devolver (no cartão Atribuído)',
+      descricao:
+        'Pegou sem querer, ou o Pátio atribuiu por engano? Toque em Devolver e confirme. O documento volta para a sequência sem conferente. Só funciona enquanto está Atribuído, antes de abrir o primeiro volume.',
     },
     {
       nome: '↻ e "sync"',

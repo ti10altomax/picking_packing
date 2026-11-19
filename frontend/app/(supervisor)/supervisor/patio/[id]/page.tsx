@@ -31,6 +31,14 @@ const STATUS_SEQ: Record<string, { label: string; cor: string }> = {
 // Pedido ainda "mexível" pelo pátio (atribuir/reatribuir/remover)
 const EDITAVEIS = ['selecionado', 'atribuido']
 
+// Filtro local da lista (2026-11-19): a tela já recebe todos os documentos da sequência, e
+// com muitas notas ficava difícil achar uma. Busca sem acento por nº, cliente,
+// transportadora e conferente; chips de status com contagem.
+function semAcento(s: string) {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+}
+const ORDEM_STATUS = ['selecionado', 'atribuido', 'conferindo', 'aguardando_fechamento', 'conferido', 'nao_conforme', 'cancelado']
+
 export default function SequenciaDetalhePage() {
   const router = useRouter()
   const params = useParams()
@@ -45,6 +53,8 @@ export default function SequenciaDetalhePage() {
   const [agindo, setAgindo] = useState(false)
   // Nome livre da sequência (2026-11-17): edição inline no cabeçalho
   const [editandoNome, setEditandoNome] = useState(false)
+  const [filtroStatus, setFiltroStatus] = useState('')
+  const [busca, setBusca] = useState('')
   const [nome, setNome] = useState('')
   const toast = useToast()
 
@@ -158,6 +168,18 @@ export default function SequenciaDetalhePage() {
   const editaveis = seq.pedidos.filter((p) => EDITAVEIS.includes(p.status))
   const conferenteAtual = conferentes.find((c) => c.id === conferenteId)
   const podeExcluir = seq.status === 'aberta' && seq.pedidos.length === 0
+  const porStatus = new Map<string, number>()
+  for (const p of seq.pedidos) porStatus.set(p.status, (porStatus.get(p.status) ?? 0) + 1)
+  const termo = semAcento(busca.trim())
+  const visiveis = seq.pedidos.filter((p) => {
+    if (filtroStatus && p.status !== filtroStatus) return false
+    if (!termo) return true
+    const alvo = semAcento(
+      `${p.numero_externo} ${p.cliente ?? ''} ${p.transportadora ?? ''} ${p.conferente_username ?? ''} ${p.pedidos_origem ?? ''}`,
+    )
+    return alvo.includes(termo)
+  })
+  const filtrando = !!filtroStatus || !!termo
 
   return (
     <div className="p-4 pb-32">
@@ -238,14 +260,72 @@ export default function SequenciaDetalhePage() {
         </div>
       )}
 
+      {seq.pedidos.length > 0 && (
+        <div className="mb-3 space-y-2">
+          <div className="relative">
+            <input
+              type="search"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar nº, cliente, transportadora, conferente…"
+              className="w-full bg-surface-card border border-surface-border text-ink placeholder:text-ink-subtle rounded-lg px-3 py-2 text-sm min-h-[44px]"
+            />
+            {busca && (
+              <button
+                onClick={() => setBusca('')}
+                className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] px-2 text-ink-subtle hover:text-ink"
+                aria-label="Limpar busca"
+              >
+                ×
+              </button>
+            )}
+          </div>
+          <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap">
+            <button
+              onClick={() => setFiltroStatus('')}
+              className={`shrink-0 text-xs px-3 min-h-[36px] rounded-full border font-medium transition-colors ${
+                !filtroStatus ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100' : 'border-surface-border text-ink-muted hover:bg-surface-elev'
+              }`}
+            >
+              Todos · {seq.pedidos.length}
+            </button>
+            {ORDEM_STATUS.filter((s) => porStatus.has(s)).map((s) => {
+              const cfg = STATUS_PEDIDO[s]
+              const ativo = filtroStatus === s
+              return (
+                <button
+                  key={s}
+                  onClick={() => setFiltroStatus(ativo ? '' : s)}
+                  className={`shrink-0 text-xs px-3 min-h-[36px] rounded-full border font-medium transition-colors ${
+                    ativo ? `${cfg.cor} border-current` : 'border-surface-border text-ink-muted hover:bg-surface-elev'
+                  }`}
+                >
+                  {cfg.label} · {porStatus.get(s)}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {seq.pedidos.length === 0 ? (
         <p className="text-ink-subtle text-center py-12">
           Sequência vazia — adicione pedidos pela tela do Pátio.
         </p>
+      ) : visiveis.length === 0 ? (
+        <p className="text-ink-subtle text-center py-12">
+          Nenhum documento com esse filtro.{' '}
+          <button onClick={() => { setBusca(''); setFiltroStatus('') }} className="underline underline-offset-2 text-ink-muted hover:text-ink">Limpar</button>
+        </p>
       ) : (
         <div className="bg-surface-card rounded-xl border border-surface-border overflow-hidden">
+          {filtrando && (
+            <p className="px-4 py-2 text-xs text-ink-subtle border-b border-surface-border">
+              {visiveis.length} de {seq.pedidos.length}
+            </p>
+          )}
           <ul>
-            {seq.pedidos.map((p) => {
+            {visiveis.map((p) => {
               const cfg = STATUS_PEDIDO[p.status] ?? { label: p.status, cor: 'bg-surface-elev text-ink-muted' }
               const editavel = EDITAVEIS.includes(p.status) && seq.status !== 'concluida'
               const marcado = selecionados.has(p.id)

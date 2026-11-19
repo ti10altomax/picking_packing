@@ -9,6 +9,7 @@ import { HistoricoBotao } from '@/components/pedidos/HistoricoPedido'
 import { TrocarTransportadora } from '@/components/cce/TrocarTransportadora'
 import { useCcePermissao } from '@/lib/useCcePermissao'
 import { ItensPorVolume, type ItemDoc, type VolumeDoc } from '@/components/pedidos/ItensPorVolume'
+import { MoverLancamentos } from '@/components/pedidos/MoverLancamentos'
 import { useAuthStore } from '@/stores/authStore'
 import { useDialog } from '@/components/Dialog'
 import { useToast } from '@/components/Toast'
@@ -53,6 +54,8 @@ export default function ConferidosPage() {
   const podeCce = useCcePermissao() === true   // Corrigir NF só para os perfis em Configuracao.cce_perfis
   const { user } = useAuthStore()
   const ehAdmin = user?.perfil === 'admin'     // Devolver para Vendas é só do admin (2026-11-16)
+  const podeMover = ehAdmin || user?.perfil === 'supervisor_patio'   // Mover itens entre volumes (2026-11-19)
+  const [movendo, setMovendo] = useState<number | null>(null)
   const dialog = useDialog()
   const toast = useToast()
   const [devolvendo, setDevolvendo] = useState<number | null>(null)
@@ -305,7 +308,33 @@ export default function ConferidosPage() {
                         {carregandoEsse && !detalhe ? (
                           <p className="text-xs text-ink-subtle italic">Carregando itens…</p>
                         ) : (
-                          <ItensPorVolume itens={detalhe?.itens ?? []} volumes={detalhe?.volumes ?? []} />
+                          <>
+                            <ItensPorVolume itens={detalhe?.itens ?? []} volumes={detalhe?.volumes ?? []} />
+                            {podeMover && detalhe && detalhe.volumes.some((v) => !v.op && v.itens.length > 0) && (
+                              <button
+                                type="button"
+                                onClick={() => setMovendo(p.id)}
+                                className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-ink border border-surface-border rounded-lg px-3 min-h-[36px] bg-surface-card hover:bg-surface-elev transition-colors"
+                                title="Esqueceram de abrir um volume? Mova lançamentos para outro volume ou para um volume novo"
+                              >
+                                ⇄ Mover itens entre volumes
+                              </button>
+                            )}
+                            {movendo === p.id && detalhe && (
+                              <MoverLancamentos
+                                pedidoId={p.id}
+                                numero={p.numero_externo}
+                                itens={detalhe.itens}
+                                volumes={detalhe.volumes}
+                                onFechar={() => setMovendo(null)}
+                                onMovido={(r) => {
+                                  setMovendo(null)
+                                  setItensCache((prev) => ({ ...prev, [p.id]: { itens: prev[p.id]?.itens ?? [], volumes: r.volumes } }))
+                                  atualizarLinha(p.id, { etiqueta_bloqueio: r.etiqueta_bloqueio })
+                                }}
+                              />
+                            )}
+                          </>
                         )}
                       </div>
                     )}

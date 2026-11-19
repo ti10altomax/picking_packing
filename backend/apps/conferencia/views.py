@@ -1555,6 +1555,110 @@ def devolver_conferido(request, pk):
     return Response({'ok': True, 'status': pedido.status})
 
 # ---------------------------------------------------------------------------
+# Mover lançamentos entre volumes depois da conferência (2026-11-19)
+# O conferente esqueceu de abrir um volume novo e concluiu (ou registrou sobra) com tudo
+# numa caixa só; antes a única saída era "Devolver para Vendas" e conferir tudo de novo.
+# Sup. Pátio/admin, só web. Lançamento inteiro (sem dividir quantidade). Volume de OP
+# (caixa/fardo lacrado da fábrica) não entra nem como origem nem como destino.
+# ---------------------------------------------------------------------------
+
+@api_view(['POST'])
+def mover_lancamentos(request, pk):
+    """`{volume_item_ids: [..], destino: {volume_id} | {novo: {tipo, identificador}}}`.
+    Volume de origem que ficar vazio é apagado. Devolve os volumes atualizados e o bloqueio
+    da etiqueta (volumes ≠ NF aparece sozinho se a conta mudou) — a etiqueta já impressa
+    fica velha e precisa ser reimpressa pelo botão."""
+    if request.user.perfil not in ('supervisor_patio', 'admin'):
+        return Response({'erro': 'restrito ao Supervisor de Pátio'}, status=http_status.HTTP_403_FORBIDDEN)
+
+    ids = request.data.get('volume_item_ids') or []
+    destino = request.data.get('destino') or {}
+    if not isinstance(ids, list) or not ids or not all(isinstance(i, int) for i in ids):
+        return Response({'erro': 'volume_item_ids obrigatório (lista de ids)'}, status=http_status.HTTP_400_BAD_REQUEST)
+    if not isinstance(destino, dict) or not (destino.get('volume_id') or destino.get('novo')):
+        return Response({'erro': 'destino obrigatório: {volume_id} ou {novo: {tipo, identificador}}'},
+                        status=http_status.HTTP_400_BAD_REQUEST)
+
+    with transaction.atomic():
+        pedido = get_object_or_404(Pedido.objects.select_for_update(of=('self',)), pk=pk)
+        if pedido.status not in (Pedido.Status.CONFERIDO, Pedido.Status.AGUARDANDO_FECHAMENTO):
+            return Response(
+                {'erro': f'pedido em status "{pedido.get_status_display()}" — só Conferido ou Aguardando fechamento'},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        lancamentos = list(
+            VolumeItem.objects.select_related('volume', 'pedido_item')
+            .filter(pk__in=ids, volume__pedido=pedido)
+        )
+        if len(lancamentos) != len(set(ids)):
+            return Response({'erro': 'algum lançamento não pertence a este documento'}, status=http_status.HTTP_400_BAD_REQUEST)
+        if any(vi.volume.op for vi in lancamentos):
+            return Response({'erro': 'lançamento de caixa/fardo da fábrica (OP) não pode ser movido'},
+                            status=http_status.HTTP_400_BAD_REQUEST)
+
+        criado_novo = False
+        if destino.get('volume_id'):
+            alvo = pedido.volumes.filter(pk=destino['volume_id']).first()
+            if not alvo:
+                return Response({'erro': 'volume de destino não pertence ao documento'}, status=http_status.HTTP_400_BAD_REQUEST)
+            if alvo.op:
+                return Response({'erro': 'não dá para mover para caixa/fardo da fábrica (OP)'}, status=http_status.HTTP_400_BAD_REQUEST)
+        else:
+            novo = destino.get('novo') or {}
+            tipo = str(novo.get('tipo') or Volume.Tipo.CAIXA)
+            if tipo not in Volume.Tipo.values:
+                return Response({'erro': f'tipo de volume inválido: {tipo}'}, status=http_status.HTTP_400_BAD_REQUEST)
+            alvo = Volume.objects.create(
+                pedido=pedido, tipo=tipo, identificador=str(novo.get('identificador') or '').strip()[:100],
+                criado_por=request.user, fechado_em=timezone.now(),
+            )
+            criado_novo = True
+
+        if all(vi.volume_id == alvo.id for vi in lancamentos):
+            return Response({'erro': 'os lançamentos já estão nesse volume'}, status=http_status.HTTP_400_BAD_REQUEST)
+
+        origens = {}
+        movidos = []
+        for vi in lancamentos:
+            if vi.volume_id == alvo.id:
+                continue
+            origens[vi.volume_id] = vi.volume
+            movidos.append({'volume_item_id': vi.id, 'sku': vi.pedido_item.sku, 'qtd': vi.qtd,
+                            'de': vi.volume_id, 'para': alvo.id})
+            vi.volume = alvo
+            vi.save(update_fields=['volume'])
+
+        apagados = []
+        for v in origens.values():
+            if not v.itens.exists():
+                apagados.append({'volume_id': v.id, 'tipo': v.tipo, 'identificador': v.identificador})
+                v.delete()
+
+        PedidoLog.objects.create(
+            pedido=pedido, usuario=request.user, acao='volumes_reorganizados',
+            payload={'movidos': movidos, 'destino': {'volume_id': alvo.id, 'tipo': alvo.tipo,
+                                                     'identificador': alvo.identificador, 'novo': criado_novo},
+                     'volumes_apagados': apagados},
+        )
+
+    from apps.impressao.services import motivo_bloqueio
+    from apps.pedidos.serializers import VolumeSerializer
+    volumes = pedido.volumes.all().prefetch_related('itens').order_by('criado_em', 'id')
+    logger.info(f'{pedido}: {len(movidos)} lançamento(s) movido(s) para volume {alvo.id} por {request.user.username}',
+                extra={'pedido': pedido.id})
+    return Response({
+        'ok': True,
+        'movidos': len(movidos),
+        'destino_id': alvo.id,
+        'volumes_apagados': [a['volume_id'] for a in apagados],
+        'volumes': VolumeSerializer(volumes, many=True).data,
+        'etiqueta_bloqueio': motivo_bloqueio(pedido),
+        'etiqueta_impressa': pedido.impressoes_etiqueta.filter(status='ok').exists(),
+    })
+
+
+# ---------------------------------------------------------------------------
 # Lista de Cancelados — transferência de conferência (2026-09-30)
 # Documento cancelado no Senior (ou pelo supervisor) com volumes já montados:
 # o Sup. Pátio aponta o documento reemitido e a conferência é transferida.
@@ -1710,6 +1814,43 @@ def _opcao(p):
         'conferente': p.conferente.username if p.conferente else None,
         'sequencia': {'id': p.sequencia.id, 'numero': p.sequencia.numero, 'descricao': p.sequencia.descricao} if p.sequencia else None,
     }
+
+
+@api_view(['POST'])
+def devolver_atribuicao(request, pk):
+    """Conferente devolve um documento que está Atribuído a ele (pegou sem querer, ou o
+    Pátio atribuiu por engano — 2026-11-19). Só antes de abrir volume: volta a Selecionado,
+    continua na sequência, sem conferente; o Pátio reatribui ou outro conferente pega."""
+    err = _exige_conferente(request)
+    if err:
+        return err
+    pedido = get_object_or_404(Pedido, pk=pk)
+    err = _guard_pedido(request, pedido)
+    if err:
+        return err
+    if pedido.status != Pedido.Status.ATRIBUIDO:
+        return Response(
+            {'erro': 'só dá para devolver documento Atribuído que ainda não começou a conferência'},
+            status=http_status.HTTP_400_BAD_REQUEST,
+        )
+    if pedido.volumes.exists():
+        return Response({'erro': 'documento já tem volume — não dá mais para devolver'},
+                        status=http_status.HTTP_400_BAD_REQUEST)
+    anterior = pedido.conferente
+    with transaction.atomic():
+        pedido.status = Pedido.Status.SELECIONADO
+        pedido.conferente = None
+        pedido.atribuido_em = None
+        pedido.atribuido_por = None
+        pedido.save(update_fields=['status', 'conferente', 'atribuido_em', 'atribuido_por'])
+        PedidoLog.objects.create(
+            pedido=pedido, usuario=request.user,
+            acao='atribuicao_devolvida',
+            payload={'conferente': anterior.username if anterior else None,
+                     'sequencia_id': pedido.sequencia_id,
+                     'numero': pedido.sequencia.numero if pedido.sequencia else None},
+        )
+    return Response({'ok': True, 'status': pedido.status})
 
 
 @api_view(['POST'])

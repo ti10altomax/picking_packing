@@ -1,14 +1,31 @@
 'use client'
 import { DocBadges } from '@/components/ui/DocBadges'
 import { useEffect, useState, useCallback } from 'react'
-import { fechamentosApi, type Fechamento } from '@/lib/api'
+import { fechamentosApi, pedidosApi, type Fechamento } from '@/lib/api'
 import { useDialog } from '@/components/Dialog'
+import { MoverLancamentos } from '@/components/pedidos/MoverLancamentos'
+import type { ItemDoc, VolumeDoc } from '@/components/pedidos/ItensPorVolume'
 
 export default function FechamentosPage() {
   const dialog = useDialog()
   const [lista, setLista] = useState<Fechamento[]>([])
   const [carregando, setCarregando] = useState(true)
   const [agindo, setAgindo] = useState<number | null>(null)
+  // Mover itens entre volumes antes de fechar (2026-11-19): o conferente esqueceu de abrir volume
+  const [movendo, setMovendo] = useState<{ id: number; numero: string; itens: ItemDoc[]; volumes: VolumeDoc[] } | null>(null)
+  const [carregandoVolumes, setCarregandoVolumes] = useState<number | null>(null)
+
+  async function abrirMover(p: Fechamento) {
+    setCarregandoVolumes(p.id)
+    try {
+      const d = await pedidosApi.buscar(p.id)
+      setMovendo({ id: p.id, numero: p.numero_externo, itens: d.itens ?? [], volumes: d.volumes ?? [] })
+    } catch {
+      await dialog.alert({ variant: 'danger', title: 'Erro', message: 'Não foi possível carregar os volumes.' })
+    } finally {
+      setCarregandoVolumes(null)
+    }
+  }
 
   const carregar = useCallback(async () => {
     setCarregando(true)
@@ -97,13 +114,33 @@ export default function FechamentosPage() {
                 </ul>
               </div>
 
-              <button
-                onClick={() => fechar(p)}
-                disabled={agindo === p.id}
-                className="mt-3 w-full h-11 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-semibold disabled:opacity-50 shadow-lg shadow-emerald-600/30 transition-all"
-              >
-                {agindo === p.id ? 'Fechando…' : 'Fechar e enviar ao Senior'}
-              </button>
+              <div className="mt-3 flex flex-col sm:flex-row gap-2">
+                <button
+                  onClick={() => abrirMover(p)}
+                  disabled={carregandoVolumes === p.id}
+                  className="sm:w-auto h-11 px-4 rounded-lg border border-surface-border text-sm font-semibold text-ink hover:bg-surface-elev disabled:opacity-50"
+                  title="Esqueceram de abrir um volume? Mova lançamentos antes de fechar"
+                >
+                  {carregandoVolumes === p.id ? 'Carregando…' : '⇄ Mover itens entre volumes'}
+                </button>
+                <button
+                  onClick={() => fechar(p)}
+                  disabled={agindo === p.id}
+                  className="flex-1 h-11 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-semibold disabled:opacity-50 shadow-lg shadow-emerald-600/30 transition-all"
+                >
+                  {agindo === p.id ? 'Fechando…' : 'Fechar e enviar ao Senior'}
+                </button>
+              </div>
+              {movendo?.id === p.id && (
+                <MoverLancamentos
+                  pedidoId={p.id}
+                  numero={p.numero_externo}
+                  itens={movendo.itens}
+                  volumes={movendo.volumes}
+                  onFechar={() => setMovendo(null)}
+                  onMovido={() => setMovendo(null)}
+                />
+              )}
             </div>
           ))}
         </div>

@@ -4,6 +4,8 @@ from . import views
 urlpatterns = [
     path('conferencia/pedidos/', views.listar_atribuidos, name='conferencia_listar_atribuidos'),
     path('conferencia/pegar/', views.pegar_documento, name='conferencia_pegar_documento'),
+    path('conferencia/pedidos/<int:pk>/devolver_atribuicao/', views.devolver_atribuicao,
+         name='conferencia_devolver_atribuicao'),
     path('conferencia/pedidos/<int:pk>/', views.detalhe, name='conferencia_detalhe'),
     path('conferencia/pedidos/<int:pk>/iniciar/', views.iniciar, name='conferencia_iniciar'),
     path('conferencia/pedidos/<int:pk>/separado_por/', views.alterar_separado_por, name='conferencia_separado_por'),
@@ -30,6 +32,7 @@ urlpatterns = [
     path('nao-conformes/<int:pk>/retornar/', views.retornar_nao_conforme, name='retornar_nao_conforme'),
     # Devolver para Vendas (admin, 2026-11-16): Conferido → Pendente, do zero
     path('conferidos/<int:pk>/devolver/', views.devolver_conferido, name='devolver_conferido'),
+    path('conferidos/<int:pk>/mover_lancamentos/', views.mover_lancamentos, name='mover_lancamentos'),
 
     # Lista de Cancelados + transferência de conferência para o documento reemitido
     path('cancelados/', views.listar_cancelados, name='listar_cancelados'),

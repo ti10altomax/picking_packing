@@ -8,6 +8,7 @@ import {
   RefreshControl,
   ActivityIndicator,
   Modal,
+  TextInput,
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router'
@@ -35,6 +36,14 @@ const STATUS_PEDIDO: Record<string, { label: string; cor: string; texto: string 
 
 const EDITAVEIS = ['selecionado', 'atribuido']
 
+// Filtro local da lista (2026-11-19): a tela já recebe todos os documentos da sequência, e
+// com muitas notas ficava difícil achar uma. Busca sem acento por nº, cliente,
+// transportadora e conferente; chips de status com contagem.
+function semAcento(s: string) {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+}
+const ORDEM_STATUS = ['selecionado', 'atribuido', 'conferindo', 'aguardando_fechamento', 'conferido', 'nao_conforme', 'cancelado']
+
 export default function SequenciaDetalhe() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const sequenciaId = Number(id)
@@ -53,6 +62,8 @@ export default function SequenciaDetalhe() {
   const [agindo, setAgindo] = useState(false)
   const [relatorio, setRelatorio] = useState<RelatorioSequencia | null>(null)
   const [relatorioAberto, setRelatorioAberto] = useState(false)
+  const [filtroStatus, setFiltroStatus] = useState('')
+  const [busca, setBusca] = useState('')
 
   async function abrirRelatorio() {
     try {
@@ -145,6 +156,18 @@ export default function SequenciaDetalhe() {
   }
 
   const editaveis = seq.pedidos.filter((p) => EDITAVEIS.includes(p.status))
+  const porStatus = new Map<string, number>()
+  for (const p of seq.pedidos) porStatus.set(p.status, (porStatus.get(p.status) ?? 0) + 1)
+  const termo = semAcento(busca.trim())
+  const visiveis = seq.pedidos.filter((p) => {
+    if (filtroStatus && p.status !== filtroStatus) return false
+    if (!termo) return true
+    const alvo = semAcento(
+      `${p.numero_externo} ${p.cliente ?? ''} ${p.transportadora ?? ''} ${p.conferente_username ?? ''} ${p.pedidos_origem ?? ''}`,
+    )
+    return alvo.includes(termo)
+  })
+  const filtrando = !!filtroStatus || !!termo
 
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-surface-bg">
@@ -173,10 +196,59 @@ export default function SequenciaDetalhe() {
             <Text className="text-ink-subtle">▾</Text>
           </Pressable>
         )}
+        {seq.pedidos.length > 0 ? (
+          <>
+            <View className="h-11 bg-surface-card border border-surface-border rounded-lg flex-row items-center pl-3 pr-1">
+              <TextInput
+                value={busca}
+                onChangeText={setBusca}
+                placeholder="Buscar nº, cliente, transportadora…"
+                placeholderTextColor="#71717a"
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="search"
+                className="flex-1 text-ink text-sm"
+              />
+              {busca ? (
+                <Pressable onPress={() => setBusca('')} hitSlop={8} className="w-9 h-9 items-center justify-center">
+                  <Text className="text-ink-subtle text-lg">×</Text>
+                </Pressable>
+              ) : null}
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+              <Pressable
+                onPress={() => setFiltroStatus('')}
+                className={`h-9 px-3 rounded-full border items-center justify-center ${
+                  !filtroStatus ? 'bg-zinc-100 border-zinc-100' : 'border-surface-border'
+                }`}
+              >
+                <Text className={`text-xs font-medium ${!filtroStatus ? 'text-zinc-900' : 'text-ink-muted'}`}>Todos · {seq.pedidos.length}</Text>
+              </Pressable>
+              {ORDEM_STATUS.filter((s) => porStatus.has(s)).map((s) => {
+                const cfg = STATUS_PEDIDO[s]
+                const ativo = filtroStatus === s
+                return (
+                  <Pressable
+                    key={s}
+                    onPress={() => setFiltroStatus(ativo ? '' : s)}
+                    className={`h-9 px-3 rounded-full border items-center justify-center ${
+                      ativo ? `${cfg.cor} border-transparent` : 'border-surface-border'
+                    }`}
+                  >
+                    <Text className={`text-xs font-medium ${ativo ? cfg.texto : 'text-ink-muted'}`}>{cfg.label} · {porStatus.get(s)}</Text>
+                  </Pressable>
+                )
+              })}
+            </ScrollView>
+            {filtrando ? (
+              <Text className="text-xs text-ink-subtle">{visiveis.length} de {seq.pedidos.length}</Text>
+            ) : null}
+          </>
+        ) : null}
       </View>
 
       <FlatList
-        data={seq.pedidos}
+        data={visiveis}
         keyExtractor={(p) => String(p.id)}
         contentContainerStyle={{
           paddingHorizontal: 16,
@@ -192,7 +264,7 @@ export default function SequenciaDetalhe() {
         }
         ListEmptyComponent={
           <Text className="text-ink-subtle text-center py-12">
-            Sequência vazia — adicione pedidos pela tela do Pátio.
+            {seq.pedidos.length === 0 ? 'Sequência vazia — adicione pedidos pela tela do Pátio.' : 'Nenhum documento com esse filtro.'}
           </Text>
         }
         renderItem={({ item: p }) => {

@@ -19,6 +19,18 @@ def _vol(p):
     return f"{p.get('tipo') or 'volume'} {p.get('identificador') or ''}".strip()
 
 
+def _reorganizados(p):
+    m = p.get('movidos') or []
+    d = p.get('destino') or {}
+    alvo = f"{d.get('tipo') or 'volume'} {d.get('identificador') or ''}".strip() + (' (novo)' if d.get('novo') else '')
+    txt = f"{len(m)} lançamento(s) → {alvo}: " + ', '.join(f"{x.get('sku')} ×{x.get('qtd')}" for x in m[:6])
+    if len(m) > 6:
+        txt += f' e mais {len(m) - 6}'
+    if p.get('volumes_apagados'):
+        txt += f" · {len(p['volumes_apagados'])} volume(s) vazio(s) apagado(s)"
+    return txt
+
+
 def _sobras(p):
     return ', '.join(f"{s.get('sku')} +{s.get('qtd')}" for s in p.get('sobras', []) if isinstance(s, dict))
 
@@ -93,11 +105,15 @@ ROTULOS = {
     'pedido_sequenciado': ('Entrou na sequência', 'fluxo', lambda p: f"sequência {p.get('numero')}"),
     'pedido_removido_sequencia': ('Removido da sequência', 'fluxo', lambda p: f"sequência {p.get('numero')}"),
     'pedido_atribuido': ('Atribuído ao conferente', 'fluxo', _atribuido),
+    'atribuicao_devolvida': ('Devolvido pelo conferente', 'alerta',
+                             lambda p: f"{p.get('conferente') or 'conferente'} devolveu — voltou a Selecionado"
+                                       + (f" na sequência {p.get('numero')}" if p.get('numero') else '')),
     'conferencia_iniciada': ('Conferência iniciada', 'fluxo',
                              lambda p: f"separado por {p.get('separado_por')}" if p.get('separado_por') else 'separador não identificado'),
     'separado_por_alterado': ('Separador alterado', 'fluxo', lambda p: p.get('separado_por') or ''),
     'volume_criado': ('Volume aberto', 'fluxo', _vol),
     'volume_removido': ('Volume removido', 'alerta', _vol),
+    'volumes_reorganizados': ('Volumes reorganizados', 'alerta', _reorganizados),
     'item_bipado': ('Item bipado', 'bip',
                     lambda p: f"{p.get('sku')} × {p.get('qtd')} · total {p.get('qtd_separada_total')}"
                               + (f" · barra errada {p.get('codigo_lido')} (código alternativo)" if p.get('codigo_lido') else '')),
