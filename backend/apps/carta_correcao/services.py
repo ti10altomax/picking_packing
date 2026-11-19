@@ -42,7 +42,7 @@ PERFIS_CCE_CONFIGURAVEIS = ('supervisor_vendas', 'supervisor_patio')
 LIMITE_TEXTO = 999          # String(999) na porta de envio; a SEFAZ aceita até 1000 em xCorrecao
 LIMITE_VOLUMES = 999
 MODOS = ('desligado', 'gravar', 'gravar_e_transmitir')
-TEXTOS = ('montado', 'livre')   # cce_texto: o sistema monta "ONDE SE LE…" | o usuário digita tudo
+TEXTOS = ('montado', 'livre')   # cce_texto: o sistema monta "ALTERA-SE … PARA:" | o usuário digita tudo
 FRETE_LABEL = {'C': 'POR CONTA DO EMITENTE (CIF)', 'F': 'POR CONTA DO DESTINATARIO (FOB)', 'X': 'SEM FRETE'}
 SEPARADOR_ANTERIORES = ' | CORRECOES ANTERIORES MANTIDAS: '
 
@@ -114,22 +114,19 @@ def _ascii_maiusculo(texto: str) -> str:
 def montar_texto(base: dict, nova: dict | None, frete_novo: str, vol_novo: int | None, complemento: str,
                  anteriores: list[dict], livre: bool = False) -> str:
     """`base` = o que o documento autorizado diz hoje ({codtra, transportadora, frete, volumes}, ver
-    `_baseline`); é o "onde se lê". `vol_novo` = quantidade informada ou None.
+    `_baseline`); só decide o que mudou (o texto não cita o valor antigo desde 2026-11-19:
+    "ALTERA-SE … PARA: …", pedido da supervisão). `vol_novo` = quantidade informada ou None.
     `livre` (cce_texto = livre): o texto é só o que o usuário digitou em `complemento`; as
     correções continuam indo nos campos do Gravar, mas o sistema não escreve nada por ele."""
     partes = []
     if livre:
         nova, frete_novo, vol_novo = None, '', None
     if nova and nova['codtra'] != base['codtra']:
-        de = f"'{_ascii_maiusculo(base['transportadora'])}' ({base['codtra']})" if base['codtra'] else 'SEM TRANSPORTADORA'
-        partes.append(f"TRANSPORTADORA: ONDE SE LE {de}, LEIA-SE '{_ascii_maiusculo(nova['nome'])}' ({nova['codtra']}).")
+        partes.append(f"ALTERA-SE TRANSPORTADORA PARA: {_ascii_maiusculo(nova['nome'])} ({nova['codtra']}).")
     if frete_novo and frete_novo != base['frete']:
-        de = FRETE_LABEL.get(base['frete'], 'NAO INFORMADO')
-        partes.append(f"FRETE: ONDE SE LE '{de}', LEIA-SE '{FRETE_LABEL[frete_novo]}'.")
-    vol_antes = base['volumes']
-    if vol_novo is not None and vol_novo != vol_antes:
-        de = str(vol_antes) if vol_antes is not None else 'NAO INFORMADO'
-        partes.append(f"QUANTIDADE DE VOLUMES: ONDE SE LE {de}, LEIA-SE {vol_novo}.")
+        partes.append(f"ALTERA-SE FRETE PARA: {FRETE_LABEL[frete_novo]}.")
+    if vol_novo is not None and vol_novo != base['volumes']:
+        partes.append(f"ALTERA-SE QUANTIDADE PARA: {vol_novo}.")
     if complemento.strip():
         partes.append(_ascii_maiusculo(complemento))
     texto = ' '.join(partes)
@@ -683,12 +680,12 @@ def montar_texto_completo(situacao: dict, anteriores: list[dict]) -> str:
     partes = []
     codtra = str(situacao.get('codtra') or '').strip()
     if codtra:
-        partes.append(f"TRANSPORTADORA: LEIA-SE '{_ascii_maiusculo(situacao.get('nomtra') or '')}' ({codtra}).")
+        partes.append(f"ALTERA-SE TRANSPORTADORA PARA: {_ascii_maiusculo(situacao.get('nomtra') or '')} ({codtra}).")
     ciffob = (situacao.get('ciffob') or '').upper()
     if ciffob in FRETE_LABEL:
-        partes.append(f"FRETE: LEIA-SE '{FRETE_LABEL[ciffob]}'.")
+        partes.append(f"ALTERA-SE FRETE PARA: {FRETE_LABEL[ciffob]}.")
     if situacao.get('qtdemb'):
-        partes.append(f"QUANTIDADE DE VOLUMES: LEIA-SE {situacao['qtdemb']}.")
+        partes.append(f"ALTERA-SE QUANTIDADE PARA: {situacao['qtdemb']}.")
     texto = ' '.join(partes)
     vistos = {_ascii_maiusculo(texto)}
     unicos = []

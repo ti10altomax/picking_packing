@@ -53,7 +53,7 @@ class Configuracao(models.Model):
         'cce_modo': 'desligado',
         'cce_tipger': '2',                                         # 1 gera XML | 2 WS eDocs
         # Texto da carta (2026-10-27, enquanto a diretoria discute): 'montado' = o sistema
-        # escreve "ONDE SE LE X, LEIA-SE Y" + complemento opcional | 'livre' = o usuário
+        # escreve "ALTERA-SE X PARA: Y" + complemento opcional | 'livre' = o usuário
         # digita o texto inteiro (obrigatório). As cartas anteriores são repetidas nos dois.
         'cce_texto': 'montado',                                    # | livre
         # Quem pode corrigir NF (2026-10-28): perfis separados por vírgula, entre

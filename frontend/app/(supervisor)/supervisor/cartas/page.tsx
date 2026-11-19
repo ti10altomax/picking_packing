@@ -198,7 +198,7 @@ export default function CartasCorrecaoPage() {
                   value={config.texto}
                   disabled={salvando}
                   onChange={(e) => salvarTexto(e.target.value as CceTexto)}
-                  title="Montado: o sistema escreve 'ONDE SE LE X, LEIA-SE Y' e o usuário só complementa. Livre: o usuário digita o texto inteiro; transportadora, frete e volumes continuam sendo alterados na nota. As cartas anteriores são repetidas nos dois."
+                  title="Montado: o sistema escreve 'ALTERA-SE X PARA: Y' e o usuário só complementa. Livre: o usuário digita o texto inteiro; transportadora, frete e volumes continuam sendo alterados na nota. As cartas anteriores são repetidas nos dois."
                   className="bg-surface-card border border-surface-border text-ink rounded-lg px-2 min-h-[40px] text-sm"
                 >
                   <option value="montado">Texto montado pelo sistema</option>

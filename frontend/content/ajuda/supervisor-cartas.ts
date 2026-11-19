@@ -66,7 +66,7 @@ export const supervisorCartas: AjudaTela = {
     {
       nome: 'Texto: montado pelo sistema',
       descricao:
-        'O sistema escreve a carta no formato "onde se lê… leia-se…" com o que você escolheu. Você só pode acrescentar um "Complemento (opcional)".',
+        'O sistema escreve a carta no formato "ALTERA-SE TRANSPORTADORA PARA: …" / "ALTERA-SE QUANTIDADE PARA: …" com o que você escolheu. Você só pode acrescentar um "Complemento (opcional)".',
     },
     {
       nome: 'Texto: livre',

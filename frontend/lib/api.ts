@@ -777,7 +777,7 @@ export const agoraApi = {
 // ---------------------------------------------------------------------------
 
 export type CceModo = 'desligado' | 'gravar' | 'gravar_e_transmitir'
-/** Texto da carta: montado pelo sistema ("ONDE SE LE…" + complemento) ou digitado inteiro pelo usuário (2026-10-27) */
+/** Texto da carta: montado pelo sistema ("ALTERA-SE … PARA:" + complemento) ou digitado inteiro pelo usuário (2026-10-27) */
 export type CceTexto = 'montado' | 'livre'
 
 export type CceConfig = {

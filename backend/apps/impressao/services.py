@@ -32,6 +32,12 @@ from django.utils import timezone
 
 from apps.core.models import Configuracao
 from apps.etiquetas.printer import enviar_para_rede  # cliente TCP 9100 (congelado, reaproveitado)
+
+# Vai na frente de todo envio direto pela rede, igual ao agente USB 1.0.2 (2026-11-19). `~JX` cancela
+# um formato ZPL parcial preso no buffer da Zebra — preso, ela engole todo ^XA…^XZ em silêncio
+# com a luz verde (visto em 13/11 na GC420t que agora está no servidor de impressão 172.18.18.230).
+# Sem formato preso, não faz nada.
+PREFIXO_ZPL = b'~JX\r\n'
 from apps.pedidos.models import Impressora, Pedido, PedidoLog, PrintJob
 
 from .etiqueta import dados_etiquetas, normalizar_modelo
@@ -221,7 +227,7 @@ def imprimir(pedido: Pedido, *, impressora: Impressora | None = None, canal: str
                 erro='impressora sem IP cadastrado',
             )
         try:
-            enviar_para_rede(impressora.ip, impressora.porta or 9100, zpl)
+            enviar_para_rede(impressora.ip, impressora.porta or 9100, PREFIXO_ZPL + zpl)
         except OSError as e:
             logger.warning(f'etiqueta {pedido}: falha TCP {impressora.ip}:{impressora.porta} — {e}')
             return _registrar(
