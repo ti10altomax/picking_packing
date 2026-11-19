@@ -66,6 +66,7 @@ def _cancelado(p):
 
 def _carta(p):
     st = {'simulada': 'simulada (dry-run)', 'gravada': 'gravada no Senior, não enviada', 'transmitida': 'transmitida à SEFAZ',
+          'aguardando_sde': 'gravada, aguardando transmissão (SDE)',
           'erro_gravar': 'recusada/falhou ao gravar', 'erro_transmitir': 'gravada, falhou ao transmitir'}.get(p.get('status'), p.get('status') or '')
     txt = st
     if p.get('nf'):
@@ -154,6 +155,10 @@ ROTULOS = {
     'etiqueta_erro': ('Falha ao imprimir etiqueta', 'alerta', lambda p: p.get('erro') or ''),
     'carta_correcao': ('Carta de correção', 'fluxo', _carta),
     'carta_correcao_transmissao': ('Carta de correção transmitida', 'fluxo', _carta),
+    'carta_correcao_verificada': ('Carta de correção verificada no Senior', 'fluxo', _carta),
+    'carta_correcao_reenvio': ('Carta de correção reenviada (completa)', 'fluxo', _carta),
+    'carta_correcao_reimportada': ('Carta de correção reimportada no Senior', 'alerta',
+                                   lambda p: ('simulada · ' if p.get('simulada') else '') + (f"erro: {p.get('erro')}" if p.get('erro') else f"protocolo {p.get('protocolo') or ''}")),
     # escopo congelado
     'separacao_finalizada': ('Separação finalizada (legado)', 'legado', lambda p: ''),
     'endereco_atribuido': ('Endereço atribuído (legado)', 'legado', lambda p: p.get('endereco') or ''),

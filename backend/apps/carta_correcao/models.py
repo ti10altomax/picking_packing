@@ -17,6 +17,10 @@ class CartaCorrecao(models.Model):
       transmitida       documentofiscal.EmitirCartaCorrecao ok (modo gravar_e_transmitir)
       erro_gravar       Gravar recusou (tipoRetorno -1) ou falhou (rede/SOAP)
       erro_transmitir   gravou, mas a transmissão falhou — o faturamento envia no Senior
+      aguardando_sde    gravou; o SDE (serviço de documentos eletrônicos do Senior) não recebeu
+                        a carta na hora (10011) — ela sai depois, pelo SDE ou pelo faturamento.
+                        O beat `verificar_cartas_pendentes` relê a E140CCE e fecha o status
+                        (2026-11-19, caso da NF 152139).
     """
 
     class Modo(models.TextChoices):
@@ -27,6 +31,7 @@ class CartaCorrecao(models.Model):
     class Status(models.TextChoices):
         SIMULADA = 'simulada', 'Simulada'
         GRAVADA = 'gravada', 'Gravada (não enviada)'
+        AGUARDANDO_SDE = 'aguardando_sde', 'Gravada, aguardando transmissão (SDE)'
         TRANSMITIDA = 'transmitida', 'Transmitida'
         ERRO_GRAVAR = 'erro_gravar', 'Erro ao gravar'
         ERRO_TRANSMITIR = 'erro_transmitir', 'Gravada, erro ao transmitir'
@@ -76,6 +81,13 @@ class CartaCorrecao(models.Model):
     protocolo = models.CharField(max_length=30, blank=True)
     autorizada_em = models.CharField(max_length=20, blank=True)   # "DD/MM/AAAA hh:mm" como o Senior devolve
 
+    # O que a E140CCE diz desta carta na última verificação (2026-11-19): sequência do evento
+    # no Senior, situação (1 não enviada · 2 enviada · 3 autorizada · 4 rejeitada · 5 denegada)
+    # e quando o Separa olhou. None = nunca achada lá.
+    seqeve = models.IntegerField(null=True, blank=True)
+    sitcce_senior = models.IntegerField(null=True, blank=True)
+    verificada_em = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         verbose_name = 'Carta de correção'
         verbose_name_plural = 'Cartas de correção'
@@ -87,4 +99,11 @@ class CartaCorrecao(models.Model):
     @property
     def efetiva(self) -> bool:
         """Chegou a gravar no Senior (com ou sem transmissão)."""
-        return self.status in (self.Status.GRAVADA, self.Status.TRANSMITIDA, self.Status.ERRO_TRANSMITIR)
+        return self.status in (self.Status.GRAVADA, self.Status.AGUARDANDO_SDE,
+                               self.Status.TRANSMITIDA, self.Status.ERRO_TRANSMITIR)
+
+    @property
+    def transmissao_tentada(self) -> bool:
+        """O Separa chamou o EmitirCartaCorrecao para esta carta — a SEFAZ pode tê-la recebido
+        mesmo com retorno de erro (10011). Apagá-la no Senior não desfaz nada lá."""
+        return bool(self.payload_transmitir) or self.status in (self.Status.TRANSMITIDA, self.Status.AGUARDANDO_SDE)

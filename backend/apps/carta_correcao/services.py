@@ -149,6 +149,153 @@ def montar_texto(base: dict, nova: dict | None, frete_novo: str, vol_novo: int |
 
 
 # ---------------------------------------------------------------------------
+# Retornos do EmitirCartaCorrecao (2026-11-19)
+# Códigos de 5 dígitos começando por 100 são do Senior/SDE, não da SEFAZ (cujas rejeições
+# têm 3 dígitos). Os dois vistos em produção na NF 152139:
+#   10011 "Não foi possível integrar o documento, verifique o log do SDE" — o SDE não recebeu a
+#         carta agora; ela FICA gravada no Senior e pode sair depois (foi autorizada na manhã
+#         seguinte). Não é erro final → `aguardando_sde`.
+#   10021 "Já existe no sistema um documento com os dados informados e sua situação não permite
+#         a reintegração" — a SEFAZ já tem uma carta com essa sequência (duplicata).
+# ---------------------------------------------------------------------------
+
+def classificar_rejeicao(cod, msg: str) -> tuple[str, str, str]:
+    """(status, fonte, explicação em português) para o par codRej/msgRet do retorno."""
+    cod = str(cod or '').strip()
+    msg = (msg or '').strip()
+    if cod == '10011':
+        return (CartaCorrecao.Status.AGUARDANDO_SDE, 'Senior/SDE',
+                'o SDE (serviço de documentos eletrônicos do Senior) não recebeu a carta agora. A carta '
+                'FICOU GRAVADA no Senior e pode ser transmitida depois, pelo SDE ou pelo faturamento; o Separa '
+                'vai conferir a situação dela na E140CCE. Não refaça a correção.')
+    if cod == '10021':
+        return (CartaCorrecao.Status.ERRO_TRANSMITIR, 'Senior/SDE',
+                'a SEFAZ já tem uma carta com esta sequência (duplicata). Em geral a carta anterior desta nota '
+                'foi transmitida (ou apagada no Senior depois de transmitida). Confira as cartas da nota no '
+                'Senior antes de qualquer nova correção.')
+    fonte = 'SEFAZ' if cod.isdigit() and len(cod) == 3 else 'Senior/SDE'
+    return (CartaCorrecao.Status.ERRO_TRANSMITIR, fonte, msg or 'tipRet -1')
+
+
+def _mesmo_texto(a: str, b: str) -> bool:
+    return _ascii_maiusculo(a) == _ascii_maiusculo(b)
+
+
+def _casar_com_senior(carta: CartaCorrecao, cartas_senior: list[dict], reservados: set | None = None) -> dict | None:
+    """Linha da E140CCE que corresponde a esta carta do Separa: mesmo texto; senão a mesma
+    data/hora do evento que o Separa mandou no Gravar (o fiscal pode ter editado o texto) —
+    mas nunca uma linha cujo texto é o de OUTRA carta do Separa (`reservados`), senão duas
+    cartas gravadas no mesmo minuto se confundem."""
+    for c in cartas_senior:
+        if _mesmo_texto(c.get('texto') or '', carta.texto):
+            return c
+    pg = carta.payload_gravar or {}
+    for c in cartas_senior:
+        if pg.get('datEve') and c.get('data') == pg.get('datEve') and c.get('hora') == pg.get('horEve'):
+            if reservados and _ascii_maiusculo(c.get('texto') or '') in reservados:
+                continue
+            return c
+    return None
+
+
+def _cartas_da_nf(pedido: Pedido, ident: tuple) -> list:
+    return [c for c in pedido.cartas_correcao.all()
+            if c.efetiva and (c.nf_codsnf, str(c.nf_numero)) == (ident[1], str(ident[2]))]
+
+
+def _textos_reservados(cartas: list, exceto: CartaCorrecao) -> set:
+    return {_ascii_maiusculo(c.texto) for c in cartas if c.id != exceto.id}
+
+
+def reconciliar(pedido: Pedido, ident: tuple, anteriores: dict, usuario=None) -> list[CartaCorrecao]:
+    """Atualiza as cartas do Separa desta NF com o que a E140CCE diz (sequência, situação,
+    protocolo). Devolve as que mudaram de status. Não faz nada se a E140CCE não pôde ser lida."""
+    if not anteriores.get('disponivel'):
+        return []
+    agora = timezone.now()
+    mudadas = []
+    cartas = _cartas_da_nf(pedido, ident)
+    for carta in cartas:
+        linha = _casar_com_senior(carta, anteriores.get('cartas', []), _textos_reservados(cartas, carta))
+        campos = ['verificada_em']
+        carta.verificada_em = agora
+        status_antes = carta.status
+        if linha:
+            carta.seqeve = linha.get('sequencia')
+            carta.sitcce_senior = linha.get('sitcce')
+            campos += ['seqeve', 'sitcce_senior']
+            if linha.get('sitcce') == 3:
+                carta.status = CartaCorrecao.Status.TRANSMITIDA
+                if linha.get('protocolo'):
+                    carta.protocolo = linha['protocolo'][:30]
+                if linha.get('autorizada_em'):
+                    carta.autorizada_em = linha['autorizada_em'][:20]
+                if status_antes != carta.status:
+                    carta.erro = ''
+                campos += ['status', 'protocolo', 'autorizada_em', 'erro']
+            elif linha.get('sitcce') == 4 and carta.status != CartaCorrecao.Status.ERRO_TRANSMITIR:
+                carta.status = CartaCorrecao.Status.ERRO_TRANSMITIR
+                carta.erro = 'Rejeitada na transmissão (situação 4 na E140CCE do Senior). Acerte no Senior.'
+                campos += ['status', 'erro']
+        carta.save(update_fields=campos)
+        if carta.status != status_antes:
+            mudadas.append(carta)
+            _log(pedido, usuario, carta, acao='carta_correcao_verificada')
+            logger.info('carta_correcao %s: %s → %s pela E140CCE', carta.id, status_antes, carta.status,
+                        extra={'pedido': pedido.id, 'carta': carta.id})
+    return mudadas
+
+
+def reconciliar_nf(pedido: Pedido, ident: tuple) -> list[CartaCorrecao]:
+    """Versão para o beat: lê a E140CCE e reconcilia."""
+    return reconciliar(pedido, ident, senior.cartas_anteriores(*ident))
+
+
+def _cartas_sumidas(pedido: Pedido, ident: tuple, anteriores: dict) -> list[CartaCorrecao]:
+    """Cartas do Separa que FORAM transmitidas (ou tentadas) e não estão mais na E140CCE. Apagar no
+    Senior não desfaz o evento na SEFAZ: a nota não aceita nova carta até reimportar essa."""
+    if not anteriores.get('disponivel'):
+        return []
+    cartas = _cartas_da_nf(pedido, ident)
+    return [c for c in cartas
+            if c.transmissao_tentada
+            and _casar_com_senior(c, anteriores.get('cartas', []), _textos_reservados(cartas, c)) is None]
+
+
+def bloqueio_por_cartas(anteriores: dict, sumidas: list) -> dict | None:
+    """Por que a nota NÃO pode receber carta nova agora (a SEFAZ exige as cartas em sequência):
+    carta anterior ainda não transmitida/autorizada no Senior, carta rejeitada, ou carta do Separa
+    transmitida que sumiu da E140CCE (2026-11-19)."""
+    for c in anteriores.get('cartas', []):
+        seq = c.get('sequencia')
+        if c.get('sitcce') in (1, 2):
+            return {'codigo': 'carta_pendente_senior', 'sequencia': seq,
+                    'mensagem': f"A carta {seq} desta nota está '{c.get('sitcce_label')}' no Senior — ainda não foi "
+                                "transmitida/autorizada. Peça ao faturamento para transmitir (ou apagar) essa carta antes "
+                                "de gravar outra: a SEFAZ só aceita a próxima depois que a anterior é autorizada."}
+        if c.get('sitcce') in (4, 5):
+            return {'codigo': 'carta_rejeitada_senior', 'sequencia': seq,
+                    'mensagem': f"A carta {seq} desta nota está '{c.get('sitcce_label')}' no Senior. Acerte essa carta no "
+                                "Senior (reenviar ou excluir) antes de gravar outra."}
+    if sumidas:
+        c = sumidas[0]
+        quando = timezone.localtime(c.criado_em).strftime('%d/%m %H:%M')
+        reimportavel = c.status == CartaCorrecao.Status.TRANSMITIDA and bool(c.protocolo)
+        if reimportavel:
+            msg = (f"A carta do Separa de {quando} foi AUTORIZADA na SEFAZ (protocolo {c.protocolo}"
+                   f"{', ' + c.autorizada_em if c.autorizada_em else ''}) e não está mais na E140CCE do Senior. "
+                   "Apagar a carta no Senior não desfaz o evento na SEFAZ: a próxima carta precisa ser a sequência "
+                   "seguinte e repetir essa. Reimporte a carta no Senior (botão abaixo) antes de corrigir de novo.")
+        else:
+            msg = (f"A carta do Separa de {quando} foi enviada à transmissão (retorno: {c.erro[:160] or c.get_status_display()}) "
+                   "e não está mais na E140CCE do Senior. Ela pode ter chegado à SEFAZ mesmo assim — confirme com o "
+                   "fiscal (log do SDE ou portal) antes de qualquer nova carta. Se a SEFAZ a autorizou, ela precisa ser "
+                   "reimportada no Senior; se não, marque-a como não transmitida no Django Admin.")
+        return {'codigo': 'carta_sumiu_senior', 'carta_id': c.id, 'reimportavel': reimportavel, 'mensagem': msg}
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Identificação da NF e elegibilidade
 # ---------------------------------------------------------------------------
 
@@ -217,8 +364,11 @@ def _cartas_apagadas(pedido: Pedido, ident: tuple, anteriores: dict) -> list[Car
     if not anteriores.get('disponivel'):
         return []
     textos_senior = {_ascii_maiusculo(c.get('texto') or '') for c in anteriores.get('cartas', [])}
+    # Só carta que NUNCA foi à transmissão (2026-11-19): a que foi transmitida/tentada e sumiu é
+    # `_cartas_sumidas` → bloqueio, porque a SEFAZ pode tê-la e a sequência não pode ser refeita.
     apagadas = [c for c in pedido.cartas_correcao.all()
-                if c.efetiva and (c.nf_codsnf, c.nf_numero) == (ident[1], ident[2])
+                if c.status == CartaCorrecao.Status.GRAVADA and not c.transmissao_tentada
+                and (c.nf_codsnf, str(c.nf_numero)) == (ident[1], str(ident[2]))
                 and _ascii_maiusculo(c.texto) not in textos_senior]
     return sorted(apagadas, key=lambda c: c.criado_em, reverse=True)
 
@@ -240,13 +390,19 @@ def _baseline(pedido: Pedido, situacao: dict, apagadas: list[CartaCorrecao]) -> 
 
 
 def _contexto(pedido: Pedido, ident: tuple, situacao: dict | None = None) -> tuple[dict, dict, list, dict]:
-    """(situacao, anteriores, apagadas, base) — tudo que previa/executar precisam para montar o texto."""
+    """(situacao, anteriores, apagadas, base) — tudo que previa/executar precisam para montar o texto.
+    De passagem reconcilia as cartas do Separa com a E140CCE (2026-11-19)."""
     if situacao is None:
         situacao = senior.situacao_nf(*ident)
         _sincronizar_com_nf(pedido, situacao)
     anteriores = senior.cartas_anteriores(*ident)
+    reconciliar(pedido, ident, anteriores)
     apagadas = _cartas_apagadas(pedido, ident, anteriores)
     return situacao, anteriores, apagadas, _baseline(pedido, situacao, apagadas)
+
+
+def _bloqueio_sequencia(pedido: Pedido, ident: tuple, anteriores: dict) -> dict | None:
+    return bloqueio_por_cartas(anteriores, _cartas_sumidas(pedido, ident, anteriores))
 
 
 def preparar(pedido: Pedido) -> dict:
@@ -266,7 +422,15 @@ def preparar(pedido: Pedido) -> dict:
         elif situacao.get('disponivel') and situacao.get('autorizada') is False:
             bloqueio = {'codigo': 'nf_nao_autorizada',
                         'mensagem': f"A NF está '{situacao.get('sitdoe_label') or situacao.get('sitdoe')}' no Senior; só NF Autorizada aceita carta de correção."}
+        if not bloqueio:
+            bloqueio = _bloqueio_sequencia(pedido, ident, anteriores)
+    # Reenviar carta completa (2026-11-19): nova carta repetindo o que a nota tem hoje, mesmo sem
+    # mudar nada — para quando a SEFAZ ficou com uma carta incompleta (ex.: 152139 sem os volumes).
+    pode_reenviar = (not bloqueio and bool(ident) and modo_atual() != 'desligado'
+                     and bool(situacao.get('disponivel')) and situacao.get('encontrada') is not False
+                     and situacao.get('autorizada') is not False and bool(anteriores.get('disponivel')))
     return {
+        'pode_reenviar': pode_reenviar,
         'pedido': {
             'id': pedido.id, 'numero_externo': pedido.numero_externo, 'codfil': pedido.codfil, 'codsnf': pedido.codsnf,
             'tipo': pedido.tipo, 'status': pedido.status, 'cliente': pedido.cliente,
@@ -363,6 +527,9 @@ def executar(pedido: Pedido, usuario, codtra_novo: str, frete_novo: str, volumes
                             f"A NF está '{situacao.get('sitdoe_label')}' no Senior; só NF Autorizada aceita carta de correção.", http=409)
     _sincronizar_com_nf(pedido, situacao)
     _, anteriores, apagadas, base = _contexto(pedido, (nf_codfil, nf_codsnf, nf_numero), situacao)
+    bloqueio = _bloqueio_sequencia(pedido, (nf_codfil, nf_codsnf, nf_numero), anteriores)
+    if bloqueio:
+        raise ErroCarta(bloqueio['codigo'], bloqueio['mensagem'], http=409)
     vol_antes = base['volumes']
 
     # Comparação contra o "onde se lê" (base), não contra o valor cru da nota: depois de uma carta
@@ -409,9 +576,21 @@ def executar(pedido: Pedido, usuario, codtra_novo: str, frete_novo: str, volumes
         payload_gravar=payload,
     )
 
+    return _gravar_e_transmitir(pedido, usuario, carta, payload, texto, situacao, modo,
+                                nova if muda_transportadora else None, frete_novo if muda_frete else '',
+                                vol_novo if muda_volumes else None)
+
+
+def _gravar_e_transmitir(pedido: Pedido, usuario, carta: CartaCorrecao, payload: dict, texto: str, situacao: dict,
+                         modo: str, nova: dict | None, frete_novo: str, vol_novo: int | None,
+                         acao_log: str = 'carta_correcao') -> CartaCorrecao:
+    """Chama o Gravar (e o EmitirCartaCorrecao, conforme o modo), grava o rastro e espelha a
+    mudança no Pedido. Usado pelo `executar` e pelo `reenviar`."""
+    nf_codfil, nf_codsnf, nf_numero = carta.nf_codfil, carta.nf_codsnf, carta.nf_numero
+    muda_transportadora, muda_frete, muda_volumes = bool(nova), bool(frete_novo), vol_novo is not None
     if senior.dry_run():
         carta.save()
-        _log(pedido, usuario, carta)
+        _log(pedido, usuario, carta, acao=acao_log)
         logger.info('carta_correcao simulada (dry-run)', extra={'pedido': pedido.id, 'carta': carta.id})
         return carta
 
@@ -422,14 +601,14 @@ def executar(pedido: Pedido, usuario, codtra_novo: str, frete_novo: str, volumes
         carta.status = CartaCorrecao.Status.ERRO_GRAVAR
         carta.erro = str(e)[:2000]
         carta.save()
-        _log(pedido, usuario, carta)
+        _log(pedido, usuario, carta, acao=acao_log)
         raise ErroCarta('senior_indisponivel', f'Senior não respondeu ao Gravar: {e}', http=502)
     carta.retorno_gravar = _json(retorno)
     if retorno.get('tipoRetorno') != 0 or retorno.get('erroExecucao'):
         carta.status = CartaCorrecao.Status.ERRO_GRAVAR
         carta.erro = (retorno.get('mensagemRetorno') or retorno.get('erroExecucao') or 'tipoRetorno -1')[:2000]
         carta.save()
-        _log(pedido, usuario, carta)
+        _log(pedido, usuario, carta, acao=acao_log)
         raise ErroCarta('senior_recusou', f'Senior recusou a carta: {carta.erro}', http=409)
 
     carta.status = CartaCorrecao.Status.GRAVADA
@@ -449,7 +628,7 @@ def executar(pedido: Pedido, usuario, codtra_novo: str, frete_novo: str, volumes
             campos.append('nf_volumes')
         if campos:
             pedido.save(update_fields=campos)
-        _log(pedido, usuario, carta)
+        _log(pedido, usuario, carta, acao=acao_log)
     logger.info('carta_correcao gravada', extra={'pedido': pedido.id, 'carta': carta.id})
     if muda_volumes or muda_transportadora:
         # Etiqueta de volume: a correção pode ter sido exatamente o que a travava (volumes
@@ -484,17 +663,151 @@ def executar(pedido: Pedido, usuario, codtra_novo: str, frete_novo: str, volumes
             if ok:
                 carta.status = CartaCorrecao.Status.TRANSMITIDA
             else:
-                carta.status = CartaCorrecao.Status.ERRO_TRANSMITIR
-                carta.erro = (r0.get('msgRet') or ret.get('mensagemRetorno') or ret.get('erroExecucao') or 'tipRet -1')[:2000]
-                if r0.get('codRej'):
-                    carta.erro = f"SEFAZ {r0.get('codRej')}: {carta.erro}"
+                bruto = (r0.get('msgRet') or ret.get('mensagemRetorno') or ret.get('erroExecucao') or 'tipRet -1')
+                status_novo, fonte, explicacao = classificar_rejeicao(r0.get('codRej'), bruto)
+                carta.status = status_novo
+                carta.erro = (f"{fonte} {r0.get('codRej')}: {explicacao}" if r0.get('codRej') else explicacao)[:2000]
         except senior.ErroSenior as e:
-            carta.status = CartaCorrecao.Status.ERRO_TRANSMITIR
-            carta.erro = str(e)[:2000]
+            # sem resposta do WS: a carta pode ou não ter saído — trata como incerta (aguardando)
+            carta.status = CartaCorrecao.Status.AGUARDANDO_SDE
+            carta.erro = f'Sem resposta do EmitirCartaCorrecao ({str(e)[:300]}). A carta ficou gravada; o Separa vai conferir na E140CCE.'[:2000]
         carta.save()
         _log(pedido, usuario, carta, acao='carta_correcao_transmissao')
         logger.info('carta_correcao transmissão %s', carta.status, extra={'pedido': pedido.id, 'carta': carta.id})
     return carta
+
+
+def montar_texto_completo(situacao: dict, anteriores: list[dict]) -> str:
+    """Texto de uma carta que só REPETE o estado atual da nota (transportadora, frete, volumes) e
+    as cartas anteriores — para a SEFAZ ficar com tudo numa carta só."""
+    partes = []
+    codtra = str(situacao.get('codtra') or '').strip()
+    if codtra:
+        partes.append(f"TRANSPORTADORA: LEIA-SE '{_ascii_maiusculo(situacao.get('nomtra') or '')}' ({codtra}).")
+    ciffob = (situacao.get('ciffob') or '').upper()
+    if ciffob in FRETE_LABEL:
+        partes.append(f"FRETE: LEIA-SE '{FRETE_LABEL[ciffob]}'.")
+    if situacao.get('qtdemb'):
+        partes.append(f"QUANTIDADE DE VOLUMES: LEIA-SE {situacao['qtdemb']}.")
+    texto = ' '.join(partes)
+    vistos = {_ascii_maiusculo(texto)}
+    unicos = []
+    for c in anteriores:
+        t = _ascii_maiusculo(c.get('texto') or '')
+        if t and t not in vistos:
+            vistos.add(t)
+            unicos.append(t)
+    if unicos:
+        texto = (texto + SEPARADOR_ANTERIORES if texto else '') + ' / '.join(unicos)
+    return texto
+
+
+def reenviar(pedido: Pedido, usuario, complemento: str = '') -> CartaCorrecao:
+    """Carta nova repetindo o que a nota tem hoje (2026-11-19). Para quando a SEFAZ ficou com uma
+    carta incompleta/errada e o `executar` diria "nada a corrigir". Passa pelos mesmos bloqueios."""
+    modo = modo_atual()
+    if modo == 'desligado':
+        raise ErroCarta('desligado', 'Carta de correção desligada na configuração (Gestão → Cartas de correção).', http=409)
+    bloqueio = elegibilidade(pedido)
+    if bloqueio:
+        raise ErroCarta(bloqueio['codigo'], bloqueio['mensagem'], http=409)
+    ident = pedido.identificacao_nf
+    nf_codfil, nf_codsnf, nf_numero = ident
+    situacao = senior.situacao_nf(nf_codfil, nf_codsnf, nf_numero)
+    if not situacao.get('disponivel'):
+        raise ErroCarta('oracle_indisponivel', f"Não consegui ler a nota no Senior: {situacao.get('erro')}", http=503)
+    if situacao.get('encontrada') is False:
+        raise ErroCarta('nf_nao_encontrada', situacao['erro'], http=409)
+    if situacao.get('autorizada') is False:
+        raise ErroCarta('nf_nao_autorizada', f"A NF está '{situacao.get('sitdoe_label')}' no Senior; só NF Autorizada aceita carta de correção.", http=409)
+    _sincronizar_com_nf(pedido, situacao)
+    _, anteriores, _, base = _contexto(pedido, ident, situacao)
+    if not anteriores.get('disponivel'):
+        raise ErroCarta('oracle_indisponivel', 'Não consegui ler as cartas anteriores no Senior — o reenvio precisa delas.', http=503)
+    bloqueio = _bloqueio_sequencia(pedido, ident, anteriores)
+    if bloqueio:
+        raise ErroCarta(bloqueio['codigo'], bloqueio['mensagem'], http=409)
+    complemento = (complemento or '').strip()
+    texto = montar_texto_completo(situacao, anteriores['cartas'])
+    if complemento:
+        texto = f"{_ascii_maiusculo(complemento)} {texto}".strip()
+    if not texto:
+        raise ErroCarta('sem_conteudo', 'A nota não tem transportadora, frete nem volumes para repetir na carta.')
+    if len(texto) > LIMITE_TEXTO:
+        raise ErroCarta('texto_longo', f'Texto da carta com {len(texto)} caracteres; o limite é {LIMITE_TEXTO}.')
+    agora = timezone.localtime()
+    payload = {
+        'codEmp': str(SENIOR_CODEMP), 'codFil': str(nf_codfil), 'codSnf': str(nf_codsnf), 'numNfv': int(nf_numero),
+        'desCor': texto, 'sitCce': '1', 'datEve': agora.strftime('%d/%m/%Y'), 'horEve': agora.strftime('%H:%M'),
+    }
+    codtra = str(situacao.get('codtra') or '').strip()
+    if codtra:
+        payload['codTra'] = codtra
+    ciffob = (situacao.get('ciffob') or '').upper()
+    if ciffob in ('C', 'F'):
+        payload['cifFob'] = ciffob
+    if situacao.get('qtdemb'):
+        payload['qtdEmb'] = str(situacao['qtdemb'])
+    carta = CartaCorrecao(
+        pedido=pedido, usuario=usuario,
+        modo=CartaCorrecao.Modo.DRY_RUN if senior.dry_run() else modo,
+        status=CartaCorrecao.Status.SIMULADA,
+        nf_codfil=nf_codfil, nf_codsnf=nf_codsnf, nf_numero=nf_numero,
+        codtra_anterior=base['codtra'], transportadora_anterior=base['transportadora'],
+        codtra_novo=base['codtra'], transportadora_nova=base['transportadora'],
+        frete_anterior=base['frete'], frete_novo=base['frete'],
+        volumes_anterior=None, volumes_novo=None,
+        texto=texto, complemento=complemento or 'REENVIO: carta completa repetindo a nota',
+        cartas_anteriores=anteriores['cartas'], payload_gravar=payload,
+    )
+    return _gravar_e_transmitir(pedido, usuario, carta, payload, texto, situacao, modo, None, '', None,
+                                acao_log='carta_correcao_reenvio')
+
+
+def reimportar(carta: CartaCorrecao, usuario) -> dict:
+    """Carta do Separa AUTORIZADA na SEFAZ que sumiu da E140CCE: grava de volta no Senior já como
+    autorizada (sitCce 3 + protocolo + data/hora), que é o uso documentado desses campos do Gravar.
+    Depois relê a E140CCE para confirmar."""
+    if carta.status != CartaCorrecao.Status.TRANSMITIDA or not carta.protocolo:
+        raise ErroCarta('nao_reimportavel', 'Só carta autorizada na SEFAZ (com protocolo) pode ser reimportada.')
+    ident = (carta.nf_codfil, carta.nf_codsnf, carta.nf_numero)
+    anteriores = senior.cartas_anteriores(*ident)
+    if not anteriores.get('disponivel'):
+        raise ErroCarta('oracle_indisponivel', 'Não consegui ler as cartas da nota no Senior.', http=503)
+    reservados = _textos_reservados(_cartas_da_nf(carta.pedido, ident), carta)
+    if _casar_com_senior(carta, anteriores['cartas'], reservados):
+        reconciliar(carta.pedido, ident, anteriores, usuario)
+        return {'ja_estava': True, 'carta': serializar(carta)}
+    data_aut, _, hora_aut = (carta.autorizada_em or '').partition(' ')
+    pg = carta.payload_gravar or {}
+    payload = {
+        'codEmp': str(SENIOR_CODEMP), 'codFil': str(carta.nf_codfil), 'codSnf': str(carta.nf_codsnf),
+        'numNfv': int(carta.nf_numero), 'desCor': carta.texto, 'sitCce': '3',
+        'datEve': pg.get('datEve') or data_aut, 'horEve': pg.get('horEve') or (hora_aut or '00:00'),
+        'numPrt': carta.protocolo, 'datAut': data_aut or pg.get('datEve'), 'horAut': hora_aut or '00:00',
+    }
+    if senior.dry_run():
+        PedidoLog.objects.create(pedido=carta.pedido, usuario=usuario, acao='carta_correcao_reimportada',
+                                 payload={'carta_id': carta.id, 'simulada': True, 'payload': payload})
+        return {'simulada': True, 'payload': payload, 'carta': serializar(carta)}
+    try:
+        retorno = senior.gravar_carta(payload)
+    except senior.ErroSenior as e:
+        raise ErroCarta('senior_indisponivel', f'Senior não respondeu ao Gravar: {e}', http=502)
+    if retorno.get('tipoRetorno') != 0 or retorno.get('erroExecucao'):
+        msg = retorno.get('mensagemRetorno') or retorno.get('erroExecucao') or 'tipoRetorno -1'
+        PedidoLog.objects.create(pedido=carta.pedido, usuario=usuario, acao='carta_correcao_reimportada',
+                                 payload={'carta_id': carta.id, 'erro': str(msg)[:300], 'payload': payload})
+        raise ErroCarta('senior_recusou', f'Senior recusou a reimportação: {msg}', http=409)
+    PedidoLog.objects.create(pedido=carta.pedido, usuario=usuario, acao='carta_correcao_reimportada',
+                             payload={'carta_id': carta.id, 'protocolo': carta.protocolo, 'payload': payload,
+                                      'retorno': _json(retorno)})
+    logger.info('carta_correcao %s reimportada no Senior', carta.id, extra={'pedido': carta.pedido_id, 'carta': carta.id})
+    anteriores = senior.cartas_anteriores(*ident)
+    reconciliar(carta.pedido, ident, anteriores, usuario)
+    carta.refresh_from_db()
+    return {'ok': True, 'carta': serializar(carta),
+            'na_e140cce': _casar_com_senior(carta, anteriores.get('cartas', []), reservados) is not None}
 
 
 def _json(dados):
@@ -539,4 +852,6 @@ def serializar(c: CartaCorrecao) -> dict:
         'payload_transmitir': c.payload_transmitir, 'retorno_transmitir': c.retorno_transmitir,
         'erro': c.erro,
         'sitdoe': c.sitdoe, 'protocolo': c.protocolo, 'autorizada_em': c.autorizada_em,
+        'seqeve': c.seqeve, 'sitcce_senior': c.sitcce_senior, 'verificada_em': c.verificada_em,
+        'transmissao_tentada': c.transmissao_tentada,
     }

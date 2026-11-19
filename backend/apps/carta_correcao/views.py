@@ -91,6 +91,53 @@ def executar(request, pk):
     }, status=http_status.HTTP_201_CREATED)
 
 
+@api_view(['POST'])
+def reenviar(request, pk):
+    """Carta completa repetindo o que a nota tem hoje (2026-11-19). Body: {complemento?}."""
+    err = _exige(request)
+    if err:
+        return err
+    pedido = get_object_or_404(Pedido, pk=pk)
+    try:
+        carta = services.reenviar(pedido, request.user, str(request.data.get('complemento') or ''))
+    except ErroCarta as e:
+        return _erro(e)
+    pedido.refresh_from_db()
+    return Response({
+        'carta': services.serializar(carta),
+        'pedido': {'id': pedido.id, 'codtra': pedido.codtra, 'transportadora': pedido.transportadora, 'frete': pedido.frete,
+                   'nf_numero': pedido.nf_numero, 'etiqueta_bloqueio': motivo_bloqueio(pedido)},
+    }, status=http_status.HTTP_201_CREATED)
+
+
+@api_view(['POST'])
+def reimportar(request, carta_id):
+    """Carta do Separa autorizada na SEFAZ que sumiu da E140CCE → grava de volta no Senior como autorizada."""
+    err = _exige(request)
+    if err:
+        return err
+    carta = get_object_or_404(CartaCorrecao.objects.select_related('pedido'), pk=carta_id)
+    try:
+        return Response(services.reimportar(carta, request.user))
+    except ErroCarta as e:
+        return _erro(e)
+
+
+@api_view(['POST'])
+def verificar(request, pk):
+    """Relê a E140CCE agora e atualiza as cartas do Separa desta nota (o beat faz o mesmo a cada 10 min)."""
+    err = _exige(request)
+    if err:
+        return err
+    pedido = get_object_or_404(Pedido, pk=pk)
+    ident = pedido.identificacao_nf
+    if not ident:
+        return Response({'erro': 'documento sem NF'}, status=http_status.HTTP_400_BAD_REQUEST)
+    mudadas = services.reconciliar_nf(pedido, ident)
+    return Response({'atualizadas': [services.serializar(c) for c in mudadas],
+                     'cartas': [services.serializar(c) for c in pedido.cartas_correcao.select_related('usuario')[:10]]})
+
+
 @api_view(['GET'])
 def transportadoras(request):
     err = _exige(request)

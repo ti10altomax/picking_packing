@@ -806,8 +806,12 @@ export type CceCarta = {
   nf_numero: string; nf_codsnf: string
   cliente: string
   modo: 'dry_run' | 'gravar' | 'gravar_e_transmitir'; modo_label: string
-  status: 'simulada' | 'gravada' | 'transmitida' | 'erro_gravar' | 'erro_transmitir'; status_label: string
+  status: 'simulada' | 'gravada' | 'aguardando_sde' | 'transmitida' | 'erro_gravar' | 'erro_transmitir'; status_label: string
   efetiva: boolean
+  // o Separa chamou a transmissão (a SEFAZ pode ter a carta mesmo com retorno de erro) — 2026-11-19
+  transmissao_tentada: boolean
+  // o que a E140CCE dizia na última verificação: sequência, situação (1..5) e quando o Separa olhou
+  seqeve: number | null; sitcce_senior: number | null; verificada_em: string | null
   codtra_anterior: string; transportadora_anterior: string
   codtra_novo: string; transportadora_nova: string
   frete_anterior: string; frete_novo: string
@@ -835,7 +839,10 @@ export type CcePreparar = {
   baseline: { codtra: string; transportadora: string; frete: string; volumes: number | null }
   // carta do Separa mais recente que o fiscal apagou no Senior (a nota ficou com os valores novos) — para refazer
   refazer: CceCarta | null
-  bloqueio: { codigo: string; mensagem: string } | null
+  // carta_pendente_senior / carta_rejeitada_senior (sequencia) / carta_sumiu_senior (carta_id, reimportavel) — 2026-11-19
+  bloqueio: { codigo: string; mensagem: string; sequencia?: number | null; carta_id?: number; reimportavel?: boolean } | null
+  // nova carta repetindo o que a nota tem hoje (SEFAZ ficou com carta incompleta) — 2026-11-19
+  pode_reenviar: boolean
   situacao: {
     disponivel: boolean; encontrada?: boolean; sitnfv?: number | null; sitdoe?: number | null
     sitdoe_label?: string; autorizada: boolean | null; codtra?: string; nomtra?: string; ciffob?: string
@@ -872,6 +879,20 @@ export const cartaCorrecaoApi = {
         carta: CceCarta
         pedido: { id: number; codtra: string; transportadora: string; frete: string; nf_numero: string }
       }),
+  // carta completa repetindo o que a nota tem hoje (2026-11-19)
+  reenviar: (pedidoId: number, complemento = '') =>
+    api.post(`/api/carta-correcao/pedidos/${pedidoId}/reenviar/`, { complemento })
+      .then((r) => r.data as {
+        carta: CceCarta
+        pedido: { id: number; codtra: string; transportadora: string; frete: string; nf_numero: string }
+      }),
+  // relê a E140CCE agora (autorizada? rejeitada?) — o beat faz a cada 10 min
+  verificar: (pedidoId: number) =>
+    api.post(`/api/carta-correcao/pedidos/${pedidoId}/verificar/`).then((r) => r.data as { atualizadas: CceCarta[]; cartas: CceCarta[] }),
+  // carta do Separa autorizada na SEFAZ que sumiu da E140CCE → grava de volta no Senior como autorizada
+  reimportar: (cartaId: number) =>
+    api.post(`/api/carta-correcao/cartas/${cartaId}/reimportar/`)
+      .then((r) => r.data as { ok?: boolean; ja_estava?: boolean; simulada?: boolean; na_e140cce?: boolean; carta: CceCarta }),
   transportadoras: (q: string) =>
     api.get('/api/carta-correcao/transportadoras/', { params: { q } })
       .then((r) => r.data as { transportadoras: CceTransportadora[] }),

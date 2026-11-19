@@ -170,6 +170,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'apps.senior.tasks.vincular_nfs_pedidos',
         'schedule': 300.0,  # pedido em andamento → NF emitida (E140IPV); base da carta de correção
     },
+    'verificar-cartas-pendentes': {
+        'task': 'apps.carta_correcao.tasks.verificar_cartas_pendentes',
+        'schedule': 600.0,  # carta gravada/aguardando SDE → relê a E140CCE (autorizada? rejeitada?) (2026-11-19)
+    },
     # CONGELADO — escopo antigo (Senior+CLICK+VTEX). Códigos preservados em apps/senior/tasks.py
     # e apps/vtex/tasks.py. Reativar removendo o comentário se voltar ao fluxo de marketplace.
     # 'monitorar-faturamento': {

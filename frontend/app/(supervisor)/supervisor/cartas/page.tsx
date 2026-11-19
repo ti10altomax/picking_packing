@@ -47,6 +47,10 @@ export default function CartasCorrecaoPage() {
   const [cartas, setCartas] = useState<CceCarta[]>([])
   const [config, setConfig] = useState<CceConfig | null>(null)
   const [filtro, setFiltro] = useState('')
+  // Filtro de texto da lista (2026-11-19): acompanha a busca de cima (quem procura 152139 para
+  // corrigir quer ver as cartas dela embaixo) e pode ser editado à parte.
+  const [filtroTexto, setFiltroTexto] = useState('')
+  const debounceLista = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [carregando, setCarregando] = useState(true)
   const [aberta, setAberta] = useState<number | null>(null)
   const [salvando, setSalvando] = useState(false)
@@ -55,15 +59,22 @@ export default function CartasCorrecaoPage() {
   const carregar = useCallback(async () => {
     setCarregando(true)
     try {
-      const r = await cartaCorrecaoApi.listar(filtro ? { status: filtro } : {})
+      const r = await cartaCorrecaoApi.listar({ ...(filtro ? { status: filtro } : {}), ...(filtroTexto.trim() ? { search: filtroTexto.trim() } : {}) })
       setCartas(r.cartas)
       setConfig(r.config)
     } finally {
       setCarregando(false)
     }
-  }, [filtro])
+  }, [filtro, filtroTexto])
 
-  useEffect(() => { carregar() }, [carregar])
+  useEffect(() => {
+    if (debounceLista.current) clearTimeout(debounceLista.current)
+    debounceLista.current = setTimeout(() => { carregar() }, 300)
+    return () => { if (debounceLista.current) clearTimeout(debounceLista.current) }
+  }, [carregar])
+
+  // a busca de cima puxa o filtro da lista junto
+  useEffect(() => { setFiltroTexto(busca) }, [busca])
 
   // busca do documento (Separa; número desconhecido → servidor consulta o Senior)
   useEffect(() => {
@@ -264,13 +275,21 @@ export default function CartasCorrecaoPage() {
       <div className="bg-surface-card rounded-xl border border-surface-border overflow-hidden">
         <div className="px-4 py-2 border-b border-surface-border bg-surface-elev/50 flex items-center gap-3 text-xs text-ink-muted font-medium">
           <span>Cartas feitas pelo Separa</span>
+          <input
+            type="search"
+            value={filtroTexto}
+            onChange={(e) => setFiltroTexto(e.target.value)}
+            placeholder="Filtrar por NF, pedido, cliente ou transportadora"
+            className="ml-auto flex-1 min-w-[160px] max-w-xs bg-surface-card border border-surface-border text-ink placeholder:text-ink-subtle rounded-lg px-2 min-h-[32px] text-xs font-normal"
+          />
           <select
             value={filtro}
             onChange={(e) => setFiltro(e.target.value)}
-            className="ml-auto bg-surface-card border border-surface-border text-ink rounded-lg px-2 min-h-[32px] text-xs"
+            className="bg-surface-card border border-surface-border text-ink rounded-lg px-2 min-h-[32px] text-xs"
           >
             <option value="">Todas</option>
             <option value="gravada">Gravadas</option>
+            <option value="aguardando_sde">Aguardando transmissão (SDE)</option>
             <option value="transmitida">Transmitidas</option>
             <option value="erro_gravar">Erro ao gravar</option>
             <option value="erro_transmitir">Erro ao transmitir</option>
@@ -280,7 +299,7 @@ export default function CartasCorrecaoPage() {
         {carregando ? (
           <p className="p-4 text-ink-muted">Carregando…</p>
         ) : cartas.length === 0 ? (
-          <p className="p-8 text-ink-subtle text-center">Nenhuma carta ainda.</p>
+          <p className="p-8 text-ink-subtle text-center">{filtroTexto.trim() || filtro ? 'Nenhuma carta com esse filtro.' : 'Nenhuma carta ainda.'}</p>
         ) : (
           <ul>
             {cartas.map((c) => {
@@ -303,6 +322,11 @@ export default function CartasCorrecaoPage() {
                     <div className="px-4 pb-4 text-xs space-y-2">
                       <p className="font-mono whitespace-pre-wrap text-ink bg-surface-elev/50 rounded-lg p-2">{c.texto}</p>
                       {c.protocolo && <p className="text-ink-muted">Protocolo {c.protocolo}{c.autorizada_em ? ` · ${c.autorizada_em}` : ''}{c.sitdoe != null ? ` · sitDoe ${c.sitdoe}` : ''}</p>}
+                      {c.verificada_em && (
+                        <p className="text-ink-muted">
+                          No Senior (E140CCE): {c.seqeve != null ? `sequência ${c.seqeve} · situação ${c.sitcce_senior ?? '?'}` : 'não encontrada'} · conferido {fmt(c.verificada_em)}
+                        </p>
+                      )}
                       <details>
                         <summary className="cursor-pointer text-ink-muted">Rastro dos web services</summary>
                         <pre className="mt-1 bg-surface-elev/50 rounded-lg p-2 overflow-x-auto text-[11px] text-ink">

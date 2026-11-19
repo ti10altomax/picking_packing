@@ -26,6 +26,26 @@ export const supervisorCartas: AjudaTela = {
   ],
   elementos: [
     {
+      nome: 'Filtro da lista "Cartas feitas pelo Separa"',
+      descricao:
+        'Campo de texto ao lado do seletor de status: filtra por NF, pedido, cliente ou transportadora. Quando você digita na busca "Corrigir uma nota", a lista de baixo acompanha o mesmo número; dá para editar o filtro à parte.',
+    },
+    {
+      nome: 'Reenviar carta completa (no modal)',
+      descricao:
+        'Cria uma carta NOVA, na sequência seguinte, repetindo transportadora, frete, volumes e as cartas anteriores que a nota tem hoje, mesmo sem mudar nada. Use quando a SEFAZ ficou com uma carta incompleta (por exemplo, a transportadora foi mas os volumes não). Passa pelos mesmos bloqueios de sequência.',
+    },
+    {
+      nome: 'Reimportar carta no Senior (no bloqueio)',
+      descricao:
+        'Aparece quando uma carta do Separa já autorizada na SEFAZ foi apagada no Senior. Grava a carta de volta na E140CCE como "Autorizada", com o protocolo. Nada é transmitido. Sem isso, a próxima carta nasceria com a sequência errada e a SEFAZ recusaria.',
+    },
+    {
+      nome: 'Aguardando transmissão (SDE)',
+      descricao:
+        'Chip azul: a carta foi gravada, mas o SDE (serviço de documentos eletrônicos do Senior) não a recebeu na hora (retorno 10011). Ela sai depois, pelo SDE ou pelo faturamento. O Separa confere a E140CCE a cada 10 minutos e muda para Transmitida (ou Erro) sozinho. Não refaça a correção.',
+    },
+    {
       nome: 'Modo: Desligado',
       descricao: 'A carta não é gravada. A janela abre, mas o botão de gravar fica apagado.',
     },
@@ -75,6 +95,26 @@ export const supervisorCartas: AjudaTela = {
     },
   ],
   situacoes: [
+    {
+      quando: '"A carta N desta nota está Não enviada no Senior — ainda não foi transmitida/autorizada."',
+      oQueFazer: 'A SEFAZ só aceita a próxima carta depois que a anterior é autorizada. Peça ao faturamento para transmitir (ou apagar) a carta N no Senior. Depois toque em "Já foi resolvido no Senior? Conferir de novo".',
+    },
+    {
+      quando: '"A carta do Separa de … foi AUTORIZADA na SEFAZ … e não está mais na E140CCE do Senior."',
+      oQueFazer: 'Alguém apagou a carta no Senior depois de transmitida. Apagar não desfaz nada na SEFAZ. Toque em "Reimportar carta no Senior" e depois corrija normalmente.',
+    },
+    {
+      quando: '"A carta do Separa de … foi enviada à transmissão … e não está mais na E140CCE."',
+      oQueFazer: 'O Separa não sabe se a SEFAZ recebeu essa carta. Confirme com o fiscal (log do SDE ou portal da SEFAZ). Se foi autorizada, ela precisa ser reimportada no Senior; se não foi, o admin marca a carta como "Erro ao gravar" no Django Admin para o Separa desconsiderá-la.',
+    },
+    {
+      quando: 'Erro "Senior/SDE 10011: o SDE … não recebeu a carta agora".',
+      oQueFazer: 'Não é erro definitivo. A carta ficou gravada no Senior e sai depois. Não refaça a correção: isso gera carta duplicada. Acompanhe o chip "Aguardando transmissão (SDE)".',
+    },
+    {
+      quando: 'Erro "Senior/SDE 10021: a SEFAZ já tem uma carta com esta sequência (duplicata)".',
+      oQueFazer: 'A carta anterior desta nota já foi transmitida (ou foi apagada no Senior depois de transmitida). Abra "Corrigir NF" de novo: o Separa mostra o bloqueio certo e o que fazer.',
+    },
     {
       quando: '"Pedido ainda sem nota fiscal emitida no Senior…"',
       oQueFazer:

@@ -21,6 +21,7 @@ const INPUT = 'w-full bg-surface-card border border-surface-border text-ink plac
 const COR_STATUS: Record<CceCarta['status'], string> = {
   simulada: 'bg-surface-elev text-ink-muted',
   gravada: 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300',
+  aguardando_sde: 'bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-300',
   transmitida: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
   erro_gravar: 'bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-300',
   erro_transmitir: 'bg-orange-100 text-orange-800 dark:bg-orange-500/15 dark:text-orange-300',
@@ -140,7 +141,60 @@ export function ModalCarta({
   const [resultado, setResultado] = useState<CceCarta | null>(null)
   const [erroEnvio, setErroEnvio] = useState<string | null>(null)
   const [mostrarAnteriores, setMostrarAnteriores] = useState(false)
+  const [agindo, setAgindo] = useState<'reenviar' | 'reimportar' | null>(null)
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [recarga, setRecarga] = useState(0)
+
+  // Reenviar carta completa (2026-11-19): nova carta repetindo transportadora, frete e volumes que a
+  // nota tem hoje + as anteriores — quando a SEFAZ ficou com uma carta incompleta (ex.: sem os volumes).
+  async function reenviar() {
+    if (!dados) return
+    const vaiTransmitir = dados.config.modo === 'gravar_e_transmitir' && !dados.config.dry_run
+    if (!dados.config.dry_run) {
+      const ok = await dialog.confirm({
+        title: 'Reenviar carta completa?',
+        message: `Vai nascer uma carta NOVA (sequência seguinte) repetindo o que a nota tem hoje: transportadora, frete, volumes e as cartas anteriores. ${vaiTransmitir ? 'Ela será gravada e TRANSMITIDA à SEFAZ agora. Não tem volta.' : 'Ela fica "Não enviada" no Senior para o faturamento transmitir.'} Use quando a SEFAZ ficou com uma carta incompleta. Continuar?`,
+        variant: vaiTransmitir ? 'danger' : 'warning',
+        confirmText: vaiTransmitir ? 'Reenviar e transmitir' : 'Reenviar', cancelText: 'Voltar',
+      })
+      if (!ok) return
+    }
+    setAgindo('reenviar')
+    setErroEnvio(null)
+    try {
+      const r = await cartaCorrecaoApi.reenviar(pedidoId, complemento)
+      setResultado(r.carta)
+      if (r.carta.efetiva) onAlterado?.(r.pedido)
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { erro?: string } } }
+      setErroEnvio(err.response?.data?.erro ?? 'Falha ao reenviar a carta.')
+    } finally {
+      setAgindo(null)
+    }
+  }
+
+  // Carta do Separa autorizada na SEFAZ que foi apagada no Senior: grava de volta como autorizada
+  async function reimportar() {
+    if (!dados?.bloqueio?.carta_id) return
+    const ok = await dialog.confirm({
+      title: 'Reimportar carta no Senior?',
+      message: 'A carta volta para a E140CCE já como "Autorizada", com o protocolo da SEFAZ. Nada é transmitido. Depois disso a nota aceita a próxima correção na sequência certa.',
+      variant: 'warning', confirmText: 'Reimportar', cancelText: 'Voltar',
+    })
+    if (!ok) return
+    setAgindo('reimportar')
+    setErroEnvio(null)
+    try {
+      const r = await cartaCorrecaoApi.reimportar(dados.bloqueio.carta_id)
+      if (r.simulada) setErroEnvio('Modo simulação: a reimportação foi só registrada, nada foi gravado no Senior.')
+      setRecarga((n) => n + 1)
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { erro?: string } } }
+      setErroEnvio(err.response?.data?.erro ?? 'Falha ao reimportar a carta.')
+    } finally {
+      setAgindo(null)
+    }
+  }
 
   useEffect(() => {
     cartaCorrecaoApi.preparar(pedidoId)
@@ -162,7 +216,7 @@ export function ModalCarta({
         }
       })
       .catch((e) => setErroCarga(e?.response?.data?.erro ?? 'Não consegui carregar os dados da nota.'))
-  }, [pedidoId])
+  }, [pedidoId, recarga])
 
   // busca de transportadoras (debounce) — só quando o usuário abre a troca
   useEffect(() => {
@@ -320,8 +374,26 @@ export function ModalCarta({
             </div>
 
             {dados.bloqueio ? (
-              <div className="rounded-xl border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 p-3 text-sm text-red-800 dark:text-red-300">
-                {dados.bloqueio.mensagem}
+              <div className="rounded-xl border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 p-3 text-sm text-red-800 dark:text-red-300 space-y-2">
+                <p>{dados.bloqueio.mensagem}</p>
+                {dados.bloqueio.codigo === 'carta_sumiu_senior' && dados.bloqueio.reimportavel && (
+                  <button
+                    onClick={reimportar}
+                    disabled={agindo !== null}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 px-4 min-h-[40px] text-xs font-semibold disabled:opacity-50"
+                  >
+                    {agindo === 'reimportar' ? 'Reimportando…' : 'Reimportar carta no Senior'}
+                  </button>
+                )}
+                {(dados.bloqueio.codigo === 'carta_pendente_senior' || dados.bloqueio.codigo === 'carta_sumiu_senior') && (
+                  <button
+                    onClick={() => setRecarga((n) => n + 1)}
+                    className="ml-2 text-xs underline underline-offset-2"
+                  >
+                    Já foi resolvido no Senior? Conferir de novo
+                  </button>
+                )}
+                {erroEnvio && <p className="text-xs">{erroEnvio}</p>}
               </div>
             ) : resultado ? (
               <Resultado carta={resultado} onFechar={onFechar} />
@@ -504,7 +576,17 @@ export function ModalCarta({
 
                 {erroEnvio && <p className="text-sm text-red-600 dark:text-red-400 mb-3">{erroEnvio}</p>}
 
-                <div className="flex items-center justify-end gap-2">
+                <div className="flex items-center justify-end gap-2 flex-wrap">
+                  {dados.pode_reenviar && (
+                    <button
+                      onClick={reenviar}
+                      disabled={agindo !== null || enviando}
+                      title="Nova carta repetindo transportadora, frete e volumes que a nota tem hoje + as cartas anteriores. Para quando a SEFAZ ficou com uma carta incompleta."
+                      className="mr-auto px-3 min-h-[44px] rounded-lg border border-surface-border text-xs font-semibold text-ink hover:bg-surface-elev disabled:opacity-50"
+                    >
+                      {agindo === 'reenviar' ? 'Reenviando…' : '↻ Reenviar carta completa'}
+                    </button>
+                  )}
                   <button onClick={onFechar} className="px-4 min-h-[44px] rounded-lg text-sm text-ink-muted hover:text-ink">Cancelar</button>
                   <button
                     onClick={confirmar}
@@ -530,6 +612,7 @@ export function ModalCarta({
                       <ChipStatusCarta carta={c} />
                       <span className="text-ink">
                         {fmt(c.criado_em)} · {c.usuario ?? '—'} · {resumoMudancas(c) || '—'}
+                        {c.seqeve != null && <span className="text-ink-subtle"> · seq. {c.seqeve} no Senior</span>}
                         {c.erro && <span className="text-red-600 dark:text-red-400"> — {c.erro}</span>}
                       </span>
                     </li>
@@ -545,7 +628,7 @@ export function ModalCarta({
 }
 
 function Resultado({ carta, onFechar }: { carta: CceCarta; onFechar: () => void }) {
-  const ok = carta.status === 'gravada' || carta.status === 'transmitida' || carta.status === 'simulada'
+  const ok = carta.status === 'gravada' || carta.status === 'transmitida' || carta.status === 'simulada' || carta.status === 'aguardando_sde'
   return (
     <div className={`rounded-xl border p-4 text-sm ${ok
       ? 'border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10'
@@ -556,6 +639,7 @@ function Resultado({ carta, onFechar }: { carta: CceCarta; onFechar: () => void 
           {carta.status === 'simulada' && 'Simulação registrada — nada foi enviado ao Senior.'}
           {carta.status === 'gravada' && 'Carta gravada no Senior como "Não enviada". O faturamento transmite por lá.'}
           {carta.status === 'transmitida' && 'Carta gravada e transmitida.'}
+          {carta.status === 'aguardando_sde' && 'Carta gravada. O SDE do Senior não a recebeu agora — ela sai depois. Não refaça a correção; o Separa confere a situação sozinho.'}
           {carta.status === 'erro_transmitir' && 'Carta gravada, mas a transmissão falhou. O faturamento envia pelo Senior.'}
           {carta.status === 'erro_gravar' && 'O Senior não aceitou a carta.'}
         </span>
