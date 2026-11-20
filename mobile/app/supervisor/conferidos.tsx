@@ -294,6 +294,7 @@ export default function Conferidos() {
       <EscolherImpressora
         visible={pedidoImprimir !== null}
         pedidoId={pedidoImprimir}
+        reimpressao={!!pedidos.find((x) => x.id === pedidoImprimir)?.etiqueta_volume_em}
         onClose={() => setPedidoImprimir(null)}
         onImpresso={() => carregar(buscaAtivaRef.current, 1, false)}
       />

@@ -40,6 +40,9 @@ class ImpressaoEtiqueta(models.Model):
     )
     print_job = models.ForeignKey(PrintJob, null=True, blank=True, on_delete=models.SET_NULL)
     erro = models.TextField(blank=True)
+    # Reimpressão só de alguns volumes (2026-11-19 — acabou o ribbon na 12ª de 30): números dos
+    # volumes ("VOLUME N/M") que saíram. Vazio/None = todos.
+    volumes = models.JSONField(null=True, blank=True)
     criado_em = models.DateTimeField(auto_now_add=True)
 
     class Meta:

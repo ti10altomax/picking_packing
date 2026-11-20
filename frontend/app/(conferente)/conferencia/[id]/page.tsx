@@ -79,6 +79,9 @@ function textoDivergencia(d: DivergenciaFardo) {
 }
 
 
+// Multiplicadores do botão Qtd (fixos, pedido do usuário em 2026-11-20)
+const MULTIPLICADORES = [2, 4, 6, 12] as const
+
 const MOTIVOS = [
   { valor: 'divergencia_qtd', label: 'Divergência de quantidade' },
   { valor: 'produto_errado', label: 'Produto errado' },
@@ -149,7 +152,14 @@ export default function ConferenciaPedidoPage() {
   // direto. O botão "Qtd" da barra arma só a PRÓXIMA leitura para abrir o modal de
   // quantidade (caixa fechada); depois volta sozinho para 1 em 1. Tocar no item da lista
   // continua abrindo o modal.
-  const [qtdArmada, setQtdArmada] = useState(false)
+  // Multiplicador (2026-11-20, pedido do usuário): cada toque no botão avança um passo —
+  // desligado → Qtd (modal na próxima leitura, como antes) → ×2 → ×4 → ×6 → ×12 → desligado.
+  // Com multiplicador cada leitura lança N direto, sem modal, e ele FICA ligado até tocar de
+  // novo; desliga sozinho ao trocar de volume (e ao sair da tela, porque o estado é local).
+  const [passoQtd, setPassoQtd] = useState(0)
+  const qtdArmada = passoQtd === 1
+  const multiplicador = passoQtd >= 2 ? MULTIPLICADORES[passoQtd - 2] : 1
+  const setQtdArmada = (v: boolean) => setPassoQtd(v ? 1 : 0)
   // Leituras seguidas vão em fila e cada uma olha o pedido mais novo — sem isso duas
   // bipadas rápidas do último item pendente passariam pela checagem local.
   const pedidoRef = useRef<Pedido | null>(null)
@@ -232,6 +242,15 @@ export default function ConferenciaPedidoPage() {
       : null)
     ?? [...volumes].reverse().find((v) => !v.fechado_em)
     ?? null
+  // trocou de volume → multiplicador desliga (um ×12 esquecido ligado seria erro grande)
+  const volumeAtivoId = volumeAtivo?.id ?? null
+  const volumeMultRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (volumeMultRef.current !== null && volumeMultRef.current !== volumeAtivoId) {
+      setPassoQtd((p) => (p >= 2 ? 0 : p))
+    }
+    volumeMultRef.current = volumeAtivoId
+  }, [volumeAtivoId])
 
   const totalPedido = pedido?.itens.reduce(
     (s, i) => s + (i.status === 'ok' ? i.qtd_pedida : 0), 0,
@@ -441,7 +460,7 @@ export default function ConferenciaPedidoPage() {
     if (!cod || !pedido) return
 
     if (ehOp(pedido, cod)) {
-      setQtdArmada(false)
+      if (qtdArmada) setQtdArmada(false)
       lerFardo(cod)
       return
     }
@@ -452,7 +471,7 @@ export default function ConferenciaPedidoPage() {
     }
 
     if (!qtdArmada) {
-      registrarUm(cod, volumeAtivo.id)
+      registrarUm(cod, volumeAtivo.id, multiplicador)
       return
     }
     const item = itemPendente(pedido, cod)
@@ -471,12 +490,14 @@ export default function ConferenciaPedidoPage() {
     return /^\d{1,12}$/.test(cod) && !p.itens.some((i) => codigoDoItem(i, cod))
   }
 
-  function itemPendente(p: Pedido, cod: string) {
-    return p.itens.find(
+  // Com multiplicador, prefere o item (mesmo código em G1/G2) onde a quantidade inteira cabe
+  function itemPendente(p: Pedido, cod: string, qtd = 1) {
+    const pendentes = p.itens.filter(
       (i) => i.status === 'ok'
         && i.qtd_separada < i.qtd_pedida
         && codigoDoItem(i, cod),
     )
+    return pendentes.find((i) => i.qtd_pedida - i.qtd_separada >= qtd) ?? pendentes[0]
   }
 
   function erroItemNaoPendente(cod: string) {
@@ -519,19 +540,19 @@ export default function ConferenciaPedidoPage() {
     }).catch(() => {})
   }
 
-  // Leitura sem "Qtd" armado: 1 unidade no volume ativo, sem modal
-  function registrarUm(cod: string, volumeId: number) {
+  // Leitura sem "Qtd" armado: 1 unidade (ou o multiplicador ligado) no volume ativo, sem modal
+  function registrarUm(cod: string, volumeId: number, qtd = 1) {
     const ate = bloqueioCodigo.current.get(cod)
     if (emVoo.current.has(cod) || (ate !== undefined && Date.now() < ate)) return
-    const itemLido = pedidoRef.current ? itemPendente(pedidoRef.current, cod) : null
+    const itemLido = pedidoRef.current ? itemPendente(pedidoRef.current, cod, qtd) : null
     if (itemLido) {
       emVoo.current.add(cod)
-      toast.info(`Lido ${itemLido.sku}`, { detalhe: 'registrando…', chave: 'leitor', duracao: 15000 })
+      toast.info(`Lido ${itemLido.sku}${qtd > 1 ? ` ×${qtd}` : ''}`, { detalhe: 'registrando…', chave: 'leitor', duracao: 15000 })
     }
     filaBip.current = filaBip.current.then(async () => {
       const p = pedidoRef.current
       if (!p) { emVoo.current.delete(cod); return }
-      const item = itemPendente(p, cod)
+      const item = itemPendente(p, cod, qtd)
       if (!item) {
         emVoo.current.delete(cod)
         erroItemNaoPendente(cod)
@@ -539,7 +560,7 @@ export default function ConferenciaPedidoPage() {
       }
       try {
         const r = await conferenciaApi.bipar(pedidoId, {
-          item_id: item.id, qtd: 1, codigo: cod, volume_id: volumeId,
+          item_id: item.id, qtd, codigo: cod, volume_id: volumeId,
         })
         const atual = pedidoRef.current ?? p
         const novo = {
@@ -550,7 +571,7 @@ export default function ConferenciaPedidoPage() {
         setPedido(novo)
         piscar('ok', 500)
         playBeep(880, 120)
-        toast.ok(`+1 ${item.sku}`, {
+        toast.ok(`+${qtd} ${item.sku}`, {
           detalhe: `${item.descricao ? `${item.descricao} · ` : ''}${r.qtd_separada} de ${r.qtd_pedida}${
             r.qtd_separada >= r.qtd_pedida ? ' — item completo' : ''
           }${r.codigo_alternativo ? ' · barra errada da fábrica (registrada)' : ''}`,
@@ -565,7 +586,16 @@ export default function ConferenciaPedidoPage() {
         if (await tratarCancelado(err)) return
         const e = err as { response?: { status?: number; data?: { resultado?: string; erro?: string } } }
         if (e?.response?.status === 409 && e.response.data?.resultado === 'excesso') {
-          erroScan('Este item já está completo', `${item.sku}: o pedido tem ${item.qtd_pedida}.`, cod)
+          const faltam = item.qtd_pedida - item.qtd_separada
+          if (qtd > 1 && faltam > 0) {
+            erroScan(
+              `Passa do pedido — nada foi lançado`,
+              `${item.sku}: faltam ${faltam} e o multiplicador ×${qtd} lançaria ${qtd}. Desligue ou troque o multiplicador, ou use Qtd.`,
+              cod,
+            )
+          } else {
+            erroScan('Este item já está completo', `${item.sku}: o pedido tem ${item.qtd_pedida}.`, cod)
+          }
         } else {
           erroScan('A leitura não foi registrada', e?.response?.data?.erro ?? 'Bipe de novo.', cod)
         }
@@ -766,6 +796,8 @@ export default function ConferenciaPedidoPage() {
                 ? 'border-emerald-500 bg-zinc-900'
                 : qtdArmada
                 ? 'border-amber-400 bg-zinc-900'
+                : multiplicador > 1
+                ? 'border-sky-400 bg-zinc-900'
                 : 'border-zinc-900 bg-zinc-900 shadow-[0_0_24px_rgb(0_0_0/0.15)] dark:border-zinc-700 dark:shadow-[0_0_24px_rgb(59_130_246/0.15)]'
             }`}
           >
@@ -791,19 +823,21 @@ export default function ConferenciaPedidoPage() {
             <button
               // mouseDown sem default: o toque não tira o foco da barra (o leitor continua nela)
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => setQtdArmada((v) => !v)}
-              aria-pressed={qtdArmada}
-              aria-label="Digitar a quantidade na próxima leitura"
-              title="Próxima leitura abre a quantidade"
-              className={`shrink-0 h-10 px-3 rounded-lg text-sm font-bold transition-colors ${
+              onClick={() => setPassoQtd((p) => (p + 1) % (MULTIPLICADORES.length + 2))}
+              aria-pressed={passoQtd > 0}
+              aria-label="Quantidade: toque para alternar entre modal e multiplicadores"
+              title="1 toque: próxima leitura abre a quantidade · depois ×2, ×4, ×6, ×12"
+              className={`shrink-0 h-10 min-w-[3.25rem] px-3 rounded-lg text-sm font-bold transition-colors ${
                 qtdArmada
                   ? 'bg-amber-400 text-zinc-950'
+                  : multiplicador > 1
+                  ? 'bg-sky-400 text-zinc-950 text-base'
                   : scanFlash === 'erro'
                   ? 'text-red-500 hover:bg-red-100 dark:hover:bg-red-500/20'
                   : 'text-zinc-300 border border-zinc-700 hover:bg-zinc-800'
               }`}
             >
-              Qtd
+              {multiplicador > 1 ? `×${multiplicador}` : 'Qtd'}
             </button>
             <button
               onClick={() => setCameraAberta(true)}
@@ -823,7 +857,15 @@ export default function ConferenciaPedidoPage() {
           </div>
           {qtdArmada && (
             <p className="mt-1.5 text-sm font-semibold text-amber-700 dark:text-amber-400">
-              Próxima leitura abre a quantidade · toque em Qtd para cancelar
+              Próxima leitura abre a quantidade · toque de novo para ×2
+            </p>
+          )}
+          {multiplicador > 1 && (
+            <p className="mt-1.5 text-sm font-semibold text-sky-700 dark:text-sky-400">
+              Cada leitura lança {multiplicador} unidades ·{' '}
+              {passoQtd - 2 < MULTIPLICADORES.length - 1
+                ? `toque para ×${MULTIPLICADORES[passoQtd - 1]}`
+                : 'toque para desligar'}
             </p>
           )}
         </div>

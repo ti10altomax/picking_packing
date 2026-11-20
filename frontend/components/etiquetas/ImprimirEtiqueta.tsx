@@ -63,6 +63,9 @@ export function ImprimirEtiqueta({
   const [escolhida, setEscolhida] = useState<number | 'navegador'>('navegador')
   const [enviando, setEnviando] = useState(false)
   const [feedback, setFeedback] = useState<{ ok: boolean; msg: string } | null>(null)
+  // Reimpressão só de alguns volumes (2026-11-19 — acabou o ribbon na 12ª de 30 etiquetas)
+  const [soAlguns, setSoAlguns] = useState(false)
+  const [volumes, setVolumes] = useState('')
   const ref = useRef<HTMLDivElement>(null)
   // O seletor sai num portal com posição fixa (2026-11-16): dentro da linha ele era cortado
   // pelo `overflow-hidden` do card quando a lista tinha poucas linhas (busca por um pedido).
@@ -98,6 +101,8 @@ export function ImprimirEtiqueta({
   useEffect(() => {
     if (!aberto) return
     setFeedback(null)
+    setSoAlguns(false)
+    setVolumes('')
     impressaoApi.impressoras()
       .then((d) => { setImpressoras(d.impressoras); setEscolhida(escolhaInicial(d.impressoras)) })
       .catch(() => setImpressoras([]))
@@ -115,21 +120,27 @@ export function ImprimirEtiqueta({
   }, [aberto])
 
   async function imprimir() {
+    const sel = soAlguns ? volumes.trim() : ''
+    if (soAlguns && !sel) {
+      setFeedback({ ok: false, msg: 'Informe os volumes (ex.: 12-30) ou escolha "Todos".' })
+      return
+    }
     guardarUltimaImpressora(String(escolhida))
     if (escolhida === 'navegador') {
-      window.open(`/etiquetas/${pedidoId}`, '_blank', 'noopener')
+      window.open(`/etiquetas/${pedidoId}${sel ? `?volumes=${encodeURIComponent(sel)}` : ''}`, '_blank', 'noopener')
       setAberto(false)
       return
     }
     setEnviando(true)
     setFeedback(null)
     try {
-      const r = await impressaoApi.imprimir(pedidoId, { impressora_id: escolhida })
+      const r = await impressaoApi.imprimir(pedidoId, { impressora_id: escolhida, ...(sel ? { volumes: sel } : {}) })
       // A impressora fica longe de quem clica: toast dizendo que já foi, para não mandar
       // de novo (2026-11-09). Rede = já enviado à Zebra; USB = na fila do agente.
       const viaAgente = r.impressao.canal === 'agente'
+      const quais = r.impressao.volumes_texto ? ` (volumes ${r.impressao.volumes_texto})` : ''
       toast.ok(viaAgente ? 'Etiquetas na fila do agente' : 'Etiquetas enviadas à impressora', {
-        detalhe: `${r.impressao.qtd_etiquetas} etiqueta(s) → ${r.impressao.impressora}. Não precisa mandar de novo.`,
+        detalhe: `${r.impressao.qtd_etiquetas} etiqueta(s)${quais} → ${r.impressao.impressora}. Não precisa mandar de novo.`,
       })
       setAberto(false)
       onImpresso?.()
@@ -205,6 +216,36 @@ export function ImprimirEtiqueta({
                 </label>
               </li>
             </ul>
+          )}
+
+          {impressaEm && (
+            <div className="mt-3 border-t border-surface-border pt-3">
+              <p className="text-xs font-semibold text-ink-subtle uppercase tracking-wider mb-1">Volumes</p>
+              <div className="flex gap-1">
+                <label className="flex-1 flex items-center gap-2 px-2 rounded-lg hover:bg-surface-elev cursor-pointer min-h-[40px] text-sm text-ink">
+                  <input type="radio" name={`vol-${pedidoId}`} checked={!soAlguns} onChange={() => setSoAlguns(false)} />
+                  Todos
+                </label>
+                <label className="flex-1 flex items-center gap-2 px-2 rounded-lg hover:bg-surface-elev cursor-pointer min-h-[40px] text-sm text-ink">
+                  <input type="radio" name={`vol-${pedidoId}`} checked={soAlguns} onChange={() => setSoAlguns(true)} />
+                  Só alguns
+                </label>
+              </div>
+              {soAlguns && (
+                <>
+                  <input
+                    autoFocus
+                    value={volumes}
+                    onChange={(e) => setVolumes(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') imprimir() }}
+                    placeholder="ex.: 12-30 ou 3, 7, 10"
+                    inputMode="numeric"
+                    className="mt-1 w-full rounded-lg border border-surface-border bg-surface-bg px-3 min-h-[40px] text-sm text-ink"
+                  />
+                  <p className="mt-1 text-[11px] text-ink-subtle">Número do volume na etiqueta (VOLUME N/M). Intervalo com traço, vários com vírgula.</p>
+                </>
+              )}
+            </div>
           )}
 
           <button

@@ -323,6 +323,9 @@ export type ImpressaoEtiqueta = {
   automatica: boolean
   usuario: string | null
   erro: string
+  /** Reimpressão só de alguns volumes (2026-11-19): números e o texto "12-30, 35"; null = todos */
+  volumes?: number[] | null
+  volumes_texto?: string
 }
 
 export type ImpressoraEtiqueta = {
@@ -380,7 +383,8 @@ export type VereditoEtiqueta = {
 }
 
 export const impressaoApi = {
-  imprimir: (pedidoId: number, body: { impressora_id?: number }) =>
+  // `volumes` (2026-11-19) = "12-30, 35": só esses volumes (reimpressão); sem ele, todos
+  imprimir: (pedidoId: number, body: { impressora_id?: number; volumes?: string }) =>
     api.post(`/api/impressao/pedidos/${pedidoId}/imprimir/`, body)
       .then((r) => r.data as { resultado: string; erro: string | null; impressao: ImpressaoEtiqueta }),
   pendentes: () =>

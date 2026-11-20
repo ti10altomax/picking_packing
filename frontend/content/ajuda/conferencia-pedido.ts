@@ -30,6 +30,7 @@ export const conferenciaPedido: AjudaTela = {
     'Toque em + Volume, escolha caixa, fardo ou outro, confira o identificador e toque em Criar.',
     'Bipe o produto na barra "Bipe o código…". Cada leitura soma 1 unidade no volume ativo, sem abrir nada.',
     'Para pôr várias unidades de uma vez (caixa fechada), toque em Qtd antes de bipar, ou toque no item na lista. Informe a quantidade e toque em Confirmar.',
+    'Pacotes iguais (2, 4, 6 ou 12 unidades): toque em Qtd mais vezes até aparecer ×2, ×4, ×6 ou ×12. Cada leitura lança essa quantidade direto, sem abrir nada, até você tocar de novo.',
     'Caixa ou fardo fechado da fábrica: bipe a etiqueta da OP (só números, menos de 13 dígitos). Se a OP bate com o que falta, o sistema cria o volume "OP N" já fechado com todos os itens, e decide sozinho se é caixa ou fardo pelo produto. Não precisa abrir volume antes.',
     'Repita até todos os itens ficarem com ✓. Abra outro volume com + Volume sempre que precisar.',
     'Quando o botão ficar verde, toque em Concluir ✓ e confirme.',
@@ -66,7 +67,7 @@ export const conferenciaPedido: AjudaTela = {
     {
       nome: 'Qtd',
       descricao:
-        'Na barra de bipagem. Toque antes de bipar e a próxima leitura abre a tela de quantidade. A barra fica amarela enquanto estiver armado. Depois dessa leitura volta sozinho para 1 em 1. Toque de novo para cancelar.',
+        'Na barra de bipagem. Toque antes de bipar e a próxima leitura abre a tela de quantidade. A barra fica amarela enquanto estiver armado. Depois dessa leitura volta sozinho para 1 em 1. Cada toque a mais troca para um multiplicador: ×2, ×4, ×6, ×12 e, no toque seguinte, desliga. Com multiplicador o botão e a barra ficam azuis e cada leitura lança 2, 4, 6 ou 12 unidades direto, sem abrir a tela de quantidade. O multiplicador fica ligado até você tocar de novo; desliga sozinho ao trocar de volume ou sair da tela.',
     },
     {
       nome: 'Volume "OP N" (caixa ou fardo)',
@@ -101,6 +102,10 @@ export const conferenciaPedido: AjudaTela = {
     },
   ],
   situacoes: [
+    {
+      quando: 'Aparece "Passa do pedido — nada foi lançado" com o multiplicador ligado.',
+      oQueFazer: 'Falta menos do que o multiplicador lança. Toque em Qtd até desligar e bipe de 1 em 1, ou use Qtd (um toque) para digitar a quantidade.',
+    },
     {
       quando: 'A barra de bipagem mostra "Crie um volume antes de bipar".',
       oQueFazer: 'Toque em + Volume e crie o volume. Depois bipe de novo.',
@@ -193,7 +198,7 @@ export const conferenciaPedido: AjudaTela = {
     },
   ],
   dicas: [
-    'Peça a peça, só bipe. Caixa fechada com muitas unidades: toque em Qtd e bipe uma vez.',
+    'Peça a peça, só bipe. Caixa fechada com muitas unidades: toque em Qtd e bipe uma vez. Vários pacotes iguais: use ×2, ×4, ×6 ou ×12 e confira o número no botão antes de bipar.',
     'Apague só volumes vazios. Com itens, remova os lançamentos antes.',
   ],
   relacionadas: ['conferencia', 'login'],

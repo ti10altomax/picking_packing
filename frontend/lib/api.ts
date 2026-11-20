@@ -436,6 +436,9 @@ export type ImpressaoEtiqueta = {
   automatica: boolean
   usuario: string | null
   erro: string
+  /** Reimpressão só de alguns volumes (2026-11-19): números e o texto "12-30, 35"; null = todos */
+  volumes?: number[] | null
+  volumes_texto?: string
 }
 
 export type ModeloEtiqueta = 'padrao' | 'compacta'
@@ -528,12 +531,17 @@ export type ConfigEtiqueta = {
 
 export const impressaoApi = {
   // `modelo` força um modelo (prévia/comparação); sem ele vale o configurado
-  etiquetas: (pedidoId: number, modelo?: ModeloEtiqueta) =>
-    api.get(`/api/impressao/pedidos/${pedidoId}/etiquetas/`, { params: modelo ? { modelo } : undefined })
+  // `volumes` (2026-11-19) = "12-30, 35": só esses volumes (reimpressão); sem ele, todos
+  etiquetas: (pedidoId: number, modelo?: ModeloEtiqueta, volumes?: string) =>
+    api.get(`/api/impressao/pedidos/${pedidoId}/etiquetas/`, {
+      params: { ...(modelo ? { modelo } : {}), ...(volumes ? { volumes } : {}) },
+    })
       .then((r) => r.data as EtiquetasPedido),
-  zplUrl: (pedidoId: number, modelo?: ModeloEtiqueta) =>
-    `/api/impressao/pedidos/${pedidoId}/etiquetas/zpl/${modelo ? `?modelo=${modelo}` : ''}`,
-  imprimir: (pedidoId: number, body: { impressora_id?: number; canal?: 'navegador' }) =>
+  zplUrl: (pedidoId: number, modelo?: ModeloEtiqueta, volumes?: string) => {
+    const q = new URLSearchParams({ ...(modelo ? { modelo } : {}), ...(volumes ? { volumes } : {}) }).toString()
+    return `/api/impressao/pedidos/${pedidoId}/etiquetas/zpl/${q ? `?${q}` : ''}`
+  },
+  imprimir: (pedidoId: number, body: { impressora_id?: number; canal?: 'navegador'; volumes?: string }) =>
     api.post(`/api/impressao/pedidos/${pedidoId}/imprimir/`, body)
       .then((r) => r.data as { resultado: string; erro: string | null; impressao: ImpressaoEtiqueta }),
   pendentes: () =>

@@ -42,7 +42,7 @@ export const supervisorConferidos: AjudaTela = {
     },
     {
       nome: 'Reimprimir',
-      descricao: 'A etiqueta já saiu. Embaixo do botão fica a data da última impressão.',
+      descricao: 'A etiqueta já saiu. Embaixo do botão fica a data da última impressão. Ao reimprimir dá para escolher "Todos" os volumes ou "Só alguns": digite os números que estão na etiqueta (VOLUME N/M), com traço para intervalo e vírgula para vários, ex.: 12-30 ou 3, 7, 10.',
     },
     {
       nome: 'Sem transportadora',
@@ -82,6 +82,10 @@ export const supervisorConferidos: AjudaTela = {
     },
   ],
   situacoes: [
+    {
+      quando: 'Acabou o ribbon ou o papel no meio das etiquetas (ou uma etiqueta rasgou).',
+      oQueFazer: 'Troque o ribbon/papel, toque em "Reimprimir", escolha "Só alguns" e digite a partir do volume que falhou (ex.: 12-30). Só esses saem de novo, com a mesma numeração.',
+    },
     {
       quando: 'Nenhum pedido conferido.',
       oQueFazer: 'Nada foi concluído ainda, ou a busca não achou nada. Apague a busca e toque em "Atualizar".',

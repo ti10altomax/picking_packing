@@ -86,6 +86,8 @@ def _carta(p):
 
 def _etiqueta(p):
     txt = f"{p.get('qtd_etiquetas') or '?'} etiqueta(s) · {p.get('impressora') or p.get('canal') or ''}"
+    if p.get('volumes'):
+        txt += f" · só volumes {p.get('volumes')}"
     if p.get('automatica'):
         txt += ' · automática'
     if p.get('agente'):

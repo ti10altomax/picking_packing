@@ -279,12 +279,20 @@ export default function EtiquetasPedidoPage() {
   const [aviso, setAviso] = useState('')
   // `?modelo=padrao|compacta` força o modelo (comparar os dois); sem ele vale o configurado
   const [modelo, setModelo] = useState<ModeloEtiqueta | undefined>(undefined)
+  // `?volumes=12-30` (2026-11-19): reimpressão só desses volumes
+  const [volumes, setVolumes] = useState<string | undefined>(undefined)
 
   useEffect(() => {
-    const m = new URLSearchParams(window.location.search).get('modelo')
+    const q = new URLSearchParams(window.location.search)
+    const m = q.get('modelo')
     const forcado = m === 'padrao' || m === 'compacta' ? m : undefined
+    const vols = q.get('volumes')?.trim() || undefined
     setModelo(forcado)
-    impressaoApi.etiquetas(pedidoId, forcado).then(setDados).catch(() => setErro('Erro ao carregar as etiquetas'))
+    setVolumes(vols)
+    impressaoApi.etiquetas(pedidoId, forcado, vols).then(setDados).catch((e: unknown) => {
+      const d = (e as { response?: { data?: { erro?: string } } })?.response?.data
+      setErro(d?.erro ? `Volumes: ${d.erro}` : 'Erro ao carregar as etiquetas')
+    })
   }, [pedidoId])
 
   async function imprimir() {
@@ -292,9 +300,9 @@ export default function EtiquetasPedidoPage() {
     setRegistrando(true)
     try {
       // Registra o disparo (histórico + sai da lista de pendentes) e abre a impressão
-      await impressaoApi.imprimir(pedidoId, { canal: 'navegador' })
+      await impressaoApi.imprimir(pedidoId, { canal: 'navegador', ...(volumes ? { volumes } : {}) })
       setAviso('Impressão registrada.')
-      const d = await impressaoApi.etiquetas(pedidoId, modelo)
+      const d = await impressaoApi.etiquetas(pedidoId, modelo, volumes)
       setDados(d)
     } catch {
       setAviso('Não foi possível registrar a impressão (a página ainda pode ser impressa).')
@@ -305,7 +313,7 @@ export default function EtiquetasPedidoPage() {
   }
 
   async function baixarZpl() {
-    const r = await api.get(impressaoApi.zplUrl(pedidoId, modelo), { responseType: 'blob' })
+    const r = await api.get(impressaoApi.zplUrl(pedidoId, modelo, volumes), { responseType: 'blob' })
     const url = URL.createObjectURL(r.data)
     const a = document.createElement('a')
     a.href = url
@@ -331,7 +339,9 @@ export default function EtiquetasPedidoPage() {
             Etiquetas · {dados.pedido.tipo_label} {dados.pedido.numero_externo}
           </h1>
           <p className="text-xs text-ink-muted">
-            {dados.total_volumes} volume(s) · {dados.etiquetas.length} etiqueta(s) · {dados.pedido.transportadora || 'sem transportadora'}
+            {dados.total_volumes} volume(s) · {dados.etiquetas.length} etiqueta(s)
+            {volumes && <strong className="text-amber-700 dark:text-amber-300"> · só os volumes {volumes}</strong>}
+            {' · '}{dados.pedido.transportadora || 'sem transportadora'}
             {' · modelo '}{dados.modelo === 'compacta' ? 'compacto' : 'padrão'}{modelo ? ' (forçado pela URL)' : ''}
             {ultima && ` · última impressão ${fmtData(ultima.criado_em)} (${ultima.canal_label}${ultima.impressora ? ` ${ultima.impressora}` : ''})`}
           </p>

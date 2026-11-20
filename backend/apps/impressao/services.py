@@ -40,7 +40,7 @@ from apps.etiquetas.printer import enviar_para_rede  # cliente TCP 9100 (congela
 PREFIXO_ZPL = b'~JX\r\n'
 from apps.pedidos.models import Impressora, Pedido, PedidoLog, PrintJob
 
-from .etiqueta import dados_etiquetas, normalizar_modelo
+from .etiqueta import dados_etiquetas, filtrar_volumes, formatar_volumes, normalizar_modelo
 from .models import ImpressaoEtiqueta
 from .zpl import gerar_zpl
 
@@ -167,10 +167,11 @@ def anotar_volumes(qs):
 # ---------------------------------------------------------------------------
 
 def _registrar(pedido, *, canal, status, impressora=None, qtd=0, automatica=False,
-               usuario=None, erro='', print_job=None) -> ImpressaoEtiqueta:
+               usuario=None, erro='', print_job=None, volumes=None) -> ImpressaoEtiqueta:
     reg = ImpressaoEtiqueta.objects.create(
         pedido=pedido, impressora=impressora, canal=canal, status=status,
         qtd_etiquetas=qtd, automatica=automatica, usuario=usuario, erro=erro, print_job=print_job,
+        volumes=volumes or None,
     )
     acao = {
         ImpressaoEtiqueta.Status.OK: 'etiqueta_impressa',
@@ -183,31 +184,40 @@ def _registrar(pedido, *, canal, status, impressora=None, qtd=0, automatica=Fals
             'impressora': impressora.nome if impressora else None,
             'impressora_id': impressora.id if impressora else None,
             'qtd_etiquetas': qtd, 'automatica': automatica, 'erro': erro or None,
+            'volumes': formatar_volumes(volumes) or None,
         },
     )
     return reg
 
 
 def imprimir(pedido: Pedido, *, impressora: Impressora | None = None, canal: str | None = None,
-             usuario=None, automatica: bool = False) -> ImpressaoEtiqueta:
+             usuario=None, automatica: bool = False, volumes: list[int] | None = None) -> ImpressaoEtiqueta:
     """Gera e despacha as etiquetas do pedido.
 
     - `impressora` de rede → ZPL direto na porta TCP;
     - `impressora` USB → `PrintJob` para o agente puxar;
     - `canal='navegador'` → só registra (o HTML já foi impresso pelo usuário).
     Erros de rede viram registro `erro` (não levantam) para o histórico mostrar.
+    `volumes` (2026-11-19) = números dos volumes a (re)imprimir (`etiqueta.ler_volumes`); None = todos.
     """
     completar_dados_nf(pedido)
     verificar_elegivel(pedido)
     dados = dados_etiquetas(pedido, modelo_etiqueta())
-    qtd = len(dados['etiquetas'])
-    if not qtd:
+    if not dados['etiquetas']:
         raise ErroImpressao('sem_volumes', 'pedido sem volume com itens — nada para imprimir')
+    if volumes and set(volumes) == set(range(1, dados['total_volumes'] + 1)):
+        volumes = None   # escolheu todos: registra como impressão completa
+    try:
+        filtrar_volumes(dados, volumes)
+    except ValueError as e:
+        raise ErroImpressao('volumes_invalidos', str(e))
+    qtd = len(dados['etiquetas'])
+    extra = {'volumes': volumes}
 
     if canal == ImpressaoEtiqueta.Canal.NAVEGADOR:
         return _registrar(
             pedido, canal=ImpressaoEtiqueta.Canal.NAVEGADOR, status=ImpressaoEtiqueta.Status.OK,
-            qtd=qtd, automatica=False, usuario=usuario,
+            qtd=qtd, automatica=False, usuario=usuario, **extra,
         )
     if impressora is None:
         raise ErroImpressao('sem_impressora', 'informe a impressora ou use o navegador')
@@ -224,7 +234,7 @@ def imprimir(pedido: Pedido, *, impressora: Impressora | None = None, canal: str
             return _registrar(
                 pedido, canal=ImpressaoEtiqueta.Canal.REDE, status=ImpressaoEtiqueta.Status.ERRO,
                 impressora=impressora, qtd=qtd, automatica=automatica, usuario=usuario,
-                erro='impressora sem IP cadastrado',
+                erro='impressora sem IP cadastrado', **extra,
             )
         try:
             enviar_para_rede(impressora.ip, impressora.porta or 9100, PREFIXO_ZPL + zpl)
@@ -233,11 +243,11 @@ def imprimir(pedido: Pedido, *, impressora: Impressora | None = None, canal: str
             return _registrar(
                 pedido, canal=ImpressaoEtiqueta.Canal.REDE, status=ImpressaoEtiqueta.Status.ERRO,
                 impressora=impressora, qtd=qtd, automatica=automatica, usuario=usuario,
-                erro=f'sem resposta em {impressora.ip}:{impressora.porta} ({e})',
+                erro=f'sem resposta em {impressora.ip}:{impressora.porta} ({e})', **extra,
             )
         return _registrar(
             pedido, canal=ImpressaoEtiqueta.Canal.REDE, status=ImpressaoEtiqueta.Status.OK,
-            impressora=impressora, qtd=qtd, automatica=automatica, usuario=usuario,
+            impressora=impressora, qtd=qtd, automatica=automatica, usuario=usuario, **extra,
         )
 
     # USB via agente: enfileira; o agente local (agente/separa_agente.py) puxa em
@@ -248,6 +258,7 @@ def imprimir(pedido: Pedido, *, impressora: Impressora | None = None, canal: str
         return _registrar(
             pedido, canal=ImpressaoEtiqueta.Canal.AGENTE, status=ImpressaoEtiqueta.Status.NA_FILA,
             impressora=impressora, qtd=qtd, automatica=automatica, usuario=usuario, print_job=job,
+            **extra,
         )
 
 
@@ -281,7 +292,7 @@ def confirmar_job(job: PrintJob) -> ImpressaoEtiqueta | None:
             'canal': reg.canal, 'impressora': reg.impressora.nome if reg.impressora else None,
             'impressora_id': reg.impressora_id, 'qtd_etiquetas': reg.qtd_etiquetas,
             'automatica': reg.automatica, 'agente': agente, 'print_job_id': job.id,
-            'erro': reg.erro or None,
+            'erro': reg.erro or None, 'volumes': formatar_volumes(reg.volumes) or None,
         },
     )
     logger.info(

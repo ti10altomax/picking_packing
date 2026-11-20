@@ -8,7 +8,7 @@ from apps.core.models import Configuracao
 from apps.pedidos.models import Impressora, Pedido
 
 from . import services
-from .etiqueta import MODELOS, dados_etiquetas, normalizar_modelo
+from .etiqueta import MODELOS, dados_etiquetas, filtrar_volumes, formatar_volumes, ler_volumes, normalizar_modelo
 from .models import ImpressaoEtiqueta
 from .zpl import gerar_zpl
 
@@ -42,7 +42,18 @@ def _serializar_impressao(i: ImpressaoEtiqueta) -> dict:
         'automatica': i.automatica,
         'usuario': i.usuario.username if i.usuario else None,
         'erro': i.erro,
+        'volumes': i.volumes or None,
+        'volumes_texto': formatar_volumes(i.volumes),
     }
+
+
+def _volumes(valor):
+    """`volumes` do corpo ou da query (lista ou "12-30, 35") → (lista|None, resposta de erro|None)."""
+    try:
+        return ler_volumes(valor), None
+    except ValueError as e:
+        return None, Response({'resultado': 'volumes_invalidos', 'erro': str(e)},
+                              status=http_status.HTTP_400_BAD_REQUEST)
 
 
 def _serializar_impressora(imp: Impressora, padrao_id: int | None) -> dict:
@@ -69,6 +80,13 @@ def etiquetas(request, pk):
     pedido = get_object_or_404(Pedido.objects.select_related('conferente', 'sequencia'), pk=pk)
     services.completar_dados_nf(pedido)   # chave do DANFE / volumes que ainda faltem
     dados = dados_etiquetas(pedido, _modelo(request))
+    volumes, err = _volumes(request.query_params.get('volumes'))
+    if err:
+        return err
+    try:
+        filtrar_volumes(dados, volumes)   # ?volumes=12-30: só esses (reimpressão pelo navegador)
+    except ValueError as e:
+        return Response({'resultado': 'volumes_invalidos', 'erro': str(e)}, status=http_status.HTTP_400_BAD_REQUEST)
     dados['bloqueio'] = services.motivo_bloqueio(pedido)
     dados['impressoes'] = [
         _serializar_impressao(i)
@@ -83,6 +101,13 @@ def etiquetas_zpl(request, pk):
     pedido = get_object_or_404(Pedido.objects.select_related('conferente', 'sequencia'), pk=pk)
     services.completar_dados_nf(pedido)   # chave do DANFE / volumes que ainda faltem
     dados = dados_etiquetas(pedido, _modelo(request))
+    volumes, err = _volumes(request.query_params.get('volumes'))
+    if err:
+        return err
+    try:
+        filtrar_volumes(dados, volumes)
+    except ValueError as e:
+        return Response({'resultado': 'volumes_invalidos', 'erro': str(e)}, status=http_status.HTTP_400_BAD_REQUEST)
     imp = None
     if request.query_params.get('impressora'):
         imp = Impressora.objects.filter(pk=request.query_params['impressora']).first()
@@ -101,6 +126,10 @@ def imprimir(request, pk):
     (o usuário imprimiu a página HTML e estamos só registrando). Sem nenhum dos
     dois, usa a impressora padrão."""
     pedido = get_object_or_404(Pedido.objects.select_related('conferente', 'sequencia'), pk=pk)
+    # `volumes` (2026-11-19): só esses volumes — [12, 13] ou "12-30, 35"; sem ele, todos
+    volumes, err = _volumes(request.data.get('volumes'))
+    if err:
+        return err
     canal = (request.data.get('canal') or '').strip()
     impressora = None
     if canal != ImpressaoEtiqueta.Canal.NAVEGADOR:
@@ -118,7 +147,8 @@ def imprimir(request, pk):
                 )
 
     try:
-        reg = services.imprimir(pedido, impressora=impressora, canal=canal or None, usuario=request.user)
+        reg = services.imprimir(pedido, impressora=impressora, canal=canal or None, usuario=request.user,
+                                volumes=volumes)
     except services.ErroImpressao as e:
         return Response({'resultado': e.codigo, 'erro': e.mensagem}, status=http_status.HTTP_409_CONFLICT)
 

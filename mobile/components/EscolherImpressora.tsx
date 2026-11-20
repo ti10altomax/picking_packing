@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useToast } from '@/components/Toast'
-import { View, Text, Pressable, Modal, ActivityIndicator } from 'react-native'
+import { View, Text, Pressable, Modal, ActivityIndicator, TextInput } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as SecureStore from 'expo-secure-store'
 import { impressaoApi, type ImpressoraEtiqueta } from '@/lib/api'
@@ -13,11 +13,13 @@ const CHAVE_ULTIMA = 'etiqueta_impressora'
  * agente). No celular/coletor não existe o caminho "navegador" do web.
  */
 export function EscolherImpressora({
-  visible, pedidoId, titulo, onClose, onImpresso,
+  visible, pedidoId, titulo, reimpressao = false, onClose, onImpresso,
 }: {
   visible: boolean
   pedidoId: number | null
   titulo?: string
+  /** Reimpressão (já saiu antes): mostra "Todos / Só alguns volumes" (2026-11-19) */
+  reimpressao?: boolean
   onClose: () => void
   onImpresso?: () => void
 }) {
@@ -27,11 +29,16 @@ export function EscolherImpressora({
   const [escolhida, setEscolhida] = useState<number | null>(null)
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState('')
+  // Só alguns volumes (2026-11-19 — acabou o ribbon no meio de 30 etiquetas)
+  const [soAlguns, setSoAlguns] = useState(false)
+  const [volumes, setVolumes] = useState('')
 
   useEffect(() => {
     if (!visible) return
     setErro('')
     setLista(null)
+    setSoAlguns(false)
+    setVolumes('')
     ;(async () => {
       try {
         const d = await impressaoApi.impressoras()
@@ -49,14 +56,20 @@ export function EscolherImpressora({
 
   async function imprimir() {
     if (!pedidoId || !escolhida) return
+    const sel = reimpressao && soAlguns ? volumes.trim() : ''
+    if (reimpressao && soAlguns && !sel) {
+      setErro('Informe os volumes (ex.: 12-30) ou escolha "Todos".')
+      return
+    }
     setEnviando(true)
     setErro('')
     try {
-      const r = await impressaoApi.imprimir(pedidoId, { impressora_id: escolhida })
+      const r = await impressaoApi.imprimir(pedidoId, { impressora_id: escolhida, ...(sel ? { volumes: sel } : {}) })
       await SecureStore.setItemAsync(CHAVE_ULTIMA, String(escolhida)).catch(() => {})
       onClose()
       onImpresso?.()
-      toast.ok('Etiquetas enviadas', { detalhe: `${r.impressao.qtd_etiquetas} etiqueta(s) → ${r.impressao.impressora}` })
+      const quais = r.impressao.volumes_texto ? ` (volumes ${r.impressao.volumes_texto})` : ''
+      toast.ok('Etiquetas enviadas', { detalhe: `${r.impressao.qtd_etiquetas} etiqueta(s)${quais} → ${r.impressao.impressora}` })
     } catch (e: unknown) {
       const d = (e as { response?: { data?: { erro?: string } } })?.response?.data
       setErro(d?.erro ?? 'Falha ao imprimir')
@@ -112,6 +125,43 @@ export function EscolherImpressora({
               })}
             </View>
           )}
+
+          {reimpressao && lista && lista.length > 0 ? (
+            <View className="mb-4">
+              <Text className="text-xs font-semibold text-ink-subtle uppercase mb-2">Volumes</Text>
+              <View className="flex-row gap-2">
+                {([false, true] as const).map((v) => {
+                  const ativo = soAlguns === v
+                  return (
+                    <Pressable
+                      key={String(v)}
+                      onPress={() => setSoAlguns(v)}
+                      className={`flex-1 h-11 rounded-xl border items-center justify-center ${
+                        ativo ? 'border-emerald-500 bg-emerald-500/10' : 'border-surface-border bg-surface-card'
+                      }`}
+                    >
+                      <Text className={`font-medium ${ativo ? 'text-emerald-300' : 'text-ink'}`}>{v ? 'Só alguns' : 'Todos'}</Text>
+                    </Pressable>
+                  )
+                })}
+              </View>
+              {soAlguns ? (
+                <>
+                  <TextInput
+                    autoFocus
+                    value={volumes}
+                    onChangeText={setVolumes}
+                    placeholder="ex.: 12-30 ou 3, 7, 10"
+                    placeholderTextColor="#71717a"
+                    keyboardType="numbers-and-punctuation"
+                    showSoftInputOnFocus
+                    className="mt-2 h-12 rounded-xl border border-surface-border bg-surface-bg px-3 text-base text-ink"
+                  />
+                  <Text className="text-xs text-ink-subtle mt-1">Número do volume na etiqueta (VOLUME N/M). Intervalo com traço, vários com vírgula.</Text>
+                </>
+              ) : null}
+            </View>
+          ) : null}
 
           {erro ? <Text className="text-sm text-red-400 mb-3">{erro}</Text> : null}
 

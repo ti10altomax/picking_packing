@@ -99,6 +99,78 @@ def _paginar(itens: list[dict], tamanho: int = ITENS_POR_PAGINA) -> list[list[di
     return [itens[i:i + tamanho] for i in range(0, len(itens), tamanho)]
 
 
+MAX_VOLUMES_LISTA = 999
+
+
+def ler_volumes(valor) -> list[int] | None:
+    """Volumes escolhidos para (re)imprimir (2026-11-19): lista de números ou texto no formato do
+    Colar lista — "12-30", "12, 15 20", "3;5-7" (traço comum, en/em-dash). None/vazio = todos.
+    Levanta ValueError com a mensagem para o usuário."""
+    if valor is None or valor == '' or valor == []:
+        return None
+    numeros: set[int] = set()
+    if isinstance(valor, (list, tuple)):
+        for v in valor:
+            try:
+                n = int(v)
+            except (TypeError, ValueError):
+                raise ValueError(f'volume inválido: {v!r}')
+            numeros.add(n)
+    else:
+        import re
+        texto = re.sub(r'\s*[-\u2013\u2014]\s*', '-', str(valor).strip())
+        for parte in re.split(r'[\s,;]+', texto):
+            if not parte:
+                continue
+            m = re.fullmatch(r'(\d+)(?:-(\d+))?', parte)
+            if not m:
+                raise ValueError(f'não entendi "{parte}" — use números e intervalos, ex.: 12-30, 35')
+            ini = int(m.group(1))
+            fim = int(m.group(2) or ini)
+            if fim < ini:
+                ini, fim = fim, ini
+            if fim - ini >= MAX_VOLUMES_LISTA:
+                raise ValueError(f'intervalo {parte} grande demais')
+            numeros.update(range(ini, fim + 1))
+    if not numeros:
+        return None
+    if min(numeros) < 1:
+        raise ValueError('volume começa em 1')
+    return sorted(numeros)
+
+
+def formatar_volumes(numeros: list[int] | None) -> str:
+    """[12, 13, 14, 20] → "12-14, 20" (histórico, toast)."""
+    if not numeros:
+        return ''
+    partes, ini, ant = [], numeros[0], numeros[0]
+    for n in list(numeros[1:]) + [None]:
+        if n is not None and n == ant + 1:
+            ant = n
+            continue
+        partes.append(str(ini) if ini == ant else f'{ini}-{ant}')
+        if n is not None:
+            ini = ant = n
+    return ', '.join(partes)
+
+
+def filtrar_volumes(dados: dict, numeros: list[int] | None) -> dict:
+    """Deixa em `dados['etiquetas']` só as dos volumes pedidos (todas as páginas de cada um).
+    A numeração "VOLUME N/M" não muda — vem do documento inteiro. Número acima do total → ValueError."""
+    if not numeros:
+        return dados
+    total = dados['total_volumes']
+    fora = [n for n in numeros if n > total]
+    if fora:
+        raise ValueError(
+            f"o documento tem {total} volume(s); não existe {formatar_volumes(fora)}"
+        )
+    escolhidos = set(numeros)
+    dados['etiquetas'] = [et for et in dados['etiquetas'] if et['volume']['numero'] in escolhidos]
+    dados['volumes_escolhidos'] = numeros
+    return dados
+
+
 def dados_etiquetas(pedido: Pedido, modelo: str = MODELO_PADRAO) -> dict:
     """Tudo que vai impresso, em estrutura neutra (JSON-serializável).
 
