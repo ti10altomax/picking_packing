@@ -121,6 +121,7 @@ export default function ConferenciaDetalhe() {
   const [erro, setErro] = useState('')
   const [segundos, setSegundos] = useState(0)
   const [modalNovoVolume, setModalNovoVolume] = useState(false)
+  const [moverAberto, setMoverAberto] = useState(false)
   const [modalNaoConforme, setModalNaoConforme] = useState(false)
   const [modalConcluir, setModalConcluir] = useState(false)
   // Etiqueta de volume: seletor de impressora quando não há padrão configurada
@@ -669,7 +670,7 @@ export default function ConferenciaDetalhe() {
   // inputs; quando fecham, o leitor volta a alimentar a barra sem toque.
   const algumModalAberto =
     !!itemSelecionado || modalNovoVolume || modalNaoConforme
-    || modalSeparadoPor || modalConcluir || cameraGlobalAberta
+    || modalSeparadoPor || modalConcluir || cameraGlobalAberta || moverAberto
   useEffect(() => {
     if (loading || algumModalAberto) return
     if (pedido?.status !== 'conferindo') return
@@ -940,6 +941,7 @@ export default function ConferenciaDetalhe() {
             onAtivar={setAtivoIdManual}
             onRemoverItem={aoRemoverItem}
             onRemoverVolume={aoRemoverVolume}
+            onMover={() => setMoverAberto(true)}
           />
         ) : null}
 
@@ -1027,6 +1029,20 @@ export default function ConferenciaDetalhe() {
       </View>
 
       {/* Modais */}
+      {moverAberto && pedido.status === 'conferindo' ? (
+        <ModalMover
+          pedidoId={pedidoId}
+          itens={pedido.itens}
+          volumes={volumes}
+          onCancelar={() => setMoverAberto(false)}
+          onMovido={async (destinoId, movidos) => {
+            setMoverAberto(false)
+            setAtivoIdManual(destinoId)
+            toast.ok(`${movidos} lançamento(s) movido(s)`, { detalhe: 'O volume de destino ficou ativo.' })
+            await carregar(true)
+          }}
+        />
+      ) : null}
       {modalNovoVolume ? (
         <ModalNovoVolume
           volumes={volumes}
@@ -1376,7 +1392,7 @@ function CabecalhoSimples({
 
 function ListaVolumes({
   volumes, itens, ativoId, permiteEdicao,
-  onAtivar, onRemoverItem, onRemoverVolume,
+  onAtivar, onRemoverItem, onRemoverVolume, onMover,
 }: {
   volumes: Volume[]
   itens: ItemPedido[]
@@ -1385,15 +1401,27 @@ function ListaVolumes({
   onAtivar: (volumeId: number) => void
   onRemoverItem: (volumeId: number, volumeItemId: number) => void
   onRemoverVolume: (volumeId: number) => void
+  onMover: () => void
 }) {
   const [expandido, setExpandido] = useState<number | null>(ativoId)
   const itemMap = new Map(itens.map((i) => [i.id, i]))
+  const temMovivel = volumes.some((v) => !v.op && v.itens.length > 0)
 
   return (
     <View className="bg-surface-elev/30 border-b border-surface-border">
-      <Text className="px-4 pt-3 pb-1 text-xs text-ink-subtle uppercase tracking-wide">
-        Volumes ({volumes.length})
-      </Text>
+      <View className="px-4 pt-2 pb-1 flex-row items-center justify-between">
+        <Text className="text-xs text-ink-subtle uppercase tracking-wide">
+          Volumes ({volumes.length})
+        </Text>
+        {permiteEdicao && temMovivel ? (
+          <Pressable
+            onPress={onMover}
+            className="px-3 h-10 rounded-lg border border-surface-border bg-surface-card items-center justify-center active:bg-surface-elev"
+          >
+            <Text className="text-xs font-semibold text-ink">⇄ Mover itens</Text>
+          </Pressable>
+        ) : null}
+      </View>
       <View className="px-2 pb-2 gap-1.5">
         {volumes.map((v) => {
           const aberto = expandido === v.id
@@ -1483,6 +1511,196 @@ function ListaVolumes({
         })}
       </View>
     </View>
+  )
+}
+
+// -----------------------------------------------------------------------------
+// Modal — Mover lançamentos entre volumes (2026-11-20)
+// Estão esquecendo de abrir a caixa nova: marca os lançamentos (inteiros) e manda para outro
+// volume ou para um novo, que nasce aberto e vira o ativo. OP da fábrica não entra.
+// -----------------------------------------------------------------------------
+
+function ModalMover({
+  pedidoId, itens, volumes, onCancelar, onMovido,
+}: {
+  pedidoId: number
+  itens: ItemPedido[]
+  volumes: Volume[]
+  onCancelar: () => void
+  onMovido: (destinoId: number, movidos: number) => void
+}) {
+  const insets = useSafeAreaInsets()
+  const [marcados, setMarcados] = useState<Set<number>>(new Set())
+  const [destino, setDestino] = useState<number | 'novo'>('novo')
+  const [tipoNovo, setTipoNovo] = useState<'caixa' | 'fardo' | 'outro'>('caixa')
+  const [identificador, setIdentificador] = useState(() => proximoIdentificador(volumes, 'caixa'))
+  const [editado, setEditado] = useState(false)
+  const [enviando, setEnviando] = useState(false)
+  const [erro, setErro] = useState('')
+  const itemMap = new Map(itens.map((i) => [i.id, i]))
+  const moviveis = volumes.filter((v) => !v.op)
+  const origens = new Set(volumes.filter((v) => v.itens.some((vi) => marcados.has(vi.id))).map((v) => v.id))
+  const destinoInvalido = destino !== 'novo' && origens.size === 1 && origens.has(destino)
+
+  function alternar(id: number) {
+    setMarcados((prev) => {
+      const n = new Set(prev)
+      if (n.has(id)) n.delete(id)
+      else n.add(id)
+      return n
+    })
+  }
+
+  function escolherTipo(t: 'caixa' | 'fardo' | 'outro') {
+    setTipoNovo(t)
+    if (!editado) setIdentificador(proximoIdentificador(volumes, t))
+  }
+
+  async function mover() {
+    if (marcados.size === 0 || destinoInvalido || enviando) return
+    setEnviando(true)
+    setErro('')
+    try {
+      const r = await conferenciaApi.moverLancamentos(pedidoId, {
+        volume_item_ids: Array.from(marcados),
+        destino: destino === 'novo'
+          ? { novo: { tipo: tipoNovo, identificador: identificador.trim() } }
+          : { volume_id: destino },
+      })
+      onMovido(r.destino_id, r.movidos)
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { erro?: string } } })?.response?.data?.erro
+      setErro(msg ?? 'Não foi possível mover.')
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  return (
+    <Modal visible animationType="slide" transparent onRequestClose={onCancelar}>
+      <View className="flex-1 bg-black/60 justify-end">
+        <View
+          className="bg-surface-card border-t border-surface-border rounded-t-2xl pt-5"
+          style={{ maxHeight: '92%', paddingBottom: Math.max(insets.bottom, 16) + 8 }}
+        >
+          <View className="px-5 mb-2 flex-row items-start justify-between">
+            <View className="flex-1 pr-2">
+              <Text className="font-bold text-lg text-ink">Mover itens</Text>
+              <Text className="text-xs text-ink-muted">Marque o que vai para outro volume. O lançamento vai inteiro.</Text>
+            </View>
+            <Pressable onPress={onCancelar} hitSlop={10} className="px-2">
+              <Text className="text-ink-subtle text-2xl">×</Text>
+            </Pressable>
+          </View>
+
+          <ScrollView className="px-4" contentContainerStyle={{ gap: 8, paddingBottom: 8 }}>
+            {volumes.map((v) => (
+              <View key={v.id} className={`rounded-lg border border-surface-border overflow-hidden ${v.op ? 'opacity-50' : ''}`}>
+                <View className="px-3 py-2 bg-surface-elev/60 flex-row items-center">
+                  <Text className="flex-1 text-sm font-semibold text-ink" numberOfLines={1}>
+                    {v.identificador || `${tipoLabel(v.tipo)} #${v.id}`}
+                  </Text>
+                  {v.op ? <Text className="text-[10px] uppercase text-ink-muted">fábrica · não move</Text> : null}
+                </View>
+                {v.itens.length === 0 ? (
+                  <Text className="px-3 py-2 text-xs text-ink-subtle italic">Vazio</Text>
+                ) : v.itens.map((vi) => {
+                  const item = itemMap.get(vi.pedido_item_id)
+                  const marcado = marcados.has(vi.id)
+                  return (
+                    <Pressable
+                      key={vi.id}
+                      disabled={!!v.op}
+                      onPress={() => alternar(vi.id)}
+                      className={`flex-row items-center gap-3 px-3 min-h-[48px] border-t border-surface-border/60 ${
+                        marcado ? 'bg-emerald-500/15' : 'active:bg-surface-elev'
+                      }`}
+                    >
+                      <View className={`w-6 h-6 rounded-md border-2 items-center justify-center ${
+                        marcado ? 'bg-emerald-500 border-emerald-500' : 'border-zinc-500'
+                      }`}>
+                        {marcado ? <Text className="text-zinc-950 text-sm font-bold">✓</Text> : null}
+                      </View>
+                      <Text className="flex-1 text-sm font-mono text-ink" numberOfLines={1}>
+                        {item ? item.sku : `item #${vi.pedido_item_id}`}
+                      </Text>
+                      <Text className="text-sm font-bold text-ink">{vi.qtd}×</Text>
+                    </Pressable>
+                  )
+                })}
+              </View>
+            ))}
+          </ScrollView>
+
+          <View className="px-4 pt-3 border-t border-surface-border gap-2">
+            <Text className="text-xs text-ink-muted">Mover para</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+              <Pressable
+                onPress={() => setDestino('novo')}
+                className={`px-3 h-11 rounded-lg border-2 items-center justify-center ${
+                  destino === 'novo' ? 'border-blue-500 bg-blue-500/15' : 'border-surface-border'
+                }`}
+              >
+                <Text className={`text-sm font-semibold ${destino === 'novo' ? 'text-blue-300' : 'text-ink-muted'}`}>+ Novo volume</Text>
+              </Pressable>
+              {moviveis.map((v) => (
+                <Pressable
+                  key={v.id}
+                  onPress={() => setDestino(v.id)}
+                  className={`px-3 h-11 rounded-lg border-2 items-center justify-center ${
+                    destino === v.id ? 'border-blue-500 bg-blue-500/15' : 'border-surface-border'
+                  }`}
+                >
+                  <Text className={`text-sm font-semibold ${destino === v.id ? 'text-blue-300' : 'text-ink-muted'}`}>
+                    {v.identificador || `${tipoLabel(v.tipo)} #${v.id}`}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+            {destino === 'novo' ? (
+              <View className="flex-row gap-2">
+                {(['caixa', 'fardo', 'outro'] as const).map((t) => (
+                  <Pressable
+                    key={t}
+                    onPress={() => escolherTipo(t)}
+                    className={`px-3 h-11 rounded-lg border-2 items-center justify-center ${
+                      tipoNovo === t ? 'border-blue-500 bg-blue-500/15' : 'border-surface-border'
+                    }`}
+                  >
+                    <Text className={`text-sm capitalize ${tipoNovo === t ? 'text-blue-300' : 'text-ink-muted'}`}>{t}</Text>
+                  </Pressable>
+                ))}
+                <TextInput
+                  value={identificador}
+                  onChangeText={(v) => { setIdentificador(v); setEditado(true) }}
+                  placeholder="Identificador"
+                  placeholderTextColor="#52525b"
+                  className="flex-1 h-11 px-3 bg-surface-bg border-2 border-surface-border text-ink rounded-lg text-sm"
+                />
+              </View>
+            ) : null}
+            {destinoInvalido ? <Text className="text-xs text-amber-400">Os marcados já estão nesse volume.</Text> : null}
+            {erro ? <Text className="text-sm text-red-400">{erro}</Text> : null}
+            <View className="flex-row gap-3 mt-1">
+              <Pressable onPress={onCancelar} className="flex-1 h-12 bg-surface-elev rounded-xl items-center justify-center">
+                <Text className="text-ink font-medium">Cancelar</Text>
+              </Pressable>
+              <Pressable
+                onPress={mover}
+                disabled={enviando || marcados.size === 0 || destinoInvalido}
+                className={`flex-1 h-12 rounded-xl items-center justify-center ${
+                  enviando || marcados.size === 0 || destinoInvalido ? 'bg-emerald-600/40' : 'bg-emerald-600 active:bg-emerald-500'
+                }`}
+              >
+                <Text className="text-white font-bold">
+                  {enviando ? 'Movendo…' : `Mover${marcados.size > 0 ? ` ${marcados.size}` : ''}`}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </View>
+    </Modal>
   )
 }
 

@@ -21,7 +21,9 @@ type Props = {
 }
 
 /** Tempo mínimo entre duas leituras do MESMO código no modo contínuo */
-export const INTERVALO_REPETIR_MS = 3000
+// 3 s → 1 s em 2026-11-20 (pedido do usuário): o conferente esperava demais entre peças iguais.
+// Vale também para o leitor contínuo do DataWedge (same_barcode_timeout).
+export const INTERVALO_REPETIR_MS = 1000
 
 const FORMATOS_SUPORTADOS: BarcodeType[] = [
   'ean13',

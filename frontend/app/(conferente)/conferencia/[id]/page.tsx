@@ -6,6 +6,7 @@ import { conferenciaApi, separadoresApi, SeparadorLiberado, type VereditoEtiquet
 import { CameraScanner } from '@/components/CameraScanner'
 import { useDialog } from '@/components/Dialog'
 import { useToast } from '@/components/Toast'
+import { MoverLancamentos } from '@/components/pedidos/MoverLancamentos'
 
 // -----------------------------------------------------------------------------
 // Tipos
@@ -171,7 +172,8 @@ export default function ConferenciaPedidoPage() {
   // leitura, e o mesmo código só vale de novo depois da resposta + INTERVALO_REPETIR_MS.
   const emVoo = useRef<Set<string>>(new Set())
   const bloqueioCodigo = useRef<Map<string, number>>(new Map())
-  const INTERVALO_REPETIR_MS = 3000
+  // 3 s → 1 s em 2026-11-20 (pedido do usuário): o conferente esperava demais entre peças iguais
+  const INTERVALO_REPETIR_MS = 1000
   const recargaTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -234,6 +236,7 @@ export default function ConferenciaPedidoPage() {
 
   const volumes = pedido?.volumes ?? []
   const [ativoIdManual, setAtivoIdManual] = useState<number | null>(null)
+  const [moverAberto, setMoverAberto] = useState(false)
   // Volume ativo: o que o conferente escolheu manualmente (se ainda válido),
   // senão fallback pro último volume aberto.
   const volumeAtivo =
@@ -635,11 +638,11 @@ export default function ConferenciaPedidoPage() {
   // Re-foca o scanner principal sempre que sair de modal/iniciar
   useEffect(() => {
     if (loading) return
-    const algumModal = itemSelecionado || modalNovoVolume || modalNaoConforme || modalSeparadoPor || modalConcluir
+    const algumModal = itemSelecionado || modalNovoVolume || modalNaoConforme || modalSeparadoPor || modalConcluir || moverAberto
     if (!algumModal && pedido?.status === 'conferindo') {
       setTimeout(() => scanRef.current?.focus({ preventScroll: true }), 100)
     }
-  }, [loading, itemSelecionado, modalNovoVolume, modalNaoConforme, pedido?.status])
+  }, [loading, itemSelecionado, modalNovoVolume, modalNaoConforme, moverAberto, pedido?.status])
 
   // -------------------------------------------------------------------------
   // Render
@@ -781,6 +784,26 @@ export default function ConferenciaPedidoPage() {
           onAtivar={setAtivoIdManual}
           onRemoverItem={aoRemoverItem}
           onRemoverVolume={aoRemoverVolume}
+          onMover={() => setMoverAberto(true)}
+        />
+      )}
+
+      {/* Mover lançamentos entre volumes durante a conferência (2026-11-20): esqueceu de abrir
+          a caixa nova → marca o que vai para ela, sem apagar e bipar de novo */}
+      {moverAberto && pedido.status === 'conferindo' && (
+        <MoverLancamentos
+          pedidoId={pedidoId}
+          numero={pedido.numero_externo}
+          itens={pedido.itens}
+          volumes={volumes}
+          mover={conferenciaApi.moverLancamentos}
+          sugerirIdentificador={(t) => proximoIdentificador(volumes, t)}
+          onFechar={() => setMoverAberto(false)}
+          onMovido={async (r) => {
+            setMoverAberto(false)
+            setAtivoIdManual(r.destino_id)
+            await carregar(true)
+          }}
         />
       )}
 
@@ -811,7 +834,7 @@ export default function ConferenciaPedidoPage() {
               onChange={(e) => setScanValue(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleScan() }}
               onBlur={() => setTimeout(() => {
-                const algumModal = itemSelecionado || modalNovoVolume || modalNaoConforme || modalSeparadoPor || modalConcluir
+                const algumModal = itemSelecionado || modalNovoVolume || modalNaoConforme || modalSeparadoPor || modalConcluir || moverAberto
                 if (!algumModal) scanRef.current?.focus({ preventScroll: true })
               }, 80)}
               className={`flex-1 min-w-0 outline-none bg-transparent text-base font-mono tracking-wider ${
@@ -1069,7 +1092,7 @@ function Header({ pedido, percent, segundos, onBack }: {
 
 function ListaVolumes({
   volumes, itens, ativoId, permiteEdicao,
-  onAtivar, onRemoverItem, onRemoverVolume,
+  onAtivar, onRemoverItem, onRemoverVolume, onMover,
 }: {
   volumes: Volume[]
   itens: ItemPedido[]
@@ -1078,15 +1101,27 @@ function ListaVolumes({
   onAtivar: (volumeId: number) => void
   onRemoverItem: (volumeId: number, volumeItemId: number) => void
   onRemoverVolume: (volumeId: number) => void
+  onMover: () => void
 }) {
   const [expandido, setExpandido] = useState<number | null>(ativoId)
   const itemMap = new Map(itens.map((i) => [i.id, i]))
+  const temMovivel = volumes.some((v) => !v.op && v.itens.length > 0)
 
   return (
     <div className="bg-surface-elev/50 border-b border-surface-border">
-      <p className="px-4 pt-3 pb-1 text-xs text-ink-subtle uppercase tracking-wide">
-        Volumes ({volumes.length})
-      </p>
+      <div className="px-4 pt-2 pb-1 flex items-center justify-between gap-2">
+        <p className="text-xs text-ink-subtle uppercase tracking-wide">
+          Volumes ({volumes.length})
+        </p>
+        {permiteEdicao && temMovivel && (
+          <button
+            onClick={onMover}
+            className="px-3 h-9 rounded-md border border-surface-border bg-surface-card hover:bg-surface-elev text-ink text-xs font-semibold"
+          >
+            ⇄ Mover itens
+          </button>
+        )}
+      </div>
       <div className="px-2 pb-2 space-y-1.5">
         {volumes.map((v) => {
           const aberto = expandido === v.id

@@ -65,6 +65,11 @@ export const conferenciaPedido: AjudaTela = {
         'Ao lado de cada lançamento do volume. Remove o lançamento e a quantidade volta para a fila. Um volume vazio tem o botão Apagar volume.',
     },
     {
+      nome: '⇄ Mover itens',
+      descricao:
+        'Ao lado de "Volumes". Para quando bipou na caixa errada ou esqueceu de abrir a caixa nova. Marque os lançamentos, escolha o volume de destino ou + Novo volume e toque em Mover. O lançamento vai inteiro, sem bipar de novo. O destino fica como volume ativo. Volume que ficar vazio some. Caixa ou fardo de OP não entra.',
+    },
+    {
       nome: 'Qtd',
       descricao:
         'Na barra de bipagem. Toque antes de bipar e a próxima leitura abre a tela de quantidade. A barra fica amarela enquanto estiver armado. Depois dessa leitura volta sozinho para 1 em 1. Cada toque a mais troca para um multiplicador: ×2, ×4, ×6, ×12 e, no toque seguinte, desliga. Com multiplicador o botão e a barra ficam azuis e cada leitura lança 2, 4, 6 ou 12 unidades direto, sem abrir a tela de quantidade. O multiplicador fica ligado até você tocar de novo; desliga sozinho ao trocar de volume ou sair da tela.',
@@ -77,12 +82,12 @@ export const conferenciaPedido: AjudaTela = {
     {
       nome: 'Ícone da câmera',
       descricao:
-        'Na barra de bipagem. Um toque liga a câmera, que fica lendo um código atrás do outro (cada leitura soma 1, OP lança o volume inteiro). Toque em × Desligar para fechar. O mesmo código só vale de novo depois de 3 segundos, para não lançar duas vezes a peça que ficou na frente da lente; outro código vale na hora. A câmera fecha sozinha quando a leitura abre a tela de quantidade (Qtd armado) ou quando falta criar um volume.',
+        'Na barra de bipagem. Um toque liga a câmera, que fica lendo um código atrás do outro (cada leitura soma 1, OP lança o volume inteiro). Toque em × Desligar para fechar. O mesmo código só vale de novo depois de 1 segundo, para não lançar duas vezes a peça que ficou na frente da lente; outro código vale na hora. A câmera fecha sozinha quando a leitura abre a tela de quantidade (Qtd armado) ou quando falta criar um volume.',
     },
     {
       nome: 'Leitor (só no coletor Zebra)',
       descricao:
-        'Na barra de bipagem, ao lado da câmera. Aparece só no coletor com leitor embutido, não no celular. Um toque deixa o leitor da frente ligado direto, sem segurar o gatilho: bipe um código atrás do outro (cada leitura soma 1, OP lança o volume inteiro). O mesmo código só vale de novo depois de 3 segundos; outro código vale na hora. Toque de novo em Leitor para desligar. Desliga sozinho quando a leitura abre a tela de quantidade (Qtd armado), quando falta criar um volume, ao sair da tela ou ao trocar de app. Se apertar o gatilho com o leitor ligado, o feixe apaga: toque em Leitor duas vezes para ligar de novo.',
+        'Na barra de bipagem, ao lado da câmera. Aparece só no coletor com leitor embutido, não no celular. Um toque deixa o leitor da frente ligado direto, sem segurar o gatilho: bipe um código atrás do outro (cada leitura soma 1, OP lança o volume inteiro). O mesmo código só vale de novo depois de 1 segundo; outro código vale na hora. Toque de novo em Leitor para desligar. Desliga sozinho quando a leitura abre a tela de quantidade (Qtd armado), quando falta criar um volume, ao sair da tela ou ao trocar de app. Se apertar o gatilho com o leitor ligado, o feixe apaga: toque em Leitor duas vezes para ligar de novo.',
     },
     {
       nome: 'copiar',
@@ -103,6 +108,10 @@ export const conferenciaPedido: AjudaTela = {
   ],
   situacoes: [
     {
+      quando: 'Esqueci de abrir a caixa nova e bipei tudo na mesma.',
+      oQueFazer: 'Toque em ⇄ Mover itens, marque o que está na caixa nova, escolha + Novo volume e toque em Mover. Continue bipando: a caixa nova já fica ativa.',
+    },
+    {
       quando: 'Aparece "Passa do pedido — nada foi lançado" com o multiplicador ligado.',
       oQueFazer: 'Falta menos do que o multiplicador lança. Toque em Qtd até desligar e bipe de 1 em 1, ou use Qtd (um toque) para digitar a quantidade.',
     },
@@ -112,7 +121,7 @@ export const conferenciaPedido: AjudaTela = {
     },
     {
       quando: 'Aviso escuro "Lido SKU · registrando…".',
-      oQueFazer: 'A barra foi lida. Pode tirar a peça da frente do leitor: o aviso vira o verde "+1" quando o servidor confirmar. Enquanto não confirma, ler a mesma barra de novo não faz nada. Para lançar outra unidade do mesmo produto, espere o verde e uns 3 segundos.',
+      oQueFazer: 'A barra foi lida. Pode tirar a peça da frente do leitor: o aviso vira o verde "+1" quando o servidor confirmar. Enquanto não confirma, ler a mesma barra de novo não faz nada. Para lançar outra unidade do mesmo produto, espere o verde e 1 segundo.',
     },
     {
       quando: 'Aviso verde "+1" com o SKU e "N de M".',

@@ -1571,13 +1571,9 @@ def mover_lancamentos(request, pk):
     if request.user.perfil not in ('supervisor_patio', 'admin'):
         return Response({'erro': 'restrito ao Supervisor de Pátio'}, status=http_status.HTTP_403_FORBIDDEN)
 
-    ids = request.data.get('volume_item_ids') or []
-    destino = request.data.get('destino') or {}
-    if not isinstance(ids, list) or not ids or not all(isinstance(i, int) for i in ids):
-        return Response({'erro': 'volume_item_ids obrigatório (lista de ids)'}, status=http_status.HTTP_400_BAD_REQUEST)
-    if not isinstance(destino, dict) or not (destino.get('volume_id') or destino.get('novo')):
-        return Response({'erro': 'destino obrigatório: {volume_id} ou {novo: {tipo, identificador}}'},
-                        status=http_status.HTTP_400_BAD_REQUEST)
+    ids, destino, err = _ler_corpo_mover(request)
+    if err:
+        return err
 
     with transaction.atomic():
         pedido = get_object_or_404(Pedido.objects.select_for_update(of=('self',)), pk=pk)
@@ -1586,61 +1582,9 @@ def mover_lancamentos(request, pk):
                 {'erro': f'pedido em status "{pedido.get_status_display()}" — só Conferido ou Aguardando fechamento'},
                 status=http_status.HTTP_400_BAD_REQUEST,
             )
-
-        lancamentos = list(
-            VolumeItem.objects.select_related('volume', 'pedido_item')
-            .filter(pk__in=ids, volume__pedido=pedido)
-        )
-        if len(lancamentos) != len(set(ids)):
-            return Response({'erro': 'algum lançamento não pertence a este documento'}, status=http_status.HTTP_400_BAD_REQUEST)
-        if any(vi.volume.op for vi in lancamentos):
-            return Response({'erro': 'lançamento de caixa/fardo da fábrica (OP) não pode ser movido'},
-                            status=http_status.HTTP_400_BAD_REQUEST)
-
-        criado_novo = False
-        if destino.get('volume_id'):
-            alvo = pedido.volumes.filter(pk=destino['volume_id']).first()
-            if not alvo:
-                return Response({'erro': 'volume de destino não pertence ao documento'}, status=http_status.HTTP_400_BAD_REQUEST)
-            if alvo.op:
-                return Response({'erro': 'não dá para mover para caixa/fardo da fábrica (OP)'}, status=http_status.HTTP_400_BAD_REQUEST)
-        else:
-            novo = destino.get('novo') or {}
-            tipo = str(novo.get('tipo') or Volume.Tipo.CAIXA)
-            if tipo not in Volume.Tipo.values:
-                return Response({'erro': f'tipo de volume inválido: {tipo}'}, status=http_status.HTTP_400_BAD_REQUEST)
-            alvo = Volume.objects.create(
-                pedido=pedido, tipo=tipo, identificador=str(novo.get('identificador') or '').strip()[:100],
-                criado_por=request.user, fechado_em=timezone.now(),
-            )
-            criado_novo = True
-
-        if all(vi.volume_id == alvo.id for vi in lancamentos):
-            return Response({'erro': 'os lançamentos já estão nesse volume'}, status=http_status.HTTP_400_BAD_REQUEST)
-
-        origens = {}
-        movidos = []
-        for vi in lancamentos:
-            if vi.volume_id == alvo.id:
-                continue
-            origens[vi.volume_id] = vi.volume
-            movidos.append({'volume_item_id': vi.id, 'sku': vi.pedido_item.sku, 'qtd': vi.qtd,
-                            'de': vi.volume_id, 'para': alvo.id})
-            vi.volume = alvo
-            vi.save(update_fields=['volume'])
-
-        apagados = []
-        for v in origens.values():
-            if not v.itens.exists():
-                apagados.append({'volume_id': v.id, 'tipo': v.tipo, 'identificador': v.identificador})
-                v.delete()
-
-        PedidoLog.objects.create(
-            pedido=pedido, usuario=request.user, acao='volumes_reorganizados',
-            payload={'movidos': movidos, 'destino': {'volume_id': alvo.id, 'tipo': alvo.tipo,
-                                                     'identificador': alvo.identificador, 'novo': criado_novo},
-                     'volumes_apagados': apagados},
-        )
+        err, alvo, movidos, apagados = _executar_mover(pedido, request.user, ids, destino, fechar_novo=True)
+        if err:
+            return err
 
     from apps.impressao.services import motivo_bloqueio
     from apps.pedidos.serializers import VolumeSerializer
@@ -1656,6 +1600,117 @@ def mover_lancamentos(request, pk):
         'etiqueta_bloqueio': motivo_bloqueio(pedido),
         'etiqueta_impressa': pedido.impressoes_etiqueta.filter(status='ok').exists(),
     })
+
+
+# Mover lançamentos DURANTE a conferência, pelo próprio conferente (2026-11-20): estão
+# esquecendo de abrir a caixa nova e bipando tudo na mesma; em vez de apagar e bipar de novo,
+# marca os lançamentos e manda para outro volume (ou um novo, que nasce aberto e vira o ativo
+# na tela). Mesma regra do mover do Pátio: lançamento inteiro, OP não entra, origem vazia some.
+@api_view(['POST'])
+def mover_lancamentos_conferencia(request, pk):
+    err = _exige_conferente(request)
+    if err:
+        return err
+    ids, destino, err = _ler_corpo_mover(request)
+    if err:
+        return err
+
+    with transaction.atomic():
+        pedido = get_object_or_404(Pedido.objects.select_for_update(of=('self',)), pk=pk)
+        err = _guard_pedido(request, pedido)
+        if err:
+            return err
+        if pedido.status != Pedido.Status.CONFERINDO:
+            return Response(
+                {'erro': f'pedido em status "{pedido.status}" não permite editar volumes'},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+        err, alvo, movidos, apagados = _executar_mover(pedido, request.user, ids, destino, fechar_novo=False)
+        if err:
+            return err
+
+    logger.info(f'{pedido}: conferente moveu {len(movidos)} lançamento(s) para volume {alvo.id}',
+                extra={'pedido': pedido.id})
+    return Response({
+        'ok': True,
+        'movidos': len(movidos),
+        'destino_id': alvo.id,
+        'volumes_apagados': [a['volume_id'] for a in apagados],
+    })
+
+
+def _ler_corpo_mover(request):
+    ids = request.data.get('volume_item_ids') or []
+    destino = request.data.get('destino') or {}
+    if not isinstance(ids, list) or not ids or not all(isinstance(i, int) for i in ids):
+        return None, None, Response({'erro': 'volume_item_ids obrigatório (lista de ids)'},
+                                    status=http_status.HTTP_400_BAD_REQUEST)
+    if not isinstance(destino, dict) or not (destino.get('volume_id') or destino.get('novo')):
+        return None, None, Response({'erro': 'destino obrigatório: {volume_id} ou {novo: {tipo, identificador}}'},
+                                    status=http_status.HTTP_400_BAD_REQUEST)
+    return ids, destino, None
+
+
+def _executar_mover(pedido, usuario, ids, destino, *, fechar_novo):
+    """Dentro de transaction.atomic com o pedido travado. Devolve (erro, alvo, movidos, apagados).
+    `fechar_novo`: volume novo nasce fechado (depois da conferência) ou aberto (durante)."""
+    def falha(msg):
+        return Response({'erro': msg}, status=http_status.HTTP_400_BAD_REQUEST), None, [], []
+
+    lancamentos = list(
+        VolumeItem.objects.select_related('volume', 'pedido_item')
+        .filter(pk__in=ids, volume__pedido=pedido)
+    )
+    if len(lancamentos) != len(set(ids)):
+        return falha('algum lançamento não pertence a este documento')
+    if any(vi.volume.op for vi in lancamentos):
+        return falha('lançamento de caixa/fardo da fábrica (OP) não pode ser movido')
+
+    criado_novo = False
+    if destino.get('volume_id'):
+        alvo = pedido.volumes.filter(pk=destino['volume_id']).first()
+        if not alvo:
+            return falha('volume de destino não pertence ao documento')
+        if alvo.op:
+            return falha('não dá para mover para caixa/fardo da fábrica (OP)')
+    else:
+        novo = destino.get('novo') or {}
+        tipo = str(novo.get('tipo') or Volume.Tipo.CAIXA)
+        if tipo not in Volume.Tipo.values:
+            return falha(f'tipo de volume inválido: {tipo}')
+        alvo = Volume.objects.create(
+            pedido=pedido, tipo=tipo, identificador=str(novo.get('identificador') or '').strip()[:100],
+            criado_por=usuario, fechado_em=timezone.now() if fechar_novo else None,
+        )
+        criado_novo = True
+
+    if all(vi.volume_id == alvo.id for vi in lancamentos):
+        return falha('os lançamentos já estão nesse volume')
+
+    origens = {}
+    movidos = []
+    for vi in lancamentos:
+        if vi.volume_id == alvo.id:
+            continue
+        origens[vi.volume_id] = vi.volume
+        movidos.append({'volume_item_id': vi.id, 'sku': vi.pedido_item.sku, 'qtd': vi.qtd,
+                        'de': vi.volume_id, 'para': alvo.id})
+        vi.volume = alvo
+        vi.save(update_fields=['volume'])
+
+    apagados = []
+    for v in origens.values():
+        if not v.itens.exists():
+            apagados.append({'volume_id': v.id, 'tipo': v.tipo, 'identificador': v.identificador})
+            v.delete()
+
+    PedidoLog.objects.create(
+        pedido=pedido, usuario=usuario, acao='volumes_reorganizados',
+        payload={'movidos': movidos, 'destino': {'volume_id': alvo.id, 'tipo': alvo.tipo,
+                                                 'identificador': alvo.identificador, 'novo': criado_novo},
+                 'volumes_apagados': apagados, 'durante_conferencia': not fechar_novo},
+    )
+    return None, alvo, movidos, apagados
 
 
 # ---------------------------------------------------------------------------

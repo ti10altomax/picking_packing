@@ -329,8 +329,8 @@ export default function ConferidosPage() {
                                 onFechar={() => setMovendo(null)}
                                 onMovido={(r) => {
                                   setMovendo(null)
-                                  setItensCache((prev) => ({ ...prev, [p.id]: { itens: prev[p.id]?.itens ?? [], volumes: r.volumes } }))
-                                  atualizarLinha(p.id, { etiqueta_bloqueio: r.etiqueta_bloqueio })
+                                  setItensCache((prev) => ({ ...prev, [p.id]: { itens: prev[p.id]?.itens ?? [], volumes: r.volumes ?? [] } }))
+                                  atualizarLinha(p.id, { etiqueta_bloqueio: r.etiqueta_bloqueio ?? null })
                                 }}
                               />
                             )}

@@ -105,6 +105,14 @@ export const conferenciaApi = {
   // fardo fechado da fábrica: bipou a OP do Sisplan (só dígitos, < 13), lança o fardo inteiro
   fardo: (pedidoId: number, op: string) =>
     api.post(`/api/conferencia/pedidos/${pedidoId}/fardo/`, { op }).then((r) => r.data),
+  // Conferente move lançamentos inteiros entre volumes durante a conferência (2026-11-20)
+  moverLancamentos: (pedidoId: number, body: {
+    volume_item_ids: number[]
+    destino: { volume_id: number } | { novo: { tipo: 'caixa' | 'fardo' | 'outro'; identificador?: string } }
+  }) =>
+    api.post(`/api/conferencia/pedidos/${pedidoId}/mover_lancamentos/`, body).then((r) => r.data as {
+      ok: boolean; movidos: number; destino_id: number; volumes_apagados: number[]
+    }),
 }
 
 export type Divergencia = {

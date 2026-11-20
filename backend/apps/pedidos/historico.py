@@ -28,6 +28,8 @@ def _reorganizados(p):
         txt += f' e mais {len(m) - 6}'
     if p.get('volumes_apagados'):
         txt += f" · {len(p['volumes_apagados'])} volume(s) vazio(s) apagado(s)"
+    if p.get('durante_conferencia'):
+        txt += ' · pelo conferente, durante a conferência'
     return txt
 
 

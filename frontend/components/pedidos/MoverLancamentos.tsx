@@ -14,10 +14,16 @@ import { tituloVolume, type ItemDoc, type VolumeDoc } from '@/components/pedidos
  * some. A etiqueta já impressa fica velha: a tela avisa para reimprimir.
  */
 export type ResultadoMover = {
-  volumes: VolumeDoc[]
-  etiqueta_bloqueio: BloqueioEtiqueta | null
-  etiqueta_impressa: boolean
+  volumes?: VolumeDoc[]
+  etiqueta_bloqueio?: BloqueioEtiqueta | null
+  etiqueta_impressa?: boolean
   movidos: number
+  destino_id: number
+}
+
+type CorpoMover = {
+  volume_item_ids: number[]
+  destino: { volume_id: number } | { novo: { tipo: 'caixa' | 'fardo' | 'outro'; identificador?: string } }
 }
 
 const TIPOS: { valor: 'caixa' | 'fardo' | 'outro'; label: string }[] = [
@@ -27,7 +33,7 @@ const TIPOS: { valor: 'caixa' | 'fardo' | 'outro'; label: string }[] = [
 ]
 
 export function MoverLancamentos({
-  pedidoId, numero, itens, volumes, onFechar, onMovido,
+  pedidoId, numero, itens, volumes, onFechar, onMovido, mover: moverFn, sugerirIdentificador,
 }: {
   pedidoId: number
   numero: string
@@ -35,12 +41,16 @@ export function MoverLancamentos({
   volumes: VolumeDoc[]
   onFechar: () => void
   onMovido: (r: ResultadoMover) => void
+  /** Endpoint usado; padrão = mover do Pátio em Conferidos/Fechamentos. A conferência passa o dela. */
+  mover?: (pedidoId: number, body: CorpoMover) => Promise<ResultadoMover>
+  /** Nome sugerido para o volume novo ("Caixa 3"), como no + Volume da conferência */
+  sugerirIdentificador?: (tipo: 'caixa' | 'fardo' | 'outro') => string
 }) {
   const toast = useToast()
   const [marcados, setMarcados] = useState<Set<number>>(new Set())
   const [destino, setDestino] = useState<number | 'novo'>('novo')
   const [tipoNovo, setTipoNovo] = useState<'caixa' | 'fardo' | 'outro'>('caixa')
-  const [identificador, setIdentificador] = useState('')
+  const [identificador, setIdentificador] = useState(() => sugerirIdentificador?.('caixa') ?? '')
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState('')
 
@@ -76,7 +86,7 @@ export function MoverLancamentos({
     setEnviando(true)
     setErro('')
     try {
-      const r = await supervisorApi.moverLancamentos(pedidoId, {
+      const r = await (moverFn ?? supervisorApi.moverLancamentos)(pedidoId, {
         volume_item_ids: Array.from(marcados),
         destino: destino === 'novo'
           ? { novo: { tipo: tipoNovo, identificador: identificador.trim() } }
@@ -172,7 +182,15 @@ export function MoverLancamentos({
             </select>
             {destino === 'novo' && (
               <>
-                <select value={tipoNovo} onChange={(e) => setTipoNovo(e.target.value as 'caixa' | 'fardo' | 'outro')} className={INPUT}>
+                <select
+                  value={tipoNovo}
+                  onChange={(e) => {
+                    const t = e.target.value as 'caixa' | 'fardo' | 'outro'
+                    setTipoNovo(t)
+                    if (sugerirIdentificador) setIdentificador(sugerirIdentificador(t))
+                  }}
+                  className={INPUT}
+                >
                   {TIPOS.map((t) => <option key={t.valor} value={t.valor}>{t.label}</option>)}
                 </select>
                 <input value={identificador} onChange={(e) => setIdentificador(e.target.value)} maxLength={100} placeholder="Identificador (opcional)" className={`${INPUT} w-44`} />
