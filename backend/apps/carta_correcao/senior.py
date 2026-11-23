@@ -26,6 +26,7 @@ Se alguma consulta falhar, devolve `disponivel=False` + mensagem e o ERP continu
 validando tudo no Gravar — nada é gravado com dado errado.
 """
 import logging
+import re
 
 from django.conf import settings
 
@@ -173,8 +174,118 @@ def cartas_anteriores(codfil, codsnf, numnfv) -> dict:
     except Exception as e:
         logger.warning('carta_correcao: cartas anteriores indisponíveis: %s', e)
         return {'disponivel': False, 'cartas': [], 'erro': str(e).splitlines()[0][:300]}
-    cartas, ecos = _separar_ecos([_mapear_carta(r) for r in rows])
-    return {'disponivel': True, 'cartas': cartas, 'ecos_com_erro': ecos, 'erro': ''}
+    cartas = [_mapear_carta(r) for r in rows]
+    # A palavra final é do eDocs (2026-11-23): a E140CCE pode ficar 'Não enviada' com a carta
+    # já autorizada na SEFAZ (o retorno do SDE não é gravado no ERP desde 19/11/2026).
+    edocs = eventos_edocs(chave_nf(codfil, codsnf, numnfv))
+    cartas = _fundir_com_edocs(cartas, edocs['eventos'])
+    cartas, ecos = _separar_ecos(cartas)
+    return {'disponivel': True, 'cartas': cartas, 'ecos_com_erro': ecos, 'erro': '',
+            'edocs_disponivel': edocs['disponivel'], 'edocs_erro': edocs['erro']}
+
+
+# ---------------------------------------------------------------------------
+# eDocs (SDE) — o banco do serviço que fala com a SEFAZ (2026-11-23)
+# N130ENF = evento da NF-e (idevnt = 'ID' + tipo do evento + chave + nº sequencial; codsta =
+# cStat da SEFAZ, 135/136 = evento registrado; prtsef/datsef = protocolo e data da autorização);
+# N130CCE = texto da carta (dsccor) do evento.
+# ---------------------------------------------------------------------------
+
+CSTAT_EVENTO_REGISTRADO = (135, 136)
+_RE_SCHEMA = re.compile(r'^[A-Za-z][A-Za-z0-9_$#]{0,29}$')
+
+QUERY_CHAVE_NF = f"""
+    SELECT ide.chvdoe FROM E140IDE ide
+    WHERE ide.codemp = {SENIOR_CODEMP} AND ide.codfil = :1 AND ide.codsnf = :2 AND ide.numnfv = :3
+"""
+
+QUERY_EVENTOS_EDOCS = """
+    SELECT e.numevt, e.datevt, e.datsef, e.prtsef, e.codsta, c.dsccor
+    FROM {schema}.N130ENF e
+    LEFT JOIN {schema}.N130CCE c ON c.seqenf = e.seqenf
+    WHERE e.tipevt = 110110
+      AND e.idevnt LIKE :1
+    ORDER BY e.numevt, e.seqenf
+"""
+
+
+def chave_nf(codfil, codsnf, numnfv) -> str:
+    try:
+        rows = fetch(QUERY_CHAVE_NF, [codfil, codsnf, int(numnfv)])
+    except Exception as e:
+        logger.warning('carta_correcao: chave da NF indisponível: %s', e)
+        return ''
+    return str(rows[0].get('chvdoe') or '').strip() if rows else ''
+
+
+def eventos_edocs(chvdoe: str) -> dict:
+    """Cartas de correção da nota no eDocs: {'disponivel', 'eventos': [{sequencia, texto, cstat,
+    autorizada, protocolo, autorizada_em}], 'erro'}. Qualquer falha (esquema sem acesso, chave
+    desconhecida) → disponivel False e lista vazia; quem chama segue só com a E140CCE."""
+    schema = (getattr(settings, 'SENIOR_EDOCS_SCHEMA', '') or '').strip()
+    chvdoe = ''.join(ch for ch in str(chvdoe or '') if ch.isdigit())
+    if not schema or not _RE_SCHEMA.match(schema) or len(chvdoe) != 44:
+        return {'disponivel': False, 'eventos': [], 'erro': 'eDocs não configurado ou nota sem chave'}
+    try:
+        rows = fetch(QUERY_EVENTOS_EDOCS.format(schema=schema), [f'ID110110{chvdoe}%'])
+    except Exception as e:
+        logger.warning('carta_correcao: eDocs indisponível: %s', e)
+        return {'disponivel': False, 'eventos': [], 'erro': str(e).splitlines()[0][:300]}
+    eventos = []
+    for r in rows:
+        cstat = _int(r.get('codsta'))
+        prot = str(_int(r.get('prtsef')) or '').strip()
+        quando = r.get('datsef')
+        eventos.append({
+            'sequencia': _int(r.get('numevt')),
+            'texto': str(r.get('dsccor') or '').strip(),
+            'cstat': cstat,
+            'autorizada': cstat in CSTAT_EVENTO_REGISTRADO and bool(prot),
+            'protocolo': prot,
+            'autorizada_em': quando.strftime('%d/%m/%Y %H:%M') if hasattr(quando, 'strftime') else '',
+        })
+    return {'disponivel': True, 'eventos': eventos, 'erro': ''}
+
+
+def _norm(t) -> str:
+    return ' '.join((t or '').upper().split())
+
+
+def _fundir_com_edocs(cartas: list[dict], eventos: list[dict]) -> list[dict]:
+    """Aplica o que o eDocs sabe às linhas da E140CCE. Para cada evento AUTORIZADO no eDocs:
+    a linha do ERP com o mesmo texto vira Autorizada (protocolo e data do eDocs, `fonte` edocs);
+    sem linha no ERP (foi apagada lá — apagar não desfaz o evento na SEFAZ), entra uma linha só
+    do eDocs. O que o eDocs não conhece (carta só gravada, nunca transmitida) fica como está."""
+    cartas = [dict(c) for c in cartas]
+    usados = set()
+    for ev in eventos:
+        if not ev['autorizada']:
+            continue
+        # 1º a linha do ERP que já tem este protocolo (o texto dela pode ter sido editado lá —
+        # NF 152139); depois, pelo texto: a que não está em erro, senão qualquer uma
+        livres = [i for i in range(len(cartas)) if i not in usados]
+        alvo = next((i for i in livres if cartas[i]['protocolo'] == ev['protocolo']), None)
+        if alvo is None:
+            candidatas = [i for i in livres if _norm(cartas[i]['texto']) == _norm(ev['texto'])]
+            alvo = next((i for i in candidatas if cartas[i]['sitcce'] != SITCCE_ERRO), None)
+            if alvo is None and candidatas:
+                alvo = candidatas[0]
+        if alvo is None:
+            cartas.append({
+                'sequencia': ev['sequencia'], 'texto': ev['texto'], 'sitcce': 3, 'sitcce_label': SITCCE_LABELS[3],
+                'data': ev['autorizada_em'][:10], 'hora': ev['autorizada_em'][11:],
+                'protocolo': ev['protocolo'], 'autorizada_em': ev['autorizada_em'],
+                'fonte': 'edocs', 'so_no_edocs': True, 'sequencia_sefaz': ev['sequencia'],
+            })
+            usados.add(len(cartas) - 1)
+            continue
+        usados.add(alvo)
+        c = cartas[alvo]
+        if c['sitcce'] != 3 or not c['protocolo']:
+            c.update({'sitcce_erp': c['sitcce'], 'sitcce': 3, 'sitcce_label': SITCCE_LABELS[3],
+                      'protocolo': ev['protocolo'], 'autorizada_em': ev['autorizada_em'], 'fonte': 'edocs'})
+        c['sequencia_sefaz'] = ev['sequencia']
+    return cartas
 
 
 def _separar_ecos(cartas: list[dict]) -> tuple[list[dict], list[dict]]:

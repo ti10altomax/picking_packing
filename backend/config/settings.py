@@ -172,7 +172,7 @@ CELERY_BEAT_SCHEDULE = {
     },
     'verificar-cartas-pendentes': {
         'task': 'apps.carta_correcao.tasks.verificar_cartas_pendentes',
-        'schedule': 600.0,  # carta gravada/aguardando SDE → relê a E140CCE (autorizada? rejeitada?) (2026-11-19)
+        'schedule': 120.0,  # carta gravada/aguardando SDE → confere no eDocs se a SEFAZ autorizou (10 min até 2026-11-23)
     },
     # CONGELADO — escopo antigo (Senior+CLICK+VTEX). Códigos preservados em apps/senior/tasks.py
     # e apps/vtex/tasks.py. Reativar removendo o comentário se voltar ao fluxo de marketplace.
@@ -381,6 +381,9 @@ SENIOR_WS_PASSWORD = config('SENIOR_WS_PASSWORD', default='')
 # Carta de correção (ponto 6, 2026-10-22): mesmo host/usuário do embalagempfa.
 SENIOR_WSDL_CARTA_CORRECAO = config('SENIOR_WSDL_CARTA_CORRECAO', default='')
 SENIOR_WSDL_DOCUMENTO_FISCAL = config('SENIOR_WSDL_DOCUMENTO_FISCAL', default='')
+# Esquema Oracle do eDocs (SDE) — onde a carta de correção é conferida de verdade (2026-11-23):
+# evento, cStat e protocolo da SEFAZ. Só leitura. Vazio = não consulta (fica só a E140CCE).
+SENIOR_EDOCS_SCHEMA = config('SENIOR_EDOCS_SCHEMA', default='EDOCS_PROD_ERP')
 # True = monta o payload, grava o rastro como 'simulada' e NÃO chama o Senior.
 # Padrão ligado de propósito: produção precisa desligar explicitamente no .env.
 SENIOR_WS_DRY_RUN = config('SENIOR_WS_DRY_RUN', default=True, cast=bool)

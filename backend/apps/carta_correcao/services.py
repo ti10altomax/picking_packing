@@ -156,8 +156,9 @@ def montar_texto(base: dict, nova: dict | None, frete_novo: str, vol_novo: int |
 #         a reintegração" — a SEFAZ já tem uma carta com essa sequência (duplicata).
 # ---------------------------------------------------------------------------
 
-MSG_SEM_PROTOCOLO = ('O Senior aceitou a transmissão, mas ainda não devolveu o protocolo de autorização. A carta está '
-                     'gravada; o Separa confere a situação dela na E140CCE a cada 10 minutos. Não refaça a correção.')
+MSG_SEM_PROTOCOLO = ('O Senior aceitou a transmissão; a autorização da SEFAZ costuma chegar em menos de um minuto. '
+                     'O Separa confere no eDocs a cada 2 minutos e marca como Transmitida, com o protocolo. '
+                     'Não refaça a correção.')
 
 
 def classificar_rejeicao(cod, msg: str) -> tuple[str, str, str]:
