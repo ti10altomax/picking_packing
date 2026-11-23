@@ -22,6 +22,7 @@ Regras (decididas com o usuário em 2026-10-22, sem passar pela diretoria):
 """
 import logging
 import unicodedata
+from datetime import timedelta
 
 from django.db import transaction
 from django.utils import timezone
@@ -210,9 +211,16 @@ def _textos_reservados(cartas: list, exceto: CartaCorrecao) -> set:
     return {_ascii_maiusculo(c.texto) for c in cartas if c.id != exceto.id}
 
 
+# Carta transmitida há mais que isto e que não está nem no ERP nem no eDocs: a SEFAZ não a tem.
+# A margem cobre a carta que acabou de sair (a autorização leva ~30 s; o evento entra no eDocs
+# na hora do envio).
+MARGEM_AUSENTE_MIN = 30
+
+
 def reconciliar(pedido: Pedido, ident: tuple, anteriores: dict, usuario=None) -> list[CartaCorrecao]:
-    """Atualiza as cartas do Separa desta NF com o que a E140CCE diz (sequência, situação,
-    protocolo). Devolve as que mudaram de status. Não faz nada se a E140CCE não pôde ser lida."""
+    """Atualiza as cartas do Separa desta NF com o que o Senior diz — a E140CCE já fundida com o
+    eDocs em `senior.cartas_anteriores` (sequência, situação, protocolo). Devolve as que mudaram
+    de status. Não faz nada se a E140CCE não pôde ser lida."""
     if not anteriores.get('disponivel'):
         return []
     agora = timezone.now()
@@ -249,11 +257,27 @@ def reconciliar(pedido: Pedido, ident: tuple, anteriores: dict, usuario=None) ->
                 carta.status = CartaCorrecao.Status.AGUARDANDO_SDE
                 carta.erro = MSG_SEM_PROTOCOLO
                 campos += ['status', 'erro']
+        elif (anteriores.get('edocs_disponivel') and carta.transmissao_tentada
+              and carta.status in (CartaCorrecao.Status.TRANSMITIDA, CartaCorrecao.Status.AGUARDANDO_SDE)
+              and carta.criado_em < agora - timedelta(minutes=MARGEM_AUSENTE_MIN)):
+            # 2026-11-23: com o eDocs lido, carta que não casa com nenhuma linha (nem do ERP nem
+            # do eDocs) NÃO foi registrada na SEFAZ — o "autorizado com sucesso" do WS era de outra
+            # carta, ou o protocolo tinha sido atribuído pela linha regravada no ERP.
+            quando = timezone.localtime(agora).strftime('%d/%m %H:%M')
+            anterior = (carta.erro or '').strip()
+            carta.status = CartaCorrecao.Status.ERRO_TRANSMITIR
+            carta.erro = (f'Não consta na SEFAZ (conferido no eDocs em {quando}): este texto não foi registrado '
+                          'como carta de correção da nota.' + (f' Retorno original: {anterior}' if anterior else ''))[:2000]
+            carta.protocolo = ''
+            carta.autorizada_em = ''
+            carta.seqeve = None
+            carta.sitcce_senior = None
+            campos += ['status', 'erro', 'protocolo', 'autorizada_em', 'seqeve', 'sitcce_senior']
         carta.save(update_fields=campos)
         if carta.status != status_antes:
             mudadas.append(carta)
             _log(pedido, usuario, carta, acao='carta_correcao_verificada')
-            logger.info('carta_correcao %s: %s → %s pela E140CCE', carta.id, status_antes, carta.status,
+            logger.info('carta_correcao %s: %s → %s pelo Senior/eDocs', carta.id, status_antes, carta.status,
                         extra={'pedido': pedido.id, 'carta': carta.id})
     return mudadas
 
@@ -269,9 +293,20 @@ def _cartas_sumidas(pedido: Pedido, ident: tuple, anteriores: dict) -> list[Cart
     if not anteriores.get('disponivel'):
         return []
     cartas = _cartas_da_nf(pedido, ident)
+    linhas = anteriores.get('cartas', [])
+    if anteriores.get('edocs_disponivel'):
+        # Com o eDocs sabemos o que a SEFAZ tem (2026-11-23): "sumida" é só a carta do Separa que
+        # casa com um evento AUTORIZADO que não tem linha na E140CCE. A que não casa com nada não
+        # foi registrada na SEFAZ e não segura a sequência (o `reconciliar` a marca como erro).
+        sumidas = []
+        for c in cartas:
+            linha = _casar_com_senior(c, linhas, _textos_reservados(cartas, c)) if c.transmissao_tentada else None
+            if linha and linha.get('so_no_edocs'):
+                sumidas.append(c)
+        return sumidas
     return [c for c in cartas
             if c.transmissao_tentada
-            and _casar_com_senior(c, anteriores.get('cartas', []), _textos_reservados(cartas, c)) is None]
+            and _casar_com_senior(c, linhas, _textos_reservados(cartas, c)) is None]
 
 
 def bloqueio_por_cartas(anteriores: dict, sumidas: list) -> dict | None:
@@ -292,7 +327,7 @@ def bloqueio_por_cartas(anteriores: dict, sumidas: list) -> dict | None:
     if sumidas:
         c = sumidas[0]
         quando = timezone.localtime(c.criado_em).strftime('%d/%m %H:%M')
-        reimportavel = c.status == CartaCorrecao.Status.TRANSMITIDA and bool(c.protocolo)
+        reimportavel = c.status == CartaCorrecao.Status.TRANSMITIDA and bool((c.protocolo or '').strip())
         if reimportavel:
             msg = (f"A carta do Separa de {quando} foi AUTORIZADA na SEFAZ (protocolo {c.protocolo}"
                    f"{', ' + c.autorizada_em if c.autorizada_em else ''}) e não está mais na E140CCE do Senior. "

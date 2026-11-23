@@ -281,6 +281,11 @@ def _fundir_com_edocs(cartas: list[dict], eventos: list[dict]) -> list[dict]:
             continue
         usados.add(alvo)
         c = cartas[alvo]
+        # O texto que vale é o que a SEFAZ registrou. A linha do ERP pode ter sido regravada
+        # depois com outro texto e o mesmo protocolo (NF 150297 e 152139, 18–19/11/2026).
+        if ev['texto'] and _norm(c['texto']) != _norm(ev['texto']):
+            c['texto_erp'] = c['texto']
+            c['texto'] = ev['texto']
         if c['sitcce'] != 3 or not c['protocolo']:
             c.update({'sitcce_erp': c['sitcce'], 'sitcce': 3, 'sitcce_label': SITCCE_LABELS[3],
                       'protocolo': ev['protocolo'], 'autorizada_em': ev['autorizada_em'], 'fonte': 'edocs'})
