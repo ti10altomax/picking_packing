@@ -156,6 +156,10 @@ def montar_texto(base: dict, nova: dict | None, frete_novo: str, vol_novo: int |
 #         a reintegração" — a SEFAZ já tem uma carta com essa sequência (duplicata).
 # ---------------------------------------------------------------------------
 
+MSG_SEM_PROTOCOLO = ('O Senior aceitou a transmissão, mas ainda não devolveu o protocolo de autorização. A carta está '
+                     'gravada; o Separa confere a situação dela na E140CCE a cada 10 minutos. Não refaça a correção.')
+
+
 def classificar_rejeicao(cod, msg: str) -> tuple[str, str, str]:
     """(status, fonte, explicação em português) para o par codRej/msgRet do retorno."""
     cod = str(cod or '').strip()
@@ -183,9 +187,10 @@ def _casar_com_senior(carta: CartaCorrecao, cartas_senior: list[dict], reservado
     data/hora do evento que o Separa mandou no Gravar (o fiscal pode ter editado o texto) —
     mas nunca uma linha cujo texto é o de OUTRA carta do Separa (`reservados`), senão duas
     cartas gravadas no mesmo minuto se confundem."""
-    for c in cartas_senior:
-        if _mesmo_texto(c.get('texto') or '', carta.texto):
-            return c
+    # mesmo texto em mais de uma linha (carta reenviada): a autorizada vale mais que as outras
+    iguais = [c for c in cartas_senior if _mesmo_texto(c.get('texto') or '', carta.texto)]
+    if iguais:
+        return sorted(iguais, key=lambda c: (c.get('sitcce') != 3, c.get('sitcce') == senior.SITCCE_ERRO))[0]
     pg = carta.payload_gravar or {}
     for c in cartas_senior:
         if pg.get('datEve') and c.get('data') == pg.get('datEve') and c.get('hora') == pg.get('horEve'):
@@ -230,9 +235,18 @@ def reconciliar(pedido: Pedido, ident: tuple, anteriores: dict, usuario=None) ->
                 if status_antes != carta.status:
                     carta.erro = ''
                 campos += ['status', 'protocolo', 'autorizada_em', 'erro']
-            elif linha.get('sitcce') == 4 and carta.status != CartaCorrecao.Status.ERRO_TRANSMITIR:
+            elif (linha.get('sitcce') in (4, senior.SITCCE_ERRO)
+                  and carta.status != CartaCorrecao.Status.ERRO_TRANSMITIR):
                 carta.status = CartaCorrecao.Status.ERRO_TRANSMITIR
-                carta.erro = 'Rejeitada na transmissão (situação 4 na E140CCE do Senior). Acerte no Senior.'
+                carta.erro = (f"{linha.get('sitcce_label')} na transmissão (situação {linha.get('sitcce')} na "
+                              'E140CCE do Senior). Acerte no Senior.')
+                campos += ['status', 'erro']
+            elif (linha.get('sitcce') in (1, 2) and carta.status == CartaCorrecao.Status.TRANSMITIDA
+                  and not (carta.protocolo or '').strip()):
+                # 2026-11-23: o EmitirCartaCorrecao respondeu "autorizado com sucesso" sem protocolo
+                # e a carta continua 'Não enviada' no Senior — não foi autorizada.
+                carta.status = CartaCorrecao.Status.AGUARDANDO_SDE
+                carta.erro = MSG_SEM_PROTOCOLO
                 campos += ['status', 'erro']
         carta.save(update_fields=campos)
         if carta.status != status_antes:
@@ -270,7 +284,7 @@ def bloqueio_por_cartas(anteriores: dict, sumidas: list) -> dict | None:
                     'mensagem': f"A carta {seq} desta nota está '{c.get('sitcce_label')}' no Senior — ainda não foi "
                                 "transmitida/autorizada. Peça ao faturamento para transmitir (ou apagar) essa carta antes "
                                 "de gravar outra: a SEFAZ só aceita a próxima depois que a anterior é autorizada."}
-        if c.get('sitcce') in (4, 5):
+        if c.get('sitcce') in (4, 5, senior.SITCCE_ERRO):
             return {'codigo': 'carta_rejeitada_senior', 'sequencia': seq,
                     'mensagem': f"A carta {seq} desta nota está '{c.get('sitcce_label')}' no Senior. Acerte essa carta no "
                                 "Senior (reenviar ou excluir) antes de gravar outra."}
@@ -654,11 +668,17 @@ def _gravar_e_transmitir(pedido: Pedido, usuario, carta: CartaCorrecao, payload:
             r0 = retornos[0] if retornos else {}
             ok = ret.get('tipoRetorno') == 0 and not ret.get('erroExecucao') and (r0.get('tipRet', 0) == 0)
             carta.sitdoe = r0.get('sitDoe')
-            carta.protocolo = str(r0.get('numPrt') or '')[:30]
+            carta.protocolo = str(r0.get('numPrt') or '').strip()[:30]
             if r0.get('datAut'):
                 carta.autorizada_em = f"{r0.get('datAut')} {r0.get('horAut') or ''}".strip()[:20]
-            if ok:
+            if ok and carta.protocolo:
                 carta.status = CartaCorrecao.Status.TRANSMITIDA
+            elif ok:
+                # 2026-11-23: "autorizado com sucesso" SEM protocolo só quer dizer que o Senior
+                # aceitou o pedido; a autorização vem depois pelo SDE (ou não vem — 24 cartas
+                # ficaram 'Não enviada' assim). Só a E140CCE confirma: o beat reconcilia.
+                carta.status = CartaCorrecao.Status.AGUARDANDO_SDE
+                carta.erro = MSG_SEM_PROTOCOLO
             else:
                 bruto = (r0.get('msgRet') or ret.get('mensagemRetorno') or ret.get('erroExecucao') or 'tipRet -1')
                 status_novo, fonte, explicacao = classificar_rejeicao(r0.get('codRej'), bruto)

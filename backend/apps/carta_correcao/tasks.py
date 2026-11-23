@@ -9,6 +9,7 @@ import datetime as dt
 import logging
 
 from celery import shared_task
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.core.tarefas import registrar_execucao
@@ -25,10 +26,13 @@ def verificar_cartas_pendentes():
     from .services import reconciliar_nf
 
     limite = timezone.now() - dt.timedelta(days=JANELA_DIAS)
+    # "Transmitida" sem protocolo (2026-11-23) também: o Senior respondia "autorizado com
+    # sucesso" sem a carta ter saído; só a E140CCE diz se foi autorizada.
     pendentes = (CartaCorrecao.objects
-                 .filter(criado_em__gte=limite,
-                         status__in=[CartaCorrecao.Status.GRAVADA, CartaCorrecao.Status.AGUARDANDO_SDE,
-                                     CartaCorrecao.Status.ERRO_TRANSMITIR])
+                 .filter(criado_em__gte=limite)
+                 .filter(Q(status__in=[CartaCorrecao.Status.GRAVADA, CartaCorrecao.Status.AGUARDANDO_SDE,
+                                       CartaCorrecao.Status.ERRO_TRANSMITIR])
+                         | Q(status=CartaCorrecao.Status.TRANSMITIDA, protocolo__regex=r'^\s*$'))
                  .exclude(nf_numero='')
                  .select_related('pedido'))
     notas = {}

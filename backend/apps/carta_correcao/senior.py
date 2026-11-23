@@ -46,7 +46,12 @@ SITDOE_LABELS = {
     12: 'Erro na solicitação de inutilização', 13: 'Pendente de cancelamento',
     16: 'Autorizada em contingência',
 }
-SITCCE_LABELS = {1: 'Não enviada', 2: 'Enviada', 3: 'Autorizada', 4: 'Rejeitada', 5: 'Denegada'}
+# 10 = erro (confirmado pela Altomax em 2026-11-23). Desde 19/11/2026 o EmitirCartaCorrecao deixa
+# na E140CCE, além da carta que o Gravar criou, uma SEGUNDA linha idêntica (mesmo texto e
+# minuto) com sitcce 10 — um "eco" com erro, que não é outra carta.
+SITCCE_ERRO = 10
+SITCCE_LABELS = {1: 'Não enviada', 2: 'Enviada', 3: 'Autorizada', 4: 'Rejeitada', 5: 'Denegada',
+                 SITCCE_ERRO: 'Erro'}
 
 QUERY_SITUACAO_NF = f"""
     SELECT nfv.sitnfv, nfv.codtra, tra.nomtra, nfv.ciffob, nfv.qtdemb,
@@ -168,7 +173,22 @@ def cartas_anteriores(codfil, codsnf, numnfv) -> dict:
     except Exception as e:
         logger.warning('carta_correcao: cartas anteriores indisponíveis: %s', e)
         return {'disponivel': False, 'cartas': [], 'erro': str(e).splitlines()[0][:300]}
-    return {'disponivel': True, 'cartas': [_mapear_carta(r) for r in rows], 'erro': ''}
+    cartas, ecos = _separar_ecos([_mapear_carta(r) for r in rows])
+    return {'disponivel': True, 'cartas': cartas, 'ecos_com_erro': ecos, 'erro': ''}
+
+
+def _separar_ecos(cartas: list[dict]) -> tuple[list[dict], list[dict]]:
+    """(cartas de verdade, ecos). Eco = linha com sitcce 10 cujo texto é igual ao de outra linha
+    da nota que NÃO está em erro: é a sobra da transmissão, não uma carta a mais — não entra em
+    sequência, bloqueio nem no texto das correções anteriores. Linha com erro e texto próprio
+    continua na lista (é uma carta que falhou e alguém precisa acertar no Senior)."""
+    def norm(t):
+        return ' '.join((t or '').upper().split())
+    textos_validos = {norm(c['texto']) for c in cartas if c['sitcce'] != SITCCE_ERRO}
+    reais, ecos = [], []
+    for c in cartas:
+        (ecos if c['sitcce'] == SITCCE_ERRO and norm(c['texto']) in textos_validos else reais).append(c)
+    return reais, ecos
 
 
 def transportadoras(q: str) -> list[dict]:
