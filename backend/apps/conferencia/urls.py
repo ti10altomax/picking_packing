@@ -33,6 +33,8 @@ urlpatterns = [
     path('nao-conformes/<int:pk>/cancelar/', views.cancelar_nao_conforme, name='cancelar_nao_conforme'),
     path('nao-conformes/<int:pk>/retornar/', views.retornar_nao_conforme, name='retornar_nao_conforme'),
     # Devolver para Vendas (admin, 2026-11-16): Conferido → Pendente, do zero
+    # Relatório das notas conferidas que ainda precisam de transportadora (2026-11-23)
+    path('conferidos/sem_transportadora/', views.relatorio_sem_transportadora, name='relatorio_sem_transportadora'),
     path('conferidos/<int:pk>/devolver/', views.devolver_conferido, name='devolver_conferido'),
     path('conferidos/<int:pk>/mover_lancamentos/', views.mover_lancamentos, name='mover_lancamentos'),
 

@@ -533,6 +533,63 @@ def monitorar_cancelamentos(passada_completa: bool = False):
     return resultado
 
 
+def atualizar_transportadoras(pedidos) -> int | None:
+    """Relê no Senior a transportadora de documentos que estão sem ela e preenche quem já tem —
+    relatório de Conferidos sem transportadora (2026-11-23). O `monitorar_cancelamentos` faz o
+    mesmo de carona, mas só olha Conferido dentro da janela do sync: nota mais antiga acertada
+    direto no Senior (carta de correção digitada lá) ficaria no relatório para sempre.
+    Documento com nota conhecida (NF, ou pedido já faturado) vale a nota; pedido sem nota vale o
+    pedido. Só a transportadora: não mexe em situação nem dispara etiqueta.
+    Devolve quantos preencheu; None se o Oracle falhou (quem chama segue com o que tem)."""
+    from .oracle import QUERY_SITUACAO_PEDIDOS, QUERY_SITUACAO_NFS
+    from apps.pedidos.models import Pedido
+
+    def _s(v):
+        return str(v or '').strip()
+
+    alvo = [p for p in pedidos if not p.transportadora]
+    pelas_notas = [(p, p.identificacao_nf) for p in alvo if p.identificacao_nf]
+    pelos_pedidos = [p for p in alvo if not p.identificacao_nf and p.tipo == Pedido.Tipo.PEDIDO]
+    preenchidos = 0
+
+    def _preencher(pedido, row):
+        nonlocal preenchidos
+        codtra, nome = _transportadora(row) if row is not None else ('', '')
+        if codtra:
+            pedido.codtra, pedido.transportadora = codtra, nome
+            pedido.save(update_fields=['codtra', 'transportadora'])
+            preenchidos += 1
+
+    if pelas_notas:
+        situacoes = _situacoes_no_senior(
+            QUERY_SITUACAO_NFS, [ident[2] for _, ident in pelas_notas],
+            lambda r: (_s(r.get('codfil')), _s(r.get('codsnf')), _s(r.get('numnfv'))),
+        )
+        if situacoes is None:
+            return None
+        for pedido, ident in pelas_notas:
+            codfil, codsnf, numero = (_s(x) for x in ident)
+            row = situacoes.get((codfil, codsnf, numero))
+            if row is None and not codfil:   # compat: linha antiga sem filial casa pela série + número
+                row = next((r for k, r in situacoes.items() if k[1] == codsnf and k[2] == numero), None)
+            _preencher(pedido, row)
+    if pelos_pedidos:
+        situacoes = _situacoes_no_senior(
+            QUERY_SITUACAO_PEDIDOS, [p.numero_externo for p in pelos_pedidos],
+            lambda r: (_s(r.get('codfil')), _s(r.get('numped'))),
+        )
+        if situacoes is None:
+            return None
+        for pedido in pelos_pedidos:
+            row = situacoes.get((_s(pedido.codfil), _s(pedido.numero_externo)))
+            if row is None and not pedido.codfil:
+                row = next((r for k, r in situacoes.items() if k[1] == _s(pedido.numero_externo)), None)
+            _preencher(pedido, row)
+    if preenchidos:
+        logger.info(f"atualizar_transportadoras: {preenchidos} de {len(alvo)} preenchidos pelo Senior")
+    return preenchidos
+
+
 @shared_task
 @registrar_execucao(erro_se=_teve_falha_oracle)
 def vincular_nfs_pedidos():

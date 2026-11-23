@@ -340,6 +340,32 @@ export type BuscaLote = {
   senior_falhou: boolean
 }
 
+export type DocSemTransportadora = {
+  id: number
+  tipo: string
+  numero_externo: string
+  pedidos_origem: string[]
+  nf_numero: string
+  cliente: string
+  frete: string
+  frete_label: string
+  conferido_em: string | null
+  conferente: string | null
+  /** volumes com itens na conferência */
+  volumes: number
+  /** quantidade de volumes da nota no Senior; null = ainda não lida */
+  nf_volumes: number | null
+}
+
+export type RelatorioSemTransportadora = {
+  gerado_em: string
+  /** false = o Senior não respondeu; a lista usa a última leitura automática */
+  senior_consultado: boolean
+  /** notas que já tinham transportadora no Senior e saíram da lista nesta consulta */
+  preenchidas_agora: number
+  documentos: DocSemTransportadora[]
+}
+
 export const supervisorApi = {
   localizar: (q: string) =>
     api.get('/api/pedidos/localizar/', { params: { q } }).then((r) => r.data as Localizacao[]),
@@ -376,6 +402,10 @@ export const supervisorApi = {
     api.get('/api/pedidos/', {
       params: { status: 'conferido', ...params },
     }).then((r) => r.data),
+  // Relatório das notas conferidas que ainda precisam de transportadora (2026-11-23).
+  // O backend relê a transportadora no Senior antes de responder.
+  relatorioSemTransportadora: () =>
+    api.get('/api/conferidos/sem_transportadora/').then((r) => r.data as RelatorioSemTransportadora),
   // Devolver para Vendas (admin, 2026-11-16): Conferido → Pendente, apaga volumes e zera o separado
   devolverConferido: (id: number, motivo?: string) =>
     api.post(`/api/conferidos/${id}/devolver/`, { motivo: motivo ?? '' }).then((r) => r.data),

@@ -61,7 +61,7 @@ export default function SupervisorLayout({ children }: { children: React.ReactNo
   return (
     <div className="min-h-screen bg-surface-bg text-ink flex flex-col">
       <FullscreenOnFirstTap />
-      <header className="bg-surface-card border-b border-surface-border px-4 h-14 flex items-center justify-between sticky top-0 z-10 shadow-sm dark:shadow-none">
+      <header className="bg-surface-card border-b border-surface-border px-4 h-14 flex items-center justify-between sticky top-0 z-10 shadow-sm dark:shadow-none print:hidden">
         <div className="flex items-center gap-3">
           <Marca href={destinoPorPerfil(user?.perfil)} />
           <nav className="flex items-center gap-1 ml-2">

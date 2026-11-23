@@ -1537,6 +1537,50 @@ def retornar_nao_conforme(request, pk):
 
 
 # ---------------------------------------------------------------------------
+# Relatório: Conferidos sem transportadora (2026-11-23)
+# As notas que ainda precisam da transportadora (carta de correção, ou acerto no Senior) para a
+# etiqueta de volume sair. Antes de listar, relê a transportadora no Senior — quem já foi
+# acertado lá sai da lista na hora, mesmo fora da janela do beat. Só leitura no Senior.
+# ---------------------------------------------------------------------------
+
+@api_view(['GET'])
+def relatorio_sem_transportadora(request):
+    err = _exige_supervisor_ou_admin(request)
+    if err:
+        return err
+    from apps.impressao.services import anotar_volumes
+    from apps.senior.tasks import atualizar_transportadoras
+
+    base = Pedido.objects.filter(status=Pedido.Status.CONFERIDO, transportadora='')
+    preenchidas = atualizar_transportadoras(list(base))
+
+    documentos = []
+    for p in anotar_volumes(base.select_related('conferente')).order_by('conferido_em', 'id'):
+        documentos.append({
+            'id': p.id,
+            'tipo': p.tipo,
+            'numero_externo': p.numero_externo,
+            'pedidos_origem': p.pedidos_origem or [],
+            'nf_numero': p.nf_numero,
+            'cliente': p.cliente,
+            'frete': p.frete,
+            'frete_label': p.frete_label,
+            'conferido_em': p.conferido_em,
+            'conferente': p.conferente.username if p.conferente else None,
+            # volumes com itens na conferência × `qtdemb` da nota (None = ainda não lido)
+            'volumes': p.n_volumes,
+            'nf_volumes': p.nf_volumes,
+        })
+    return Response({
+        'gerado_em': timezone.now(),
+        # False = o Oracle não respondeu; a lista usa a última leitura do beat
+        'senior_consultado': preenchidas is not None,
+        'preenchidas_agora': preenchidas or 0,
+        'documentos': documentos,
+    })
+
+
+# ---------------------------------------------------------------------------
 # Conferidos — "Devolver para Vendas" (admin, 2026-11-16)
 # Conferência que não vale (teste, documento errado): o documento volta a Pendente
 # como se nunca tivesse entrado no fluxo. Só admin, de propósito: apaga volumes e

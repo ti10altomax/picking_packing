@@ -17,6 +17,7 @@ import { supervisorEtiquetas } from './supervisor-etiquetas'
 import { supervisorCartas } from './supervisor-cartas'
 import { supervisorErros } from './supervisor-erros'
 import { supervisorConferidos } from './supervisor-conferidos'
+import { supervisorConferidosSemTransportadora } from './supervisor-conferidos-sem-transportadora'
 import { admin } from './admin'
 import { adminSaude } from './admin-saude'
 import { adminApp } from './admin-app'
@@ -49,6 +50,7 @@ export const TELAS: AjudaTela[] = [
   supervisorCartas,
   supervisorErros,
   supervisorConferidos,
+  supervisorConferidosSemTransportadora,
   admin,
   adminSaude,
   adminApp,

@@ -2,6 +2,7 @@
 import { DocBadges } from '@/components/ui/DocBadges'
 import { OndeEsta } from '@/components/pedidos/OndeEsta'
 import { useEffect, useState, useCallback, useRef } from 'react'
+import Link from 'next/link'
 import { supervisorApi, pedidosApi, type Paginado } from '@/lib/api'
 import { ImprimirEtiqueta } from '@/components/etiquetas/ImprimirEtiqueta'
 import type { BloqueioEtiqueta } from '@/lib/api'
@@ -166,9 +167,18 @@ export default function ConferidosPage() {
           <h1 className="text-2xl font-semibold text-ink">Pedidos conferidos</h1>
           <p className="text-sm text-ink-muted">Concluídos pelos conferentes</p>
         </div>
-        <button onClick={() => carregar(buscaAtiva, 1, false)} className="text-sm text-blue-600 dark:text-blue-400 min-h-[44px] px-2">
-          Atualizar
-        </button>
+        <div className="flex items-center gap-1 shrink-0">
+          {/* Relatório para imprimir: o que ainda precisa de transportadora para a etiqueta sair (2026-11-23) */}
+          <Link
+            href="/supervisor/conferidos/sem-transportadora"
+            className="inline-flex items-center text-sm text-blue-600 dark:text-blue-400 min-h-[44px] px-2"
+          >
+            Relatório sem transportadora
+          </Link>
+          <button onClick={() => carregar(buscaAtiva, 1, false)} className="text-sm text-blue-600 dark:text-blue-400 min-h-[44px] px-2">
+            Atualizar
+          </button>
+        </div>
       </div>
 
       <div className="mb-3 flex flex-col sm:flex-row gap-2">

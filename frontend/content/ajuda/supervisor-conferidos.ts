@@ -28,6 +28,11 @@ export const supervisorConferidos: AjudaTela = {
   ],
   elementos: [
     {
+      nome: 'Relatório sem transportadora',
+      descricao:
+        'No alto da tela. Abre a lista, pronta para imprimir, dos conferidos que ainda estão sem transportadora — os que precisam ser acertados para a etiqueta sair.',
+    },
+    {
       nome: 'Linha do documento',
       descricao:
         'Número, badges (NF, Entrega, Retira), NF emitida do pedido ("NF 980509"), cliente e transportadora. Embaixo: data e hora, "por" quem conferiu, "separado por" quem separou, itens e "em" quanto tempo.',
@@ -108,5 +113,5 @@ export const supervisorConferidos: AjudaTela = {
     'Depois de uma carta de correção que troca a transportadora, use "Reimprimir" para a etiqueta sair com o nome novo.',
     'O código de barras da etiqueta é a chave de acesso do DANFE (44 dígitos), a mesma que a transportadora bipa na nota. A mesma chave sai em QR Code no canto direito do rodapé, para leitores 2D e câmeras.',
   ],
-  relacionadas: ['supervisor-etiquetas', 'supervisor-cartas', 'supervisor-agora', 'admin-impressoras'],
+  relacionadas: ['supervisor-conferidos-sem-transportadora', 'supervisor-etiquetas', 'supervisor-cartas', 'supervisor-agora', 'admin-impressoras'],
 }
