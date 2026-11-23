@@ -1888,6 +1888,7 @@ function ModalBipar({
   const [qtd, setQtd] = useState('1')
   const [codigo, setCodigo] = useState(codigoInicial || '')
   const [enviando, setEnviando] = useState(false)
+  const enviandoRef = useRef(false)
   const [mensagem, setMensagem] = useState('')
   const [tipoMsg, setTipoMsg] = useState<'erro' | 'aviso' | null>(null)
   const [cameraAberta, setCameraAberta] = useState(false)
@@ -1917,7 +1918,9 @@ function ModalBipar({
 
   async function enviar(codOverride?: string) {
     const cod = (codOverride ?? codigo).trim()
-    if (!cod || enviando) return
+    // guarda SÍNCRONA (2026-11-23): o Enter do leitor dispara onSubmitEditing duas vezes no
+    // mesmo instante e o estado `enviando` ainda não virou — a leitura ia em dobro
+    if (!cod || enviando || enviandoRef.current) return
     if (qtdNum < 1) {
       setMensagem('Quantidade inválida')
       setTipoMsg('erro')
@@ -1928,6 +1931,7 @@ function ModalBipar({
       setTipoMsg('aviso')
       return
     }
+    enviandoRef.current = true
     setEnviando(true)
     setMensagem('')
     setTipoMsg(null)
@@ -1963,6 +1967,7 @@ function ModalBipar({
       // Leitor continua armado pra tentar de novo, sem subir o teclado
       setTimeout(() => capturaRef.current?.focus(), 80)
     } finally {
+      enviandoRef.current = false
       setEnviando(false)
     }
   }

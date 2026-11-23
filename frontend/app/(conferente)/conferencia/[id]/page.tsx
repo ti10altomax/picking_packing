@@ -1581,6 +1581,7 @@ function ModalBipar({
   const [qtd, setQtd] = useState('1')
   const [codigo, setCodigo] = useState(codigoInicial || '')
   const [enviando, setEnviando] = useState(false)
+  const enviandoRef = useRef(false)
   const [flash, setFlash] = useState<FlashTipo>(null)
   const [mensagem, setMensagem] = useState('')
   const [cameraAberta, setCameraAberta] = useState(false)
@@ -1603,7 +1604,8 @@ function ModalBipar({
 
   const enviar = async () => {
     const cod = codigo.trim()
-    if (!cod || enviando) return
+    // guarda SÍNCRONA (2026-11-23): Enter do leitor em dobro mandava a leitura duas vezes
+    if (!cod || enviando || enviandoRef.current) return
     if (qtdNum < 1) {
       setFlash('erro')
       setMensagem('Quantidade inválida')
@@ -1614,6 +1616,7 @@ function ModalBipar({
       setMensagem(`Só restam ${restante} unidade(s)`)
       return
     }
+    enviandoRef.current = true
     setEnviando(true)
     setFlash(null)
     setMensagem('')
@@ -1653,6 +1656,7 @@ function ModalBipar({
       setCodigo('')
       setTimeout(() => scanRef.current?.focus({ preventScroll: true }), 80)
     } finally {
+      enviandoRef.current = false
       setEnviando(false)
     }
   }

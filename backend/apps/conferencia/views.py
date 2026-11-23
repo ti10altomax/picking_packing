@@ -1,5 +1,6 @@
 import logging
 import re
+from datetime import timedelta
 from django.db import models, transaction
 from django.utils import timezone
 from rest_framework import status as http_status
@@ -18,6 +19,9 @@ from apps.pedidos.models import (
 from .fardo import FardoErro, desfazer_fardo, ler_fardo
 
 logger = logging.getLogger(__name__)
+
+# bipar: mesmo lançamento repetido dentro desta janela é a mesma leitura (ver `bipar`)
+JANELA_REPETICAO_MS = 700
 
 
 def _exige_conferente(request):
@@ -651,6 +655,32 @@ def bipar(request, pk):
     from .caixas import avaliar_caixa_cheia, ocupacao_volume, volume_caixa
     divisor = volume_caixa()
     with transaction.atomic():
+        # Trava a linha do item e confere o excesso DE NOVO (2026-11-23, NF 150739 fechou com
+        # 1329 de 1316): a checagem lá em cima lê sem trava, e duas leituras simultâneas do
+        # mesmo item (ou uma leitura junto com uma OP) passavam as duas.
+        travado = PedidoItem.objects.select_for_update().get(pk=item.pk)
+        # Leitura em dobro (2026-11-23): o coletor mandava o MESMO lançamento duas vezes com
+        # 8–300 ms de diferença (Enter do leitor disparando duas vezes no modal de quantidade) —
+        # 38 pares em produção desde 17/11. Mesmo item, volume, quantidade e código dentro de
+        # JANELA_REPETICAO_MS: é a mesma leitura; responde ok sem lançar de novo. Uma segunda
+        # leitura de verdade leva mais de 1 s (trava do mesmo código nos clientes).
+        desde = timezone.now() - timedelta(milliseconds=JANELA_REPETICAO_MS)
+        if VolumeItem.objects.filter(volume=volume, pedido_item=item, qtd=qtd, criado_em__gte=desde).exists():
+            logger.info('bipar: leitura repetida ignorada', extra={'pedido': pedido.id, 'item': item.id, 'qtd': qtd})
+            return Response({
+                'resultado': 'ok', 'repetida': True, 'item_id': item.id,
+                'qtd_separada': travado.qtd_separada, 'qtd_pedida': travado.qtd_pedida,
+                'volume_id': volume.id, 'codigo_alternativo': bool(alias),
+                'ocupacao_volume': round(ocupacao_volume(volume, divisor), 2), 'caixa_cheia': None,
+            })
+        if travado.qtd_separada + qtd > travado.qtd_pedida:
+            return Response(
+                {'resultado': 'excesso',
+                 'qtd_pedida': travado.qtd_pedida,
+                 'qtd_ja_separada': travado.qtd_separada,
+                 'qtd_solicitada': qtd},
+                status=http_status.HTTP_409_CONFLICT,
+            )
         ocupacao_antes = ocupacao_volume(volume, divisor)
         VolumeItem.objects.create(volume=volume, pedido_item=item, qtd=qtd)
         item.qtd_separada = models.F('qtd_separada') + qtd
@@ -1168,6 +1198,13 @@ def liberar_divergencia(request, pk):
         )
 
     with transaction.atomic():
+        travado = PedidoItem.objects.select_for_update().get(pk=item.pk)
+        if travado.qtd_separada + qtd > travado.qtd_pedida:
+            return Response(
+                {'erro': 'quantidade excede o pedido',
+                 'qtd_pedida': travado.qtd_pedida, 'qtd_ja_separada': travado.qtd_separada},
+                status=http_status.HTTP_409_CONFLICT,
+            )
         VolumeItem.objects.create(volume=volume, pedido_item=item, qtd=qtd)
         item.qtd_separada = models.F('qtd_separada') + qtd
         item.save(update_fields=['qtd_separada'])
