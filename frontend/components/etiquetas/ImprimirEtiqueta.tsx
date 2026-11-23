@@ -218,7 +218,9 @@ export function ImprimirEtiqueta({
             </ul>
           )}
 
-          {impressaEm && (
+          {/* Sempre visível (2026-11-23): impressão que deu erro no meio não fica marcada como
+              impressa, e ainda assim é preciso mandar só os volumes que faltaram */}
+          {(
             <div className="mt-3 border-t border-surface-border pt-3">
               <p className="text-xs font-semibold text-ink-subtle uppercase tracking-wider mb-1">Volumes</p>
               <div className="flex gap-1">

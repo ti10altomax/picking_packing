@@ -13,12 +13,13 @@ const CHAVE_ULTIMA = 'etiqueta_impressora'
  * agente). No celular/coletor não existe o caminho "navegador" do web.
  */
 export function EscolherImpressora({
-  visible, pedidoId, titulo, reimpressao = false, onClose, onImpresso,
+  visible, pedidoId, titulo, onClose, onImpresso,
 }: {
   visible: boolean
   pedidoId: number | null
   titulo?: string
   /** Reimpressão (já saiu antes): mostra "Todos / Só alguns volumes" (2026-11-19) */
+  /** sem efeito desde 2026-11-23: a escolha de volumes aparece sempre (impressão com erro no meio) */
   reimpressao?: boolean
   onClose: () => void
   onImpresso?: () => void
@@ -56,8 +57,8 @@ export function EscolherImpressora({
 
   async function imprimir() {
     if (!pedidoId || !escolhida) return
-    const sel = reimpressao && soAlguns ? volumes.trim() : ''
-    if (reimpressao && soAlguns && !sel) {
+    const sel = soAlguns ? volumes.trim() : ''
+    if (soAlguns && !sel) {
       setErro('Informe os volumes (ex.: 12-30) ou escolha "Todos".')
       return
     }
@@ -126,7 +127,7 @@ export function EscolherImpressora({
             </View>
           )}
 
-          {reimpressao && lista && lista.length > 0 ? (
+          {lista && lista.length > 0 ? (
             <View className="mb-4">
               <Text className="text-xs font-semibold text-ink-subtle uppercase mb-2">Volumes</Text>
               <View className="flex-row gap-2">
