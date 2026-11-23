@@ -1,4 +1,5 @@
 import datetime as dt
+from decimal import Decimal, InvalidOperation
 from celery import shared_task
 from django.utils import timezone
 import logging
@@ -89,6 +90,31 @@ def codigo_barras(*valores) -> str:
     return ''
 
 
+def _medida(v):
+    try:
+        d = Decimal(str(v))
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+    return d if d > 0 else None
+
+
+def medidas(row, base=None) -> tuple:
+    """(comprimento, largura, altura) da derivação (E075DER.COMDER/LARDER/ALTDER). Se a
+    derivação não tem as três medidas, usa as do tamanho base (G1/G2 → G), como no código
+    de barras — vindas como `*_base` na mesma linha ou em `base` (outra linha da E075DER).
+    Sem medida completa → (None, None, None)."""
+    proprias = tuple(_medida(row.get(c)) for c in ('comder', 'larder', 'altder'))
+    if all(proprias):
+        return proprias
+    if base is not None:
+        da_base = tuple(_medida(base.get(c)) for c in ('comder', 'larder', 'altder'))
+    else:
+        da_base = tuple(_medida(row.get(f'{c}_base')) for c in ('comder', 'larder', 'altder'))
+    if all(da_base):
+        return da_base
+    return (None, None, None)
+
+
 def _importar_itens(pedido, query, params, col_qtd):
     """Busca os itens no Oracle (E120IPD ou E140IPV + E075DER/PRO) e popula PedidoItem."""
     from .oracle import SENIOR_CODEMP
@@ -116,6 +142,7 @@ def _importar_itens(pedido, query, params, col_qtd):
         # a empresa fica só no campo `codemp` (migration pedidos.0016 limpou os antigos).
         sku = f'{codpro}-{codder}'
 
+        comprimento, largura, altura = medidas(r)
         PedidoItem.objects.create(
             pedido=pedido,
             sku=sku,
@@ -125,6 +152,9 @@ def _importar_itens(pedido, query, params, col_qtd):
             codpro=codpro,
             codder=codder,
             codemp=SENIOR_CODEMP,
+            comprimento=comprimento,
+            largura=largura,
+            altura=altura,
         )
         criados += 1
     return criados

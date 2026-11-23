@@ -82,10 +82,34 @@ type Pedido = {
   status: 'atribuido' | 'conferindo' | 'conferido' | 'nao_conforme' | 'cancelado'
   cancelado_em?: string | null
   qtd_itens: number
+  estimativa_caixas?: EstimativaCaixas | null
   separado_por: { id: number; nome: string; apelido: string } | null
   separador_nao_identificado: boolean
   itens: ItemPedido[]
   volumes: Volume[]
+}
+
+// soma(qtd × medidas da derivação no Senior) / caixa padrão — calculada no backend (2026-11-23)
+type EstimativaCaixas = { caixas: number; itens_sem_medida: number }
+// devolvido pelo bipar só na leitura que fez a caixa passar de 1 caixa padrão
+type CaixaCheia = { ocupacao: number }
+
+// Aviso de que o documento não cabe numa caixa só. Compacto: no coletor o bloco de cima
+// é fixo e não pode crescer (ver o fix do Concluir sumindo, 0.15.3).
+function AvisoCaixas({ estimativa, className = '' }: { estimativa?: EstimativaCaixas | null; className?: string }) {
+  if (!estimativa || estimativa.caixas <= 1) return null
+  const caixas = estimativa.caixas.toLocaleString('pt-BR', { maximumFractionDigits: 1 })
+  const semMedida = estimativa.itens_sem_medida
+  return (
+    <View className={`rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 ${className}`}>
+      <Text className="text-sm font-bold text-amber-400">📦 Mais de uma caixa · ≈ {caixas} caixas</Text>
+      {semMedida > 0 && (
+        <Text className="text-xs text-amber-400/80">
+          {semMedida} {semMedida === 1 ? 'item sem medida' : 'itens sem medida'} no Senior (fora da conta)
+        </Text>
+      )}
+    </View>
+  )
 }
 
 // 409 `pedido_cancelado`: o servidor bloqueou porque o documento foi cancelado no
@@ -578,6 +602,7 @@ export default function ConferenciaDetalhe() {
           chave: 'leitor',
           duracao: 2500,
         })
+        if (r.caixa_cheia) avisarCaixaCheia(r.caixa_cheia)
         // os lançamentos do volume (com id para a lixeira) vêm do servidor; uma recarga
         // depois da rajada de leituras basta
         if (recargaTimer.current) clearTimeout(recargaTimer.current)
@@ -612,6 +637,20 @@ export default function ConferenciaDetalhe() {
     setScanFlash(tipo)
     if (scanFlashTimer.current) clearTimeout(scanFlashTimer.current)
     scanFlashTimer.current = setTimeout(() => setScanFlash(null), ms)
+  }
+
+  // Caixa cheia (2026-11-23): a leitura que fez a caixa passar do volume da caixa padrão
+  // (Configuracao volume_caixa). Diálogo com OK de propósito — toast passa despercebido.
+  // O leitor contínuo desliga para o conferente não seguir bipando atrás do diálogo.
+  function avisarCaixaCheia(cc: CaixaCheia) {
+    desligarLeitor()
+    Vibration.vibrate([0, 300, 150, 300, 150, 300])
+    dialog.alert({
+      title: '📦 Caixa cheia',
+      message: `Pelas medidas do Senior, esta caixa já está com ${Math.round(cc.ocupacao * 100)}% do tamanho da caixa padrão. Feche esta caixa e abra uma nova em + Volume antes de continuar.`,
+      variant: 'warning',
+      confirmText: 'OK, entendi',
+    })
   }
 
   // Barra pisca vermelho + vibra; a mensagem vai para o toast (grande, quebra linha).
@@ -732,6 +771,8 @@ export default function ConferenciaDetalhe() {
             {pedido.qtd_itens} {pedido.qtd_itens === 1 ? 'item' : 'itens'} · {totalPedido} unidade(s)
           </Text>
 
+          <AvisoCaixas estimativa={pedido.estimativa_caixas} className="mb-6" />
+
           <Text className="text-sm font-semibold text-ink mb-2">Quem separou este pedido? *</Text>
           <SeletorSeparadoPor liberados={liberados} valor={apontamento} onChange={setApontamento} />
 
@@ -770,6 +811,7 @@ export default function ConferenciaDetalhe() {
         <Text className="text-xs text-ink-subtle mt-1">
           {totalConferido} / {totalPedido} unidades · {volumes.length} volume(s)
         </Text>
+        <AvisoCaixas estimativa={pedido.estimativa_caixas} className="mt-1.5" />
         <View className="flex-row items-center gap-1 mt-0.5">
           <Text className="text-xs text-ink-subtle">
             Separado por:{' '}
@@ -1058,10 +1100,11 @@ export default function ConferenciaDetalhe() {
           pedidoId={pedidoId}
           codigoInicial={codigoInicial}
           onFechar={() => { setItemSelecionado(null); setCodigoInicial('') }}
-          onSucesso={async () => {
+          onSucesso={async (caixaCheia) => {
             setItemSelecionado(null)
             setCodigoInicial('')
             await carregar()
+            if (caixaCheia) avisarCaixaCheia(caixaCheia)
           }}
           onCancelado={async () => {
             setItemSelecionado(null)
@@ -1838,7 +1881,7 @@ function ModalBipar({
   pedidoId: number
   codigoInicial?: string
   onFechar: () => void
-  onSucesso: () => void
+  onSucesso: (caixaCheia?: CaixaCheia | null) => void
   onCancelado: () => void
 }) {
   const insets = useSafeAreaInsets()
@@ -1889,11 +1932,11 @@ function ModalBipar({
     setMensagem('')
     setTipoMsg(null)
     try {
-      await conferenciaApi.bipar(pedidoId, {
+      const r = await conferenciaApi.bipar(pedidoId, {
         item_id: item.id, qtd: qtdNum, codigo: cod, volume_id: volumeId,
       })
       Vibration.vibrate(60)
-      onSucesso()
+      onSucesso(r.caixa_cheia)
     } catch (err: unknown) {
       const e = err as { response?: { status?: number; data?: { resultado?: string; erro?: string } } }
       const status = e?.response?.status

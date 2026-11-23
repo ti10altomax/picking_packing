@@ -220,6 +220,12 @@ class PedidoItem(models.Model):
     codder = models.CharField(max_length=20, blank=True)
     codemp = models.IntegerField(null=True, blank=True)
 
+    # Medidas da derivação no Senior (E075DER.COMDER/LARDER/ALTDER, 2026-11-23) — estimativa
+    # de caixas na conferência (`apps.conferencia.caixas`). Vazio = sem medida no cadastro.
+    comprimento = models.DecimalField(max_digits=12, decimal_places=4, null=True, blank=True)
+    largura = models.DecimalField(max_digits=12, decimal_places=4, null=True, blank=True)
+    altura = models.DecimalField(max_digits=12, decimal_places=4, null=True, blank=True)
+
     def __str__(self):
         return f'{self.sku} x{self.qtd_pedida}'
 

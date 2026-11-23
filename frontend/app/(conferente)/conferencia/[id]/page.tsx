@@ -57,11 +57,17 @@ type Pedido = {
   transferido_para_id?: number | null
   qtd_itens: number
   percent_conferido: number
+  estimativa_caixas?: EstimativaCaixas | null
   separado_por: { id: number; nome: string; apelido: string } | null
   separador_nao_identificado: boolean
   itens: ItemPedido[]
   volumes: Volume[]
 }
+
+// soma(qtd × medidas da derivação no Senior) / caixa padrão — calculada no backend
+type EstimativaCaixas = { caixas: number; itens_sem_medida: number }
+// devolvido pelo bipar só na leitura que fez a caixa passar de 1 caixa padrão
+type CaixaCheia = { ocupacao: number }
 
 type FlashTipo = 'ok' | 'erro' | 'divergente' | 'excesso' | null
 
@@ -581,6 +587,7 @@ export default function ConferenciaPedidoPage() {
           chave: 'leitor',
           duracao: 2500,
         })
+        if (r.caixa_cheia) avisarCaixaCheia(r.caixa_cheia)
         // os lançamentos do volume (com id para a lixeira) vêm do servidor; uma recarga
         // depois da rajada de leituras basta
         if (recargaTimer.current) clearTimeout(recargaTimer.current)
@@ -608,6 +615,20 @@ export default function ConferenciaPedidoPage() {
         bloqueioCodigo.current.set(cod, Date.now() + INTERVALO_REPETIR_MS)
       }
     }).catch(() => {})
+  }
+
+  // Caixa cheia (2026-11-23): a leitura que fez a caixa passar do volume da caixa padrão
+  // (Configuracao volume_caixa). Diálogo com OK de propósito — toast passa despercebido.
+  function avisarCaixaCheia(cc: CaixaCheia) {
+    playBeep(660, 180)
+    setTimeout(() => playBeep(660, 180), 250)
+    setTimeout(() => playBeep(660, 400), 500)
+    dialog.alert({
+      title: '📦 Caixa cheia',
+      message: `Pelas medidas do Senior, esta caixa já está com ${Math.round(cc.ocupacao * 100)}% do tamanho da caixa padrão. Feche esta caixa e abra uma nova em + Volume antes de continuar.`,
+      variant: 'warning',
+      confirmText: 'OK, entendi',
+    })
   }
 
   function piscar(tipo: FlashTipo, ms: number) {
@@ -675,6 +696,8 @@ export default function ConferenciaPedidoPage() {
             {pedido.qtd_itens} {pedido.qtd_itens === 1 ? 'item' : 'itens'} · {totalPedido} unidade(s)
           </p>
 
+          <AvisoCaixas estimativa={pedido.estimativa_caixas} className="w-full max-w-md mb-6 text-left" />
+
           <div className="w-full max-w-md text-left mb-6">
             <p className="text-sm font-semibold text-ink mb-2">Quem separou este pedido? *</p>
             <SeletorSeparadoPor
@@ -728,6 +751,7 @@ export default function ConferenciaPedidoPage() {
         <p className="text-xs text-ink-subtle mt-1">
           {totalConferido} / {totalPedido} unidades · {volumes.length} volume(s)
         </p>
+        <AvisoCaixas estimativa={pedido.estimativa_caixas} className="mt-2" />
         <div className="flex items-center gap-1 mt-0.5">
           <p className="text-xs text-ink-subtle">
             Separado por:{' '}
@@ -1011,10 +1035,11 @@ export default function ConferenciaPedidoPage() {
           pedidoId={pedidoId}
           codigoInicial={codigoInicial}
           onFechar={() => { setItemSelecionado(null); setCodigoInicial('') }}
-          onSucesso={async () => {
+          onSucesso={async (caixaCheia) => {
             setItemSelecionado(null)
             setCodigoInicial('')
             await carregar()
+            if (caixaCheia) avisarCaixaCheia(caixaCheia)
           }}
           onCancelado={async () => {
             setItemSelecionado(null)
@@ -1047,6 +1072,25 @@ export default function ConferenciaPedidoPage() {
           onConfirmar={aoAlterarSeparadoPor}
         />
       )}
+    </div>
+  )
+}
+
+// -----------------------------------------------------------------------------
+// Aviso de mais de uma caixa (2026-11-23)
+// -----------------------------------------------------------------------------
+
+function AvisoCaixas({ estimativa, className = '' }: { estimativa?: EstimativaCaixas | null; className?: string }) {
+  if (!estimativa || estimativa.caixas <= 1) return null
+  const caixas = estimativa.caixas.toLocaleString('pt-BR', { maximumFractionDigits: 1 })
+  return (
+    <div className={`rounded-xl border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10 px-3 py-2 ${className}`}>
+      <p className="text-sm font-bold text-amber-800 dark:text-amber-300">📦 Vai precisar de mais de uma caixa</p>
+      <p className="text-xs text-amber-700 dark:text-amber-400">
+        Estimativa pelas medidas do Senior: ≈ {caixas} caixas
+        {estimativa.itens_sem_medida > 0 &&
+          ` · ${estimativa.itens_sem_medida} ${estimativa.itens_sem_medida === 1 ? 'item sem medida' : 'itens sem medida'} (fora da conta)`}
+      </p>
     </div>
   )
 }
@@ -1531,7 +1575,7 @@ function ModalBipar({
   pedidoId: number
   codigoInicial?: string
   onFechar: () => void
-  onSucesso: () => void
+  onSucesso: (caixaCheia?: CaixaCheia | null) => void
   onCancelado: () => void
 }) {
   const [qtd, setQtd] = useState('1')
@@ -1574,12 +1618,12 @@ function ModalBipar({
     setFlash(null)
     setMensagem('')
     try {
-      await conferenciaApi.bipar(pedidoId, {
+      const r = await conferenciaApi.bipar(pedidoId, {
         item_id: item.id, qtd: qtdNum, codigo: cod, volume_id: volumeId,
       })
       playBeep(880, 150)
       setFlash('ok')
-      setTimeout(onSucesso, 350)
+      setTimeout(() => onSucesso(r.caixa_cheia), 350)
     } catch (err: unknown) {
       const e = err as { response?: { status?: number; data?: { resultado?: string; erro?: string } } }
       const status = e?.response?.status

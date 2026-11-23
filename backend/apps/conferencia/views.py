@@ -273,6 +273,7 @@ def _serializar_volume(v: Volume) -> dict:
 
 def _serializar_pedido(p: Pedido, com_volumes: bool = False) -> dict:
     from apps.pedidos.alias_barra import alternativos_por_ean
+    from .caixas import estimar as estimar_caixas, volume_caixa, volume_unitario
 
     itens = list(p.itens.all())
     # Barras erradas da fábrica cadastradas como alternativas (2026-11-17): web e coletor
@@ -281,6 +282,7 @@ def _serializar_pedido(p: Pedido, com_volumes: bool = False) -> dict:
     total_pedido = sum(i.qtd_pedida for i in itens if i.status == PedidoItem.Status.OK)
     total_conferido = sum(i.qtd_separada for i in itens if i.status == PedidoItem.Status.OK)
     percent = round(total_conferido / total_pedido * 100, 1) if total_pedido else 0
+    divisor = volume_caixa()
 
     dados = {
         'id': p.id,
@@ -309,12 +311,18 @@ def _serializar_pedido(p: Pedido, com_volumes: bool = False) -> dict:
         'transferido_para_id': p.transferido_para_id,
         'qtd_itens': len(itens),
         'percent_conferido': percent,
+        # soma(qtd × medidas da derivação) / caixa padrão; > 1 → avisar que não cabe numa caixa
+        'estimativa_caixas': estimar_caixas(itens, divisor),
+        # Caixa cheia (2026-11-23): a tela soma volume_unitario × qtd do volume aberto e,
+        # quando a leitura faz passar de volume_caixa, para o conferente com um diálogo.
+        'volume_caixa': float(divisor),
         'itens': [
             {
                 'id': i.id, 'sku': i.sku, 'descricao': i.descricao, 'ean': i.ean,
                 'codigos_alternativos': alternativos.get(i.ean, []),
                 'qtd_pedida': i.qtd_pedida, 'qtd_separada': i.qtd_separada,
                 'status': i.status,
+                'volume_unitario': volume_unitario(i),
             }
             for i in itens
         ],
@@ -640,15 +648,22 @@ def bipar(request, pk):
     if volume.fechado_em:
         return Response({'erro': 'volume já fechado'}, status=http_status.HTTP_400_BAD_REQUEST)
 
+    from .caixas import avaliar_caixa_cheia, ocupacao_volume, volume_caixa
+    divisor = volume_caixa()
     with transaction.atomic():
+        ocupacao_antes = ocupacao_volume(volume, divisor)
         VolumeItem.objects.create(volume=volume, pedido_item=item, qtd=qtd)
         item.qtd_separada = models.F('qtd_separada') + qtd
         item.save(update_fields=['qtd_separada'])
         item.refresh_from_db(fields=['qtd_separada'])
+        ocupacao = ocupacao_volume(volume, divisor)
+        caixa_cheia = avaliar_caixa_cheia(volume, ocupacao_antes, ocupacao)
         payload = {
             'item_id': item.id, 'sku': item.sku, 'qtd': qtd,
             'qtd_separada_total': item.qtd_separada, 'volume_id': volume.id,
         }
+        if caixa_cheia:
+            payload['caixa_cheia'] = caixa_cheia
         if alias:
             DivergenciaBarra.objects.create(
                 pedido_item=item, codigo_bipado=codigo, qtd=qtd, alias=alias,
@@ -666,6 +681,9 @@ def bipar(request, pk):
         'qtd_pedida': item.qtd_pedida,
         'volume_id': volume.id,
         'codigo_alternativo': bool(alias),
+        # fração da caixa padrão ocupada pelo volume; caixa_cheia só na leitura que passa de 1
+        'ocupacao_volume': round(ocupacao, 2),
+        'caixa_cheia': caixa_cheia,
     })
 
 

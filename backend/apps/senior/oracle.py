@@ -104,6 +104,8 @@ QUERY_PEDIDOS_PENDENTES = f"""
 # Código de barras do item (2026-11-05): derivações como G1/G2/G60 têm CODBAR = 0 e
 # entravam sem código. Ordem: CODBAR da derivação → CODGTN → CODBAR do tamanho base
 # (derb: G1/G2/G60 → G, GG1 → GG). A escolha é feita em `tasks.codigo_barras`.
+# Medidas da derivação (2026-11-23): COMDER/LARDER/ALTDER para a estimativa de caixas da
+# conferência (`apps.conferencia.caixas`); derivação sem medida usa a do tamanho base.
 # :1 = numped · :2 = codfil
 QUERY_ITENS_PEDIDO = f"""
     SELECT
@@ -114,6 +116,8 @@ QUERY_ITENS_PEDIDO = f"""
         der.codbar,
         der.codgtn,
         derb.codbar AS codbar_base,
+        der.comder, der.larder, der.altder,
+        derb.comder AS comder_base, derb.larder AS larder_base, derb.altder AS altder_base,
         pro.despro
     FROM E120IPD ipd
     LEFT JOIN E075DER der
@@ -283,6 +287,8 @@ QUERY_ITENS_NF = f"""
         der.codbar,
         der.codgtn,
         derb.codbar AS codbar_base,
+        der.comder, der.larder, der.altder,
+        derb.comder AS comder_base, derb.larder AS larder_base, derb.altder AS altder_base,
         pro.despro
     FROM E140IPV ipv
     LEFT JOIN E075DER der
@@ -306,7 +312,7 @@ QUERY_ITENS_NF = f"""
 # Códigos de barras das derivações de um lote de produtos — `preencher_ean_itens`
 # (itens importados antes de 2026-11-05 ficaram sem código). Os :n vêm do chamador.
 QUERY_DERIVACOES = f"""
-    SELECT der.codpro, der.codder, der.codbar, der.codgtn
+    SELECT der.codpro, der.codder, der.codbar, der.codgtn, der.comder, der.larder, der.altder
     FROM E075DER der
     WHERE der.codemp = {SENIOR_CODEMP}
       AND der.codpro IN ({{marcadores}})

@@ -22,6 +22,7 @@ class Configuracao(models.Model):
         CCE_TIPGER = 'cce_tipger', 'Carta de correção: tipo de geração (tipGer)'
         CCE_TEXTO = 'cce_texto', 'Carta de correção: texto (montado | livre)'
         CCE_PERFIS = 'cce_perfis', 'Carta de correção: perfis que podem corrigir'
+        VOLUME_CAIXA = 'volume_caixa', 'Volume da caixa padrão (cm³) — aviso de caixa cheia'
 
     # valores válidos por chave (documentação viva; o admin não valida à força)
     DEFAULTS = {
@@ -61,6 +62,10 @@ class Configuracao(models.Model):
         # De propósito só editável aqui (Django Admin), nunca em Gestão → Cartas de
         # correção: um supervisor não pode dar a permissão a si mesmo.
         'cce_perfis': 'supervisor_vendas,supervisor_patio',
+        # Caixa cheia na conferência (2026-11-23): volume interno da caixa padrão, na unidade
+        # das medidas da E075DER (cm → cm³). soma(qtd × COMDER × LARDER × ALTDER) / este valor
+        # > 1 = não cabe. Ver apps/conferencia/caixas.py.
+        'volume_caixa': '102396',
     }
 
     chave = models.CharField(max_length=50, choices=Chave.choices, unique=True)

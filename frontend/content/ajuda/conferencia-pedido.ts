@@ -108,6 +108,14 @@ export const conferenciaPedido: AjudaTela = {
   ],
   situacoes: [
     {
+      quando: 'Aparece o aviso âmbar "📦 Mais de uma caixa".',
+      oQueFazer: 'Pelas medidas dos produtos no Senior, o documento não cabe numa caixa só. Já separe mais de uma caixa e abra a próxima com + Volume quando a primeira encher. É uma estimativa: itens sem medida no Senior ficam de fora da conta.',
+    },
+    {
+      quando: 'Apareceu "📦 Caixa cheia" com o botão OK.',
+      oQueFazer: 'A última peça lida fez a caixa passar do tamanho da caixa padrão (pelas medidas do Senior). Toque em OK, feche a caixa e abra outra em + Volume. Se a peça lida não coube, use ⇄ Mover itens para passá-la para a caixa nova. No coletor o Leitor desliga sozinho: ligue de novo depois.',
+    },
+    {
       quando: 'Esqueci de abrir a caixa nova e bipei tudo na mesma.',
       oQueFazer: 'Toque em ⇄ Mover itens, marque o que está na caixa nova, escolha + Novo volume e toque em Mover. Continue bipando: a caixa nova já fica ativa.',
     },
