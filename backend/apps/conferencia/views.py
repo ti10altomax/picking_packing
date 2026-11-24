@@ -1104,10 +1104,19 @@ def marcar_nao_conforme(request, pk):
     # Faltas derivadas automaticamente (DESIGN.md §4.2): com motivo de quantidade
     # ou ausência, o que ficou sem bipar é o que o separador trouxe a menos.
     if motivo in (Pedido.MotivoNaoConforme.DIVERGENCIA_QTD, Pedido.MotivoNaoConforme.ITEM_AUSENTE):
+        # Documento retomado e marcado de novo (2026-11-24): a falta já registrada na 1ª vez
+        # não entra outra vez — só o que passar do que já está lançado para o item.
+        ja_registrado = dict(
+            ErroSeparacao.objects
+            .filter(pedido=pedido, tipo=ErroSeparacao.Tipo.A_MENOS, pedido_item__isnull=False)
+            .order_by().values_list('pedido_item_id').annotate(total=models.Sum('qtd'))
+        )
         faltas = []
         for item in pedido.itens.all():
             if item.status == PedidoItem.Status.OK and item.qtd_separada < item.qtd_pedida:
-                qtd_falta = item.qtd_pedida - item.qtd_separada
+                qtd_falta = item.qtd_pedida - item.qtd_separada - (ja_registrado.get(item.id) or 0)
+                if qtd_falta <= 0:
+                    continue
                 ErroSeparacao.objects.create(
                     pedido=pedido, pedido_item=item,
                     tipo=ErroSeparacao.Tipo.A_MENOS, qtd=qtd_falta,
@@ -1441,7 +1450,7 @@ def listar_nao_conformes(request):
     qs = (
         Pedido.objects
         .filter(status=Pedido.Status.NAO_CONFORME)
-        .select_related('conferente', 'atribuido_por', 'separado_por')
+        .select_related('conferente', 'atribuido_por', 'separado_por', 'sequencia')
         .order_by('-nao_conforme_em')
     )
     motivos_label = dict(Pedido.MotivoNaoConforme.choices)
@@ -1462,6 +1471,13 @@ def listar_nao_conformes(request):
             'atribuido_por': p.atribuido_por.username if p.atribuido_por else None,
             'separado_por': str(p.separado_por) if p.separado_por else None,
             'separador_nao_identificado': p.separador_nao_identificado,
+            # Retomar conferência (2026-11-24): a tela decide os botões por aqui
+            'conferente_ativo': bool(p.conferente and p.conferente.is_active),
+            'sequencia': (
+                {'id': p.sequencia.id, 'numero': p.sequencia.numero, 'descricao': p.sequencia.descricao}
+                if p.sequencia else None
+            ),
+            'conferencia_iniciada': bool(p.conferencia_iniciada_em),
         }
         for p in qs
     ])
@@ -1489,11 +1505,104 @@ def cancelar_nao_conforme(request, pk):
 
 
 @api_view(['POST'])
-def retornar_nao_conforme(request, pk):
-    """Retorna o pedido para a fila de Pendentes (volta ao começo do fluxo)."""
+def retomar_nao_conforme(request, pk):
+    """Retoma a conferência de um Não conforme sem passar de novo por Vendas e Pátio
+    (2026-11-24, pedido do Pátio). Volumes, quantidades e sequência ficam como estavam.
+
+    `modo`:
+      - `mesmo` (default): volta para o mesmo conferente — Em conferência se ele já tinha
+        iniciado, senão Atribuído;
+      - `sequencia`: solta na sequência sem conferente (Selecionado) — outro conferente
+        pega bipando a nota ou o Pátio atribui. Sem sequência, cai em "a sequenciar".
+    As faltas já registradas (ErroSeparacao) ficam: o erro de separação aconteceu.
+    """
     err = _exige_supervisor_ou_admin(request)
     if err:
         return err
+
+    modo = str(request.data.get('modo') or 'mesmo').strip()
+    if modo not in ('mesmo', 'sequencia'):
+        return Response({'erro': 'modo inválido — use "mesmo" ou "sequencia"'},
+                        status=http_status.HTTP_400_BAD_REQUEST)
+
+    with transaction.atomic():
+        # of=('self',): o FOR UPDATE não pode pegar o lado nulo dos joins
+        pedido = get_object_or_404(
+            Pedido.objects.select_for_update(of=('self',)).select_related('conferente', 'sequencia'),
+            pk=pk,
+        )
+        if pedido.status != Pedido.Status.NAO_CONFORME:
+            return Response(
+                {'erro': f'pedido em status "{pedido.status}", não está em Não Conforme'},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        conferente = pedido.conferente
+        if modo == 'mesmo' and not (conferente and conferente.is_active):
+            return Response(
+                {'erro': 'o conferente deste documento não está mais ativo — solte na sequência '
+                         'para outro conferente pegar',
+                 'sem_conferente': True},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        motivo_anterior = pedido.nao_conforme_motivo
+        detalhe_anterior = pedido.nao_conforme_detalhe
+        campos = ['status', 'nao_conforme_em', 'nao_conforme_motivo', 'nao_conforme_detalhe']
+        if modo == 'mesmo':
+            pedido.status = (
+                Pedido.Status.CONFERINDO if pedido.conferencia_iniciada_em else Pedido.Status.ATRIBUIDO
+            )
+        else:
+            pedido.status = Pedido.Status.SELECIONADO
+            pedido.conferente = None
+            pedido.atribuido_em = None
+            pedido.atribuido_por = None
+            campos += ['conferente', 'atribuido_em', 'atribuido_por']
+        pedido.nao_conforme_em = None
+        pedido.nao_conforme_motivo = ''
+        pedido.nao_conforme_detalhe = ''
+        pedido.save(update_fields=campos)
+
+        # O não conforme contava como final: a sequência pode ter sido concluída por ele.
+        seq = pedido.sequencia
+        if seq and seq.status == Sequencia.Status.CONCLUIDA:
+            seq.status = Sequencia.Status.EM_ANDAMENTO
+            seq.concluida_em = None
+            seq.save(update_fields=['status', 'concluida_em'])
+
+        PedidoLog.objects.create(
+            pedido=pedido, usuario=request.user,
+            acao='nao_conforme_retomado',
+            payload={
+                'modo': modo,
+                'motivo_anterior': motivo_anterior, 'detalhe_anterior': detalhe_anterior,
+                'conferente': conferente.username if conferente else None,
+                'status': pedido.status,
+                'sequencia_id': seq.id if seq else None,
+                'numero': seq.numero if seq else None,
+                'volumes': pedido.volumes.count(),
+            },
+        )
+
+    return Response({
+        'ok': True,
+        'status': pedido.status,
+        'modo': modo,
+        'conferente': conferente.username if (conferente and modo == 'mesmo') else None,
+        'sequencia': {'id': seq.id, 'numero': seq.numero, 'descricao': seq.descricao} if seq else None,
+    })
+
+
+@api_view(['POST'])
+def retornar_nao_conforme(request, pk):
+    """Retorna o pedido para a fila de Pendentes (volta ao começo do fluxo: Vendas envia de
+    novo). Só admin desde 2026-11-24 — o caminho normal é `retomar_nao_conforme`."""
+    if request.user.perfil != 'admin':
+        return Response(
+            {'erro': 'restrito ao Admin — use "Retomar conferência"'},
+            status=http_status.HTTP_403_FORBIDDEN,
+        )
 
     pedido = get_object_or_404(Pedido, pk=pk)
     if pedido.status != Pedido.Status.NAO_CONFORME:

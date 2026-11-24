@@ -13,6 +13,8 @@ import { SupervisorNav } from '@/components/SupervisorNav'
 import { useDialog } from '@/components/Dialog'
 import { DocBadges } from '@/components/DocBadges'
 import { supervisorApi } from '@/lib/api'
+import { useToast } from '@/components/Toast'
+import { rotuloSequencia } from '@/lib/sequencia'
 
 // Contrato real de GET /api/nao-conformes/ — todos os itens estão em Não Conforme
 type NaoConforme = {
@@ -30,6 +32,9 @@ type NaoConforme = {
   atribuido_por: string | null
   separado_por: string | null
   separador_nao_identificado: boolean
+  conferente_ativo?: boolean
+  sequencia?: { id: number; numero: number; descricao?: string } | null
+  conferencia_iniciada?: boolean
 }
 
 function formatarData(iso: string): string {
@@ -41,6 +46,7 @@ function formatarData(iso: string): string {
 export default function NaoConformes() {
   const insets = useSafeAreaInsets()
   const dialog = useDialog()
+  const toast = useToast()
   const [lista, setLista] = useState<NaoConforme[]>([])
   const [carregando, setCarregando] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -80,24 +86,45 @@ export default function NaoConformes() {
     } finally { setAcaoEm(null) }
   }
 
-  async function retornar(nc: NaoConforme) {
-    const ok = await dialog.confirm({
-      variant: 'info',
-      title: 'Retornar para fila?',
-      message: `O pedido ${nc.numero_externo} voltará a ficar pendente de atribuição.`,
-      confirmText: 'Retornar',
-    })
+  // Retomar a conferência (2026-11-24): o documento não volta mais para Vendas. `mesmo` =
+  // volta para quem estava conferindo; `sequencia` = solta para outro conferente pegar.
+  // (Devolver para Vendas ficou só para o admin, no web.)
+  async function retomar(nc: NaoConforme, modo: 'mesmo' | 'sequencia') {
+    const seq = nc.sequencia ? rotuloSequencia(nc.sequencia) : ''
+    const ok = await dialog.confirm(
+      modo === 'mesmo'
+        ? {
+            variant: 'info',
+            title: 'Retomar conferência?',
+            message: `O documento ${nc.numero_externo} volta para ${nc.conferente}${seq ? `, na ${seq}` : ''}. Volumes e quantidades já bipadas continuam como estão.`,
+            confirmText: 'Retomar',
+          }
+        : {
+            variant: 'info',
+            title: 'Soltar na sequência?',
+            message: seq
+              ? `O documento ${nc.numero_externo} fica sem conferente na ${seq}. Outro conferente pega bipando a nota, ou você atribui na tela da sequência. Volumes e quantidades continuam como estão.`
+              : `O documento ${nc.numero_externo} não tem sequência: volta para o Pátio colocar em uma. Volumes e quantidades continuam como estão.`,
+            confirmText: 'Soltar',
+          },
+    )
     if (!ok) return
     setAcaoEm(nc.id)
     try {
-      await supervisorApi.retornarNaoConforme(nc.id)
+      const r = await supervisorApi.retomarNaoConforme(nc.id, modo)
+      if (modo === 'mesmo') {
+        toast.ok('Conferência retomada', { detalhe: `${nc.numero_externo} voltou para ${r.conferente ?? nc.conferente}` })
+      } else {
+        toast.ok('Documento solto', {
+          detalhe: r.sequencia
+            ? `${nc.numero_externo} está disponível na ${rotuloSequencia(r.sequencia)}`
+            : `${nc.numero_externo} voltou para o Pátio sequenciar`,
+        })
+      }
       await carregar()
-    } catch {
-      await dialog.alert({
-        variant: 'danger',
-        title: 'Erro',
-        message: 'Não foi possível retornar o pedido.',
-      })
+    } catch (e: any) {
+      toast.erro('Não foi possível retomar', { detalhe: e?.response?.data?.erro })
+      await carregar()
     } finally { setAcaoEm(null) }
   }
 
@@ -161,6 +188,7 @@ export default function NaoConformes() {
                 Marcado em {formatarData(nc.nao_conforme_em)}
                 {nc.conferente ? ` · conferente: ${nc.conferente}` : ''}
                 {nc.separado_por ? ` · separado por: ${nc.separado_por}` : ''}
+                {nc.sequencia ? ` · ${rotuloSequencia(nc.sequencia, true)}` : ''}
               </Text>
               {nc.separador_nao_identificado ? (
                 <View className="self-start px-2 py-1 rounded-full bg-amber-500/15 mb-2">
@@ -168,23 +196,34 @@ export default function NaoConformes() {
                 </View>
               ) : null}
 
+              {nc.conferente && nc.conferente_ativo !== false ? (
+                <Pressable
+                  onPress={() => retomar(nc, 'mesmo')}
+                  disabled={acaoEm === nc.id}
+                  className="bg-blue-500 active:bg-blue-400 rounded-lg py-3 items-center mt-2"
+                >
+                  <Text className="text-white font-semibold text-sm">
+                    {acaoEm === nc.id ? '…' : 'Retomar conferência'}
+                  </Text>
+                </Pressable>
+              ) : null}
               <View className="flex-row gap-2 mt-2">
                 <Pressable
                   onPress={() => cancelar(nc)}
                   disabled={acaoEm === nc.id}
-                  className="flex-1 bg-red-500/20 active:bg-red-500/30 border border-red-500/40 rounded-lg py-2.5 items-center"
+                  className="flex-1 bg-red-500/20 active:bg-red-500/30 border border-red-500/40 rounded-lg py-3 items-center"
                 >
                   <Text className="text-red-300 font-semibold text-sm">
                     {acaoEm === nc.id ? '…' : 'Cancelar pedido'}
                   </Text>
                 </Pressable>
                 <Pressable
-                  onPress={() => retornar(nc)}
+                  onPress={() => retomar(nc, 'sequencia')}
                   disabled={acaoEm === nc.id}
-                  className="flex-1 bg-blue-500 active:bg-blue-400 rounded-lg py-2.5 items-center"
+                  className="flex-1 bg-blue-500/15 active:bg-blue-500/25 border border-blue-500/40 rounded-lg py-3 items-center"
                 >
-                  <Text className="text-white font-semibold text-sm">
-                    {acaoEm === nc.id ? '…' : 'Retornar à fila'}
+                  <Text className="text-blue-300 font-semibold text-sm">
+                    {acaoEm === nc.id ? '…' : 'Soltar na sequência'}
                   </Text>
                 </Pressable>
               </View>

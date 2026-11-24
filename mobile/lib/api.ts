@@ -303,8 +303,11 @@ export const supervisorApi = {
     api.get('/api/nao-conformes/').then((r) => r.data),
   cancelarNaoConforme: (id: number) =>
     api.post(`/api/nao-conformes/${id}/cancelar/`).then((r) => r.data),
+  // Só admin desde 2026-11-24 (devolve para Vendas); o caminho normal é o retomar
   retornarNaoConforme: (id: number) =>
     api.post(`/api/nao-conformes/${id}/retornar/`).then((r) => r.data),
+  retomarNaoConforme: (id: number, modo: 'mesmo' | 'sequencia' = 'mesmo') =>
+    api.post(`/api/nao-conformes/${id}/retomar/`, { modo }).then((r) => r.data),
   // Cancelados no Senior (ou pelo supervisor) com conferência a transferir
   listarCancelados: () =>
     api.get('/api/cancelados/').then((r) => r.data),

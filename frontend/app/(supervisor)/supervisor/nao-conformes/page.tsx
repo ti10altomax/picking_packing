@@ -5,6 +5,8 @@ import { useEffect, useState, useCallback } from 'react'
 import { supervisorApi, pedidosApi } from '@/lib/api'
 import { useDialog } from '@/components/Dialog'
 import { useToast } from '@/components/Toast'
+import { useAuthStore } from '@/stores/authStore'
+import { rotuloSequencia } from '@/lib/sequencia'
 
 type NaoConforme = {
   id: number
@@ -21,6 +23,9 @@ type NaoConforme = {
   atribuido_por: string | null
   separado_por: string | null
   separador_nao_identificado: boolean
+  conferente_ativo?: boolean
+  sequencia?: { id: number; numero: number; descricao?: string } | null
+  conferencia_iniciada?: boolean
 }
 
 type Item = {
@@ -45,6 +50,8 @@ export default function NaoConformesPage() {
   const [carregando, setCarregando] = useState(true)
   const [agindo, setAgindo] = useState<number | null>(null)
   const toast = useToast()
+  const { user } = useAuthStore()
+  const ehAdmin = user?.perfil === 'admin'   // Devolver para Vendas é só do admin (2026-11-24)
 
   // Acordeão
   const [expandidos, setExpandidos] = useState<Set<number>>(new Set())
@@ -108,21 +115,64 @@ export default function NaoConformesPage() {
     }
   }
 
+  // Retomar a conferência (2026-11-24): o documento não volta mais para Vendas. `mesmo` =
+  // volta para quem estava conferindo; `sequencia` = solta para outro conferente pegar.
+  async function retomar(p: NaoConforme, modo: 'mesmo' | 'sequencia') {
+    const seq = p.sequencia ? rotuloSequencia(p.sequencia) : ''
+    const ok = await dialog.confirm(
+      modo === 'mesmo'
+        ? {
+            title: 'Retomar conferência?',
+            message: `O documento ${p.numero_externo} volta para ${p.conferente}${seq ? `, na ${seq}` : ''}. Volumes e quantidades já bipadas continuam como estão.`,
+            variant: 'info',
+            confirmText: 'Retomar',
+          }
+        : {
+            title: 'Soltar na sequência?',
+            message: seq
+              ? `O documento ${p.numero_externo} fica sem conferente na ${seq}. Outro conferente pega bipando a nota, ou você atribui na tela da sequência. Volumes e quantidades continuam como estão.`
+              : `O documento ${p.numero_externo} não tem sequência: volta para o Pátio colocar em uma. Volumes e quantidades continuam como estão.`,
+            variant: 'info',
+            confirmText: 'Soltar',
+          },
+    )
+    if (!ok) return
+    setAgindo(p.id)
+    try {
+      const r = await supervisorApi.retomarNaoConforme(p.id, modo)
+      if (modo === 'mesmo') {
+        toast.ok(`Conferência retomada`, { detalhe: `${p.numero_externo} voltou para ${r.conferente ?? p.conferente}` })
+      } else {
+        toast.ok(`Documento solto`, {
+          detalhe: r.sequencia
+            ? `${p.numero_externo} está disponível na ${rotuloSequencia(r.sequencia)}`
+            : `${p.numero_externo} voltou para o Pátio sequenciar`,
+        })
+      }
+      await carregar()
+    } catch (e: any) {
+      toast.erro('Não foi possível retomar', { detalhe: e?.response?.data?.erro })
+      await carregar()
+    } finally {
+      setAgindo(null)
+    }
+  }
+
   async function retornar(p: NaoConforme) {
     const ok = await dialog.confirm({
-      title: 'Retornar para fila?',
-      message: `O pedido ${p.numero_externo} voltará a ficar pendente.`,
-      variant: 'info',
-      confirmText: 'Retornar',
+      title: 'Devolver para Vendas?',
+      message: `O documento ${p.numero_externo} volta a ficar Pendente: perde sequência e conferente, e o Sup. Vendas precisa enviá-lo de novo. Para só continuar a conferência, use "Retomar conferência".`,
+      variant: 'warning',
+      confirmText: 'Devolver',
     })
     if (!ok) return
     setAgindo(p.id)
     try {
       await supervisorApi.retornarNaoConforme(p.id)
-      toast.ok(`Pedido ${p.numero_externo} voltou para Pendente`)
+      toast.ok(`Documento ${p.numero_externo} voltou para Pendente`)
       await carregar()
-    } catch {
-      toast.erro('Erro ao retornar para fila')
+    } catch (e: any) {
+      toast.erro('Erro ao devolver para Vendas', { detalhe: e?.response?.data?.erro })
     } finally {
       setAgindo(null)
     }
@@ -182,6 +232,7 @@ export default function NaoConformesPage() {
                         })}
                         {p.conferente && ` · conferente: ${p.conferente}`}
                         {p.separado_por && ` · separado por: ${p.separado_por}`}
+                        {p.sequencia && ` · ${rotuloSequencia(p.sequencia, true)}`}
                       </p>
                       {p.separador_nao_identificado && (
                         <p className="text-xs mt-1">
@@ -262,21 +313,39 @@ export default function NaoConformesPage() {
                   </div>
                 )}
 
-                <div className="flex gap-2 px-4 py-3 border-t border-surface-border">
+                <div className="flex flex-wrap gap-2 px-4 py-3 border-t border-surface-border">
+                  {p.conferente && p.conferente_ativo !== false && (
+                    <button
+                      onClick={() => retomar(p, 'mesmo')}
+                      disabled={agindo === p.id}
+                      className="flex-1 min-w-[160px] min-h-[44px] px-3 bg-blue-600 text-white hover:bg-blue-500 dark:bg-blue-500 dark:hover:bg-blue-400 rounded-lg text-sm font-semibold disabled:opacity-50 transition-colors"
+                    >
+                      Retomar conferência
+                    </button>
+                  )}
                   <button
-                    onClick={() => retornar(p)}
+                    onClick={() => retomar(p, 'sequencia')}
                     disabled={agindo === p.id}
-                    className="flex-1 h-10 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-500/10 dark:text-blue-300 dark:hover:bg-blue-500/20 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
+                    className="flex-1 min-w-[160px] min-h-[44px] px-3 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-500/10 dark:text-blue-300 dark:hover:bg-blue-500/20 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
                   >
-                    Retornar para fila
+                    Soltar na sequência
                   </button>
                   <button
                     onClick={() => cancelar(p)}
                     disabled={agindo === p.id}
-                    className="flex-1 h-10 bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-300 dark:hover:bg-red-500/20 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
+                    className="flex-1 min-w-[160px] min-h-[44px] px-3 bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-300 dark:hover:bg-red-500/20 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
                   >
                     Cancelar pedido
                   </button>
+                  {ehAdmin && (
+                    <button
+                      onClick={() => retornar(p)}
+                      disabled={agindo === p.id}
+                      className="min-h-[44px] px-3 text-ink-muted hover:text-ink border border-surface-border rounded-lg text-sm disabled:opacity-50 transition-colors"
+                    >
+                      Devolver para Vendas
+                    </button>
+                  )}
                 </div>
               </div>
             )

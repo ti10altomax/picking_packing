@@ -104,6 +104,20 @@ def _nc(p):
     return txt
 
 
+def _retomado(p):
+    if p.get('modo') == 'sequencia':
+        if p.get('numero'):
+            txt = f"solto na sequência {p.get('numero')} para outro conferente pegar"
+        else:
+            txt = 'sem sequência — voltou para o Pátio sequenciar'
+    else:
+        txt = f"voltou para {p.get('conferente') or 'o conferente'}"
+    motivo = MOTIVOS_NC.get(p.get('motivo_anterior'), p.get('motivo_anterior') or '')
+    if motivo:
+        txt += f' · era {motivo}'
+    return txt
+
+
 # acao → (título, tipo, descrição(payload))
 ROTULOS = {
     'pedido_selecionado': ('Selecionado para separação', 'fluxo', lambda p: ''),
@@ -139,6 +153,7 @@ ROTULOS = {
                               lambda p: f"{p.get('volumes_count')} volume(s)" + ('' if p.get('senior_ok') else ' · WS Senior pendente')),
     'falta_registrada': ('Falta registrada', 'alerta', _faltas),
     'pedido_nao_conforme': ('Marcado não conforme', 'alerta', _nc),
+    'nao_conforme_retomado': ('Conferência retomada', 'fluxo', _retomado),
     'nao_conforme_retornado': ('Voltou para a fila', 'fluxo',
                                lambda p: f"era {MOTIVOS_NC.get(p.get('motivo_anterior'), p.get('motivo_anterior') or '')}".strip()),
     # Devolver para Vendas (admin, 2026-11-16) — também usado pelo acerto manual de 16/11
