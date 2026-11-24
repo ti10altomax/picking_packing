@@ -886,6 +886,7 @@ export type CcePreparar = {
   // carta do Separa mais recente que o fiscal apagou no Senior (a nota ficou com os valores novos) — para refazer
   refazer: CceCarta | null
   // carta_pendente_senior / carta_rejeitada_senior (sequencia) / carta_sumiu_senior (carta_id, reimportavel) — 2026-11-19
+  // carta_sem_retorno_senior (sequencia): autorizada na SEFAZ, o Senior ainda não registrou — 2026-11-24
   bloqueio: { codigo: string; mensagem: string; sequencia?: number | null; carta_id?: number; reimportavel?: boolean } | null
   // nova carta repetindo o que a nota tem hoje (SEFAZ ficou com carta incompleta) — 2026-11-19
   pode_reenviar: boolean

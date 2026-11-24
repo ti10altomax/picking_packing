@@ -100,6 +100,10 @@ export const supervisorCartas: AjudaTela = {
       oQueFazer: 'A SEFAZ só aceita a próxima carta depois que a anterior é autorizada. Peça ao faturamento para transmitir (ou apagar) a carta N no Senior. Depois toque em "Já foi resolvido no Senior? Conferir de novo".',
     },
     {
+      quando: '"A carta N desta nota já foi autorizada na SEFAZ …, mas o Senior ainda a mostra como Não enviada."',
+      oQueFazer: 'A carta anterior valeu na SEFAZ, mas o Senior não registrou. Uma nova carta agora seria recusada como duplicata e ainda trocaria os dados da nota. Avise a TI ou o fiscal para acertar a carta N no Senior. Depois toque em "Já foi resolvido no Senior? Conferir de novo".',
+    },
+    {
       quando: '"A carta do Separa de … foi AUTORIZADA na SEFAZ … e não está mais na E140CCE do Senior."',
       oQueFazer: 'Alguém apagou a carta no Senior depois de transmitida. Apagar não desfaz nada na SEFAZ. Toque em "Reimportar carta no Senior" e depois corrija normalmente.',
     },
@@ -113,7 +117,7 @@ export const supervisorCartas: AjudaTela = {
     },
     {
       quando: 'Erro "Senior/SDE 10021: a SEFAZ já tem uma carta com esta sequência (duplicata)".',
-      oQueFazer: 'A carta anterior desta nota já foi transmitida (ou foi apagada no Senior depois de transmitida). Abra "Corrigir NF" de novo: o Separa mostra o bloqueio certo e o que fazer.',
+      oQueFazer: 'A carta anterior desta nota já foi transmitida (ou foi apagada no Senior depois de transmitida). Não repita a correção. Abra "Corrigir NF" de novo: o Separa mostra o bloqueio certo e o que fazer.',
     },
     {
       quando: '"Pedido ainda sem nota fiscal emitida no Senior…"',

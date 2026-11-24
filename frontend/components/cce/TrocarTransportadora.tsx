@@ -385,7 +385,7 @@ export function ModalCarta({
                     {agindo === 'reimportar' ? 'Reimportando…' : 'Reimportar carta no Senior'}
                   </button>
                 )}
-                {(dados.bloqueio.codigo === 'carta_pendente_senior' || dados.bloqueio.codigo === 'carta_sumiu_senior') && (
+                {['carta_pendente_senior', 'carta_sumiu_senior', 'carta_sem_retorno_senior'].includes(dados.bloqueio.codigo) && (
                   <button
                     onClick={() => setRecarga((n) => n + 1)}
                     className="ml-2 text-xs underline underline-offset-2"

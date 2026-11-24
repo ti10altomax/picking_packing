@@ -312,9 +312,21 @@ def _cartas_sumidas(pedido: Pedido, ident: tuple, anteriores: dict) -> list[Cart
 def bloqueio_por_cartas(anteriores: dict, sumidas: list) -> dict | None:
     """Por que a nota NÃO pode receber carta nova agora (a SEFAZ exige as cartas em sequência):
     carta anterior ainda não transmitida/autorizada no Senior, carta rejeitada, ou carta do Separa
-    transmitida que sumiu da E140CCE (2026-11-19)."""
+    transmitida que sumiu da E140CCE (2026-11-19), ou carta autorizada na SEFAZ (eDocs) que o ERP
+    ainda não tem como Autorizada (2026-11-24)."""
     for c in anteriores.get('cartas', []):
         seq = c.get('sequencia')
+        if c.get('fonte') == 'edocs' and c.get('sitcce_erp') not in (None, 3):
+            # A SEFAZ tem a carta, o ERP não registrou o retorno. O Senior numera o evento pelo
+            # que ELE tem como autorizado: a próxima carta sairia de novo como nº 1 → 10021, e o
+            # Gravar já teria trocado transportadora/volumes da nota (NF 150786, 23/11/2026).
+            # Desde a leitura do eDocs (23/11) essa linha deixou de cair no bloqueio de baixo.
+            no_erp = senior.SITCCE_LABELS.get(c.get('sitcce_erp'), str(c.get('sitcce_erp')))
+            return {'codigo': 'carta_sem_retorno_senior', 'sequencia': seq,
+                    'mensagem': f"A carta {seq} desta nota já foi autorizada na SEFAZ (protocolo {c.get('protocolo')}), "
+                                f"mas o Senior ainda a mostra como '{no_erp}'. Enquanto o Senior não registrar essa "
+                                "autorização, uma nova carta volta recusada como duplicata e ainda troca os dados da "
+                                f"nota. Avise a TI ou o fiscal para acertar a carta {seq} no Senior antes de corrigir de novo."}
         if c.get('sitcce') in (1, 2):
             return {'codigo': 'carta_pendente_senior', 'sequencia': seq,
                     'mensagem': f"A carta {seq} desta nota está '{c.get('sitcce_label')}' no Senior — ainda não foi "
