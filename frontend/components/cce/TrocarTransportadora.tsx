@@ -153,7 +153,7 @@ export function ModalCarta({
     if (!dados.config.dry_run) {
       const ok = await dialog.confirm({
         title: 'Reenviar carta completa?',
-        message: `Vai nascer uma carta NOVA (sequência seguinte) repetindo o que a nota tem hoje: transportadora, frete, volumes e as cartas anteriores. ${vaiTransmitir ? 'Ela será gravada e TRANSMITIDA à SEFAZ agora. Não tem volta.' : 'Ela fica "Não enviada" no Senior para o faturamento transmitir.'} Use quando a SEFAZ ficou com uma carta incompleta. Continuar?`,
+        message: `Vai nascer uma carta NOVA (sequência seguinte) repetindo o que a nota tem hoje: transportadora, frete, volumes e as cartas anteriores. ${vaiTransmitir ? 'Ela será TRANSMITIDA à SEFAZ agora. Não tem volta.' : 'Ela fica "Não enviada" no Senior para o faturamento transmitir.'} Use quando a SEFAZ ficou com uma carta incompleta. Continuar?`,
         variant: vaiTransmitir ? 'danger' : 'warning',
         confirmText: vaiTransmitir ? 'Reenviar e transmitir' : 'Reenviar', cancelText: 'Voltar',
       })
@@ -294,7 +294,7 @@ export function ModalCarta({
       mudaVolumes ? 'a quantidade de volumes' : '',
     ].filter(Boolean).join(', ') || 'o texto da carta'
     const aviso = vaiTransmitir
-      ? `A carta vai ser GRAVADA e TRANSMITIDA à SEFAZ agora, alterando ${oQue} da nota. Isso não tem volta. Continuar?`
+      ? `A carta vai ser TRANSMITIDA à SEFAZ agora. Autorizada, o Senior passa a ter ${oQue} da nota com o valor novo. Isso não tem volta. Continuar?`
       : `A carta vai ser gravada no Senior como "Não enviada" e ${oQue} da nota vai ser alterado. Continuar?`
     if (!dados.config.dry_run) {
       const ok = await dialog.confirm({
@@ -638,9 +638,9 @@ function Resultado({ carta, onFechar }: { carta: CceCarta; onFechar: () => void 
         <span className="font-semibold text-ink">
           {carta.status === 'simulada' && 'Simulação registrada — nada foi enviado ao Senior.'}
           {carta.status === 'gravada' && 'Carta gravada no Senior como "Não enviada". O faturamento transmite por lá.'}
-          {carta.status === 'transmitida' && 'Carta gravada e transmitida.'}
-          {carta.status === 'aguardando_sde' && 'Carta gravada. O SDE do Senior não a recebeu agora — ela sai depois. Não refaça a correção; o Separa confere a situação sozinho.'}
-          {carta.status === 'erro_transmitir' && 'Carta gravada, mas a transmissão falhou. O faturamento envia pelo Senior.'}
+          {carta.status === 'transmitida' && (carta.erro ? 'Carta autorizada na SEFAZ. Falta o Senior atualizar a nota.' : 'Carta transmitida e autorizada.')}
+          {carta.status === 'aguardando_sde' && 'Carta enviada; a autorização ainda não chegou. A nota só muda depois dela. Não refaça a correção; o Separa confere sozinho.'}
+          {carta.status === 'erro_transmitir' && 'A transmissão falhou. A nota não foi alterada.'}
           {carta.status === 'erro_gravar' && 'O Senior não aceitou a carta.'}
         </span>
       </div>
@@ -648,7 +648,7 @@ function Resultado({ carta, onFechar }: { carta: CceCarta; onFechar: () => void 
       {carta.protocolo && <p className="text-xs text-ink-muted mt-1">Protocolo {carta.protocolo}{carta.autorizada_em ? ` · ${carta.autorizada_em}` : ''}</p>}
       {carta.erro && <p className="text-xs text-red-700 dark:text-red-300 mt-1">{carta.erro}</p>}
       <p className="text-xs text-ink-subtle mt-2 font-mono whitespace-pre-wrap">{carta.texto}</p>
-      {carta.efetiva && carta.codtra_novo !== carta.codtra_anterior && (
+      {(carta.status === 'gravada' || (carta.status === 'transmitida' && !carta.erro)) && carta.codtra_novo !== carta.codtra_anterior && (
         <p className="text-xs text-ink-muted mt-2">A etiqueta de volume pode ser reimpressa com a transportadora nova.</p>
       )}
       <div className="flex justify-end mt-3">

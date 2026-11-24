@@ -74,7 +74,7 @@ def previa(request, pk):
 
 @api_view(['POST'])
 def executar(request, pk):
-    """Grava a carta (e transmite, conforme o modo). Body: {codtra?, frete?, volumes?, complemento?}."""
+    """Faz a carta conforme o modo (só gravar | transmitir e, autorizada, gravar). Body: {codtra?, frete?, volumes?, complemento?}."""
     err = _exige(request)
     if err:
         return err
@@ -134,6 +134,10 @@ def verificar(request, pk):
     if not ident:
         return Response({'erro': 'documento sem NF'}, status=http_status.HTTP_400_BAD_REQUEST)
     mudadas = services.reconciliar_nf(pedido, ident)
+    # carta autorizada cuja nota ainda não foi atualizada no Senior: tenta o Gravar agora (2026-11-24)
+    for c in pedido.cartas_correcao.all():
+        if services.gravacao_pendente(c):
+            services.completar_gravacao(c.id, request.user)
     return Response({'atualizadas': [services.serializar(c) for c in mudadas],
                      'cartas': [services.serializar(c) for c in pedido.cartas_correcao.select_related('usuario')[:10]]})
 

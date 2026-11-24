@@ -43,7 +43,7 @@ export const supervisorCartas: AjudaTela = {
     {
       nome: 'Aguardando transmissão (SDE)',
       descricao:
-        'Chip azul: a carta foi gravada, mas o SDE (serviço de documentos eletrônicos do Senior) não a recebeu na hora (retorno 10011). Ela sai depois, pelo SDE ou pelo faturamento. O Separa confere a E140CCE a cada 10 minutos e muda para Transmitida (ou Erro) sozinho. Não refaça a correção.',
+        'Chip azul: a carta foi enviada, mas a autorização da SEFAZ ainda não chegou (o serviço de documentos eletrônicos do Senior não a recebeu na hora, ou demorou). O Separa confere a cada 2 minutos e muda para Transmitida (ou Erro) sozinho. A nota só é alterada depois da autorização. Não refaça a correção.',
     },
     {
       nome: 'Modo: Desligado',
@@ -57,7 +57,7 @@ export const supervisorCartas: AjudaTela = {
     {
       nome: 'Modo: Gravar e transmitir',
       descricao:
-        'O Separa grava a carta e já transmite para a SEFAZ. Não tem volta. Avise o fiscal antes de usar. O admin escolhe o modo nesta tela.',
+        'O Separa transmite a carta para a SEFAZ e, com a autorização, atualiza a nota no Senior (transportadora, frete, volumes). Se a transmissão falhar, a nota não muda. Não tem volta. Avise o fiscal antes de usar. O admin escolhe o modo nesta tela.',
     },
     {
       nome: 'simulação (dry-run)',
@@ -91,10 +91,14 @@ export const supervisorCartas: AjudaTela = {
     {
       nome: 'Chips de status',
       descricao:
-        'Gravada (amarelo): está no Senior, falta transmitir. Transmitida (verde): enviada. Erro ao gravar (vermelho): o Senior recusou. Erro ao transmitir (laranja): gravou, mas a transmissão falhou. Simulada (cinza): só teste.',
+        'Gravada (amarelo): está no Senior, falta transmitir. Transmitida (verde): autorizada na SEFAZ. Erro ao gravar (vermelho): o Senior recusou. Erro ao transmitir (laranja): a transmissão falhou e a nota não foi alterada. Simulada (cinza): só teste.',
     },
   ],
   situacoes: [
+    {
+      quando: '"Carta autorizada na SEFAZ. Falta o Senior atualizar a nota."',
+      oQueFazer: 'A carta já vale. O Separa tenta atualizar a nota no Senior sozinho a cada 2 minutos, e a etiqueta libera quando conseguir. Não refaça a correção. Se passar de uma hora, avise a TI.',
+    },
     {
       quando: '"A carta N desta nota está Não enviada no Senior — ainda não foi transmitida/autorizada."',
       oQueFazer: 'A SEFAZ só aceita a próxima carta depois que a anterior é autorizada. Peça ao faturamento para transmitir (ou apagar) a carta N no Senior. Depois toque em "Já foi resolvido no Senior? Conferir de novo".',

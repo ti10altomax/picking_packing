@@ -13,14 +13,19 @@ class CartaCorrecao(models.Model):
     auditoria e para explicar ao fiscal o que foi gravado. O ciclo é:
 
       simulada          dry-run (SENIOR_WS_DRY_RUN): montou tudo, não chamou o Senior
-      gravada           cartadecorrecao.Gravar ok (carta "Não enviada" + NF atualizada)
-      transmitida       documentofiscal.EmitirCartaCorrecao ok (modo gravar_e_transmitir)
-      erro_gravar       Gravar recusou (tipoRetorno -1) ou falhou (rede/SOAP)
-      erro_transmitir   gravou, mas a transmissão falhou — o faturamento envia no Senior
-      aguardando_sde    gravou; o SDE (serviço de documentos eletrônicos do Senior) não recebeu
-                        a carta na hora (10011) — ela sai depois, pelo SDE ou pelo faturamento.
-                        O beat `verificar_cartas_pendentes` relê a E140CCE e fecha o status
-                        (2026-11-19, caso da NF 152139).
+      gravada           modo `gravar`: cartadecorrecao.Gravar ok (carta "Não enviada" + NF atualizada)
+      transmitida       documentofiscal.EmitirCartaCorrecao autorizado, com protocolo
+      erro_gravar       modo `gravar`: o Gravar recusou (tipoRetorno -1) ou falhou (rede/SOAP)
+      erro_transmitir   a transmissão falhou
+      aguardando_sde    transmissão pedida, sem autorização ainda (10011 do SDE, resposta sem
+                        protocolo ou sem resposta). O beat `verificar_cartas_pendentes` confere
+                        no eDocs/E140CCE e fecha o status (2026-11-19, caso da NF 152139).
+
+    Desde 2026-11-24 o modo `gravar_e_transmitir` TRANSMITE PRIMEIRO e só com a autorização faz o
+    Gravar, já como Autorizada (sitCce 3 + protocolo), que é o que atualiza a nota. Nesse fluxo
+    `payload_gravar['sitCce']` = '3' e `retorno_gravar` só fica com `tipoRetorno` 0 quando a nota
+    foi atualizada; `transmitida` com o Gravar pendente = `services.gravacao_pendente` (o beat
+    repete). Erro na transmissão não altera a nota. Cartas antigas (sitCce '1') gravaram antes.
     """
 
     class Modo(models.TextChoices):
@@ -31,10 +36,10 @@ class CartaCorrecao(models.Model):
     class Status(models.TextChoices):
         SIMULADA = 'simulada', 'Simulada'
         GRAVADA = 'gravada', 'Gravada (não enviada)'
-        AGUARDANDO_SDE = 'aguardando_sde', 'Gravada, aguardando transmissão (SDE)'
+        AGUARDANDO_SDE = 'aguardando_sde', 'Aguardando transmissão (SDE)'
         TRANSMITIDA = 'transmitida', 'Transmitida'
         ERRO_GRAVAR = 'erro_gravar', 'Erro ao gravar'
-        ERRO_TRANSMITIR = 'erro_transmitir', 'Gravada, erro ao transmitir'
+        ERRO_TRANSMITIR = 'erro_transmitir', 'Erro ao transmitir'
 
     pedido = models.ForeignKey(Pedido, on_delete=models.CASCADE, related_name='cartas_correcao')
     usuario = models.ForeignKey(

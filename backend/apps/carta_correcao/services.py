@@ -15,14 +15,16 @@ Regras (decididas com o usuário em 2026-10-22, sem passar pela diretoria):
     ou escreve outro — a diretoria ainda discute o formato), e as anteriores continuam
     sendo repetidas nos dois modos;
   - modo em `Configuracao.cce_modo`: desligado | gravar | gravar_e_transmitir;
-    `cce_tipger` (1 gera XML, 2 eDocs) para a transmissão;
+    `cce_tipger` (1 gera XML, 2 eDocs) para a transmissão; desde 2026-11-24 o modo
+    `gravar_e_transmitir` TRANSMITE PRIMEIRO (EmitirCartaCorrecao) e só com a autorização
+    faz o Gravar, já como Autorizada — ver `_transmitir_e_gravar`;
   - `SENIOR_WS_DRY_RUN` monta tudo, grava o rastro como `simulada` e não chama o Senior;
   - gravou de verdade → atualiza codtra/transportadora/frete do Pedido local e grava
     `PedidoLog` (`carta_correcao`); a etiqueta de volume pode ser reimpressa na hora.
 """
 import logging
 import unicodedata
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from django.db import transaction
 from django.utils import timezone
@@ -168,9 +170,9 @@ def classificar_rejeicao(cod, msg: str) -> tuple[str, str, str]:
     msg = (msg or '').strip()
     if cod == '10011':
         return (CartaCorrecao.Status.AGUARDANDO_SDE, 'Senior/SDE',
-                'o SDE (serviço de documentos eletrônicos do Senior) não recebeu a carta agora. A carta '
-                'FICOU GRAVADA no Senior e pode ser transmitida depois, pelo SDE ou pelo faturamento; o Separa '
-                'vai conferir a situação dela na E140CCE. Não refaça a correção.')
+                'o SDE (serviço de documentos eletrônicos do Senior) não recebeu a carta agora. Ela pode ser '
+                'transmitida depois, pelo SDE ou pelo faturamento; o Separa confere no eDocs e só atualiza a '
+                'nota quando a autorização chegar. Não refaça a correção.')
     if cod == '10021':
         return (CartaCorrecao.Status.ERRO_TRANSMITIR, 'Senior/SDE',
                 'a SEFAZ já tem uma carta com esta sequência (duplicata). Em geral a carta anterior desta nota '
@@ -657,17 +659,20 @@ def executar(pedido: Pedido, usuario, codtra_novo: str, frete_novo: str, volumes
 def _gravar_e_transmitir(pedido: Pedido, usuario, carta: CartaCorrecao, payload: dict, texto: str, situacao: dict,
                          modo: str, nova: dict | None, frete_novo: str, vol_novo: int | None,
                          acao_log: str = 'carta_correcao') -> CartaCorrecao:
-    """Chama o Gravar (e o EmitirCartaCorrecao, conforme o modo), grava o rastro e espelha a
-    mudança no Pedido. Usado pelo `executar` e pelo `reenviar`."""
-    nf_codfil, nf_codsnf, nf_numero = carta.nf_codfil, carta.nf_codsnf, carta.nf_numero
-    muda_transportadora, muda_frete, muda_volumes = bool(nova), bool(frete_novo), vol_novo is not None
+    """Chama o Senior conforme o modo, grava o rastro e espelha a mudança no Pedido. Usado pelo
+    `executar` e pelo `reenviar`. `gravar` = só o Gravar ("Não enviada"); `gravar_e_transmitir` =
+    EmitirCartaCorrecao e, autorizada, Gravar como Autorizada (`_transmitir_e_gravar`).
+    `nova`/`frete_novo`/`vol_novo` ficaram só pela assinatura: o que mudou está na carta."""
     if senior.dry_run():
         carta.save()
         _log(pedido, usuario, carta, acao=acao_log)
         logger.info('carta_correcao simulada (dry-run)', extra={'pedido': pedido.id, 'carta': carta.id})
         return carta
 
-    # --- 1) Gravar -----------------------------------------------------------------
+    if modo == 'gravar_e_transmitir':
+        return _transmitir_e_gravar(pedido, usuario, carta, payload, texto, situacao, acao_log)
+
+    # --- modo 'gravar': só cria a carta "Não enviada"; o faturamento transmite no Senior ------
     try:
         retorno = senior.gravar_carta(payload)
     except senior.ErroSenior as e:
@@ -687,73 +692,248 @@ def _gravar_e_transmitir(pedido: Pedido, usuario, carta: CartaCorrecao, payload:
     carta.status = CartaCorrecao.Status.GRAVADA
     with transaction.atomic():
         carta.save()
-        campos = []
-        if muda_transportadora:
-            pedido.codtra = nova['codtra']
-            pedido.transportadora = nova['nome']
-            campos += ['codtra', 'transportadora']
-        if muda_frete:
-            pedido.frete = frete_novo
-            campos.append('frete')
-        if muda_volumes:
-            # o Gravar já trocou o qtdemb da nota: espelha aqui sem esperar o beat
-            pedido.nf_volumes = vol_novo
-            campos.append('nf_volumes')
-        if campos:
-            pedido.save(update_fields=campos)
+        _espelhar_no_pedido(pedido, carta)
         _log(pedido, usuario, carta, acao=acao_log)
     logger.info('carta_correcao gravada', extra={'pedido': pedido.id, 'carta': carta.id})
-    if muda_volumes or muda_transportadora:
-        # Etiqueta de volume: a correção pode ter sido exatamente o que a travava (volumes
-        # diferentes da NF, sem transportadora) — Conferido recente sem impressão sai agora.
-        from apps.impressao.services import disparar_se_pendente  # lazy: evita ciclo
-        try:
-            disparar_se_pendente(pedido)
-        except Exception:
-            logger.exception('etiqueta de volume: falha ao disparar após carta de correção', extra={'pedido': pedido.id})
-
-    # --- 2) Transmitir (opcional) ----------------------------------------------------
-    if modo == 'gravar_e_transmitir':
-        cabecalho = {
-            'codEmp': SENIOR_CODEMP, 'codFIl': int(nf_codfil), 'codSnf': str(nf_codsnf),
-            'numNfv': int(nf_numero),
-            'datEve': payload['datEve'], 'horEve': payload['horEve'],
-            'desCor': texto, 'tipGer': tipger_atual(),
-        }
-        if situacao.get('chvdoe'):
-            cabecalho['chvDoe'] = situacao['chvdoe']
-        carta.payload_transmitir = cabecalho
-        try:
-            ret = senior.transmitir_carta(cabecalho)
-            carta.retorno_transmitir = _json(ret)
-            retornos = ret.get('retornos') or []
-            r0 = retornos[0] if retornos else {}
-            ok = ret.get('tipoRetorno') == 0 and not ret.get('erroExecucao') and (r0.get('tipRet', 0) == 0)
-            carta.sitdoe = r0.get('sitDoe')
-            carta.protocolo = str(r0.get('numPrt') or '').strip()[:30]
-            if r0.get('datAut'):
-                carta.autorizada_em = f"{r0.get('datAut')} {r0.get('horAut') or ''}".strip()[:20]
-            if ok and carta.protocolo:
-                carta.status = CartaCorrecao.Status.TRANSMITIDA
-            elif ok:
-                # 2026-11-23: "autorizado com sucesso" SEM protocolo só quer dizer que o Senior
-                # aceitou o pedido; a autorização vem depois pelo SDE (ou não vem — 24 cartas
-                # ficaram 'Não enviada' assim). Só a E140CCE confirma: o beat reconcilia.
-                carta.status = CartaCorrecao.Status.AGUARDANDO_SDE
-                carta.erro = MSG_SEM_PROTOCOLO
-            else:
-                bruto = (r0.get('msgRet') or ret.get('mensagemRetorno') or ret.get('erroExecucao') or 'tipRet -1')
-                status_novo, fonte, explicacao = classificar_rejeicao(r0.get('codRej'), bruto)
-                carta.status = status_novo
-                carta.erro = (f"{fonte} {r0.get('codRej')}: {explicacao}" if r0.get('codRej') else explicacao)[:2000]
-        except senior.ErroSenior as e:
-            # sem resposta do WS: a carta pode ou não ter saído — trata como incerta (aguardando)
-            carta.status = CartaCorrecao.Status.AGUARDANDO_SDE
-            carta.erro = f'Sem resposta do EmitirCartaCorrecao ({str(e)[:300]}). A carta ficou gravada; o Separa vai conferir na E140CCE.'[:2000]
-        carta.save()
-        _log(pedido, usuario, carta, acao='carta_correcao_transmissao')
-        logger.info('carta_correcao transmissão %s', carta.status, extra={'pedido': pedido.id, 'carta': carta.id})
+    _disparar_etiqueta(pedido, carta)
     return carta
+
+
+# ---------------------------------------------------------------------------
+# Transmitir primeiro, gravar depois (2026-11-24)
+#
+# Até 24/11 a ordem era Gravar ("Não enviada") → EmitirCartaCorrecao. Provado em produção nesse
+# dia (NF 150786 e 151418): o Emitir cria a própria linha na E140CCE e transmite a linha NÃO
+# autorizada de menor sequência da nota. Com a linha do Gravar na frente, o retorno da SEFAZ
+# não era registrado no ERP (linha "Não enviada" + linha do Emitir em erro), a 2ª carta da nota
+# voltava 10021 e a nota já tinha sido alterada pelo Gravar mesmo quando a transmissão falhava.
+# Agora: (1) EmitirCartaCorrecao sozinho — a resposta já traz o protocolo e o ERP fica com uma
+# linha Autorizada; (2) só com a autorização, Gravar com sitCce 3 + protocolo + data/hora, que
+# é o uso documentado desses campos e atualiza transportadora/frete/volumes da nota. Se a
+# transmissão falha, nada muda na nota. Se o (2) falha, a carta já vale na SEFAZ e o beat
+# `verificar_cartas_pendentes` repete o Gravar até passar.
+# ---------------------------------------------------------------------------
+
+CAMPOS_NF_GRAVAR = ('codTra', 'cifFob', 'qtdEmb')
+MAX_TENTATIVAS_GRAVAR = 30          # ~1 h de beat (2 min); depois fica para a TI olhar
+# O Gravar com sitCce 3 recusa "Hora de autorização deve ser maior que hora do evento": o ERP
+# troca o horEve enviado por um horário logo depois da carta anterior da nota (visto: +1 min
+# sobre a linha do Emitir), então a hora de autorização precisa de folga sobre a do evento.
+MARGENS_HORA_AUT_MIN = (3, 15)
+
+
+def _precisa_gravar(carta: CartaCorrecao) -> bool:
+    """A carta (fluxo novo) tem algo a atualizar na nota pelo Gravar como Autorizada."""
+    pg = carta.payload_gravar or {}
+    return pg.get('sitCce') == '3' and any(pg.get(k) for k in CAMPOS_NF_GRAVAR)
+
+
+def _gravacao_ok(carta: CartaCorrecao) -> bool:
+    return (carta.retorno_gravar or {}).get('tipoRetorno') == 0
+
+
+def gravacao_pendente(carta: CartaCorrecao) -> bool:
+    """Autorizada na SEFAZ, mas a nota ainda não foi atualizada no Senior."""
+    return (carta.status == CartaCorrecao.Status.TRANSMITIDA and bool((carta.protocolo or '').strip())
+            and _precisa_gravar(carta) and not _gravacao_ok(carta))
+
+
+def _espelhar_no_pedido(pedido: Pedido, carta: CartaCorrecao) -> list[str]:
+    """O Gravar trocou a nota no Senior: espelha transportadora/frete/volumes no Pedido sem
+    esperar o beat. Chamar dentro de transação, junto com o `carta.save()`."""
+    campos = []
+    if carta.codtra_novo and carta.codtra_novo != carta.codtra_anterior:
+        pedido.codtra = carta.codtra_novo
+        pedido.transportadora = carta.transportadora_nova
+        campos += ['codtra', 'transportadora']
+    if carta.frete_novo and carta.frete_novo != carta.frete_anterior:
+        pedido.frete = carta.frete_novo
+        campos.append('frete')
+    if carta.volumes_novo is not None:
+        pedido.nf_volumes = carta.volumes_novo
+        campos.append('nf_volumes')
+    if campos:
+        pedido.save(update_fields=campos)
+    return campos
+
+
+def _disparar_etiqueta(pedido: Pedido, carta: CartaCorrecao) -> None:
+    """Etiqueta de volume: a correção pode ter sido exatamente o que a travava (volumes
+    diferentes da NF, sem transportadora) — Conferido recente sem impressão sai agora."""
+    if carta.volumes_novo is None and carta.codtra_novo == carta.codtra_anterior:
+        return
+    from apps.impressao.services import disparar_se_pendente  # lazy: evita ciclo
+    try:
+        disparar_se_pendente(pedido)
+    except Exception:
+        logger.exception('etiqueta de volume: falha ao disparar após carta de correção', extra={'pedido': pedido.id})
+
+
+def _gravar_autorizada(carta: CartaCorrecao) -> bool:
+    """Passo 2: `Gravar` com sitCce 3 + protocolo, levando transportadora/frete/volumes para a
+    nota. Só preenche a carta (payload/retorno/erro) — quem chama salva e espelha no Pedido.
+    True = a nota foi atualizada (ou não havia nada para atualizar)."""
+    if not _precisa_gravar(carta) or _gravacao_ok(carta):
+        return True
+    pg = dict(carta.payload_gravar)
+    tentativas = int((carta.retorno_gravar or {}).get('tentativas') or 0) + 1
+    agora = timezone.localtime().replace(tzinfo=None, second=0, microsecond=0)
+    try:
+        evento = datetime.strptime(f"{pg.get('datEve')} {pg.get('horEve')}", '%d/%m/%Y %H:%M')
+    except (TypeError, ValueError):
+        evento = agora
+    ret = {}
+    for margem in MARGENS_HORA_AUT_MIN:
+        aut = max(agora, evento + timedelta(minutes=margem))
+        pg.update({'numPrt': carta.protocolo, 'datAut': aut.strftime('%d/%m/%Y'), 'horAut': aut.strftime('%H:%M')})
+        try:
+            ret = _json(senior.gravar_carta(pg))
+        except senior.ErroSenior as e:
+            ret = {'tipoRetorno': None, 'mensagemRetorno': f'sem resposta do Gravar: {str(e)[:300]}'}
+            break
+        if ret.get('tipoRetorno') == 0 and not ret.get('erroExecucao'):
+            break
+        if ret.get('tipoRetorno') == 0:      # erroExecucao preenchido: não conta como gravado
+            ret['tipoRetorno'] = -1
+        if 'hora de autoriza' not in _ascii_minusculo(ret.get('mensagemRetorno')):
+            break
+        evento = max(evento, agora)          # 2ª tentativa: folga maior a partir de agora
+    carta.payload_gravar = pg
+    carta.retorno_gravar = {**ret, 'tentativas': tentativas}
+    if _gravacao_ok(carta):
+        carta.erro = ''
+        return True
+    motivo = (ret.get('mensagemRetorno') or ret.get('erroExecucao') or 'tipoRetorno -1')
+    final = tentativas >= MAX_TENTATIVAS_GRAVAR
+    carta.erro = (f'A carta foi autorizada na SEFAZ (protocolo {carta.protocolo}), mas o Senior ainda não atualizou a '
+                  f'nota: {motivo} '
+                  + ('O Separa parou de tentar: avise a TI.' if final
+                     else 'O Separa tenta de novo sozinho a cada 2 minutos; não refaça a correção.'))[:2000]
+    return False
+
+
+def _ascii_minusculo(texto) -> str:
+    return _ascii_maiusculo(str(texto or '')).lower()
+
+
+def _transmitir_e_gravar(pedido: Pedido, usuario, carta: CartaCorrecao, payload: dict, texto: str,
+                         situacao: dict, acao_log: str) -> CartaCorrecao:
+    """Modo `gravar_e_transmitir` desde 2026-11-24: EmitirCartaCorrecao primeiro; com a
+    autorização, Gravar como Autorizada (ver o comentário acima)."""
+    cabecalho = {
+        'codEmp': SENIOR_CODEMP, 'codFIl': int(carta.nf_codfil), 'codSnf': str(carta.nf_codsnf),
+        'numNfv': int(carta.nf_numero),
+        'datEve': payload['datEve'], 'horEve': payload['horEve'],
+        'desCor': texto, 'tipGer': tipger_atual(),
+    }
+    if situacao.get('chvdoe'):
+        cabecalho['chvDoe'] = situacao['chvdoe']
+    carta.payload_transmitir = cabecalho
+    # o que o Gravar vai levar DEPOIS da autorização (protocolo e data/hora entram na hora)
+    carta.payload_gravar = {**payload, 'sitCce': '3'}
+
+    try:
+        ret = senior.transmitir_carta(cabecalho)
+    except senior.ErroSenior as e:
+        # sem resposta do WS: a carta pode ou não ter saído — o beat confere no eDocs
+        carta.status = CartaCorrecao.Status.AGUARDANDO_SDE
+        carta.erro = (f'Sem resposta do EmitirCartaCorrecao ({str(e)[:300]}). O Separa confere no eDocs se a carta '
+                      'saiu; a nota só é alterada depois da autorização. Não refaça a correção.')[:2000]
+        carta.save()
+        _log(pedido, usuario, carta, acao=acao_log)
+        return carta
+
+    carta.retorno_transmitir = _json(ret)
+    retornos = ret.get('retornos') or []
+    r0 = retornos[0] if retornos else {}
+    ok = ret.get('tipoRetorno') == 0 and not ret.get('erroExecucao') and (r0.get('tipRet', 0) == 0)
+    carta.sitdoe = r0.get('sitDoe')
+    carta.protocolo = str(r0.get('numPrt') or '').strip()[:30]
+    if r0.get('datAut'):
+        carta.autorizada_em = f"{r0.get('datAut')} {r0.get('horAut') or ''}".strip()[:20]
+    if ok and carta.protocolo:
+        carta.status = CartaCorrecao.Status.TRANSMITIDA
+    elif ok:
+        # "autorizado com sucesso" sem protocolo = o Senior só aceitou o pedido; o beat confere
+        # no eDocs e, quando a autorização chegar, faz o Gravar.
+        carta.status = CartaCorrecao.Status.AGUARDANDO_SDE
+        carta.erro = MSG_SEM_PROTOCOLO
+    else:
+        bruto = (r0.get('msgRet') or ret.get('mensagemRetorno') or ret.get('erroExecucao') or 'tipRet -1')
+        status_novo, fonte, explicacao = classificar_rejeicao(r0.get('codRej'), bruto)
+        carta.status = status_novo
+        carta.erro = (f"{fonte} {r0.get('codRej')}: {explicacao}" if r0.get('codRej') else explicacao)[:2000]
+        if status_novo == CartaCorrecao.Status.ERRO_TRANSMITIR:
+            carta.erro = (carta.erro + ' A nota não foi alterada.')[:2000]
+
+    nota_atualizada = False
+    if carta.status == CartaCorrecao.Status.TRANSMITIDA:
+        # antes do primeiro save: o beat não enxerga a carta e não corre junto com este Gravar
+        nota_atualizada = _gravar_autorizada(carta) and _precisa_gravar(carta)
+    with transaction.atomic():
+        carta.save()
+        if nota_atualizada:
+            _espelhar_no_pedido(pedido, carta)
+        _log(pedido, usuario, carta, acao=acao_log)
+    logger.info('carta_correcao transmissão %s (nota atualizada: %s)', carta.status, nota_atualizada,
+                extra={'pedido': pedido.id, 'carta': carta.id})
+    if nota_atualizada:
+        _disparar_etiqueta(pedido, carta)
+    return carta
+
+
+def completar_gravacoes(usuario=None) -> dict:
+    """Beat: cartas autorizadas na SEFAZ cuja nota ainda não foi atualizada no Senior (o Gravar
+    do passo 2 falhou, ou a autorização só chegou depois pelo eDocs) → tenta o Gravar de novo."""
+    feitas = falhas = 0
+    ids = [c.id for c in CartaCorrecao.objects.filter(
+        status=CartaCorrecao.Status.TRANSMITIDA, payload_gravar__sitCce='3',
+        criado_em__gte=timezone.now() - timedelta(days=7)).exclude(protocolo='')
+        if gravacao_pendente(c)
+        and int((c.retorno_gravar or {}).get('tentativas') or 0) < MAX_TENTATIVAS_GRAVAR]
+    for carta_id in ids:
+        try:
+            ok = completar_gravacao(carta_id, usuario)
+        except Exception:
+            logger.exception('carta_correcao: falha ao completar a gravação da carta %s', carta_id)
+            ok = False
+        feitas += 1 if ok else 0
+        falhas += 1 if ok is False else 0
+    return {'pendentes': len(ids), 'gravadas': feitas, 'falhas': falhas}
+
+
+def completar_gravacao(carta_id: int, usuario=None) -> bool | None:
+    """True = nota atualizada agora; False = tentou e o Senior recusou; None = nada a fazer."""
+    with transaction.atomic():
+        carta = (CartaCorrecao.objects.select_for_update(skip_locked=True, of=('self',))
+                 .select_related('pedido').filter(id=carta_id).first())
+        if carta is None or not gravacao_pendente(carta):
+            return None
+        pedido = carta.pedido
+        ident = (carta.nf_codfil, carta.nf_codsnf, carta.nf_numero)
+        # Não gravar duas vezes: se a resposta de um Gravar se perdeu, a linha dele (usuário 0,
+        # Autorizada, com este protocolo) já está na E140CCE.
+        anteriores = senior.cartas_anteriores(*ident)
+        if not anteriores.get('disponivel'):
+            return None
+        ja = any((c.get('protocolo') or '').strip() == carta.protocolo.strip() and c.get('usuario_senior') == 0
+                 for c in [*anteriores.get('cartas', []), *anteriores.get('copias', [])])
+        if ja:
+            carta.retorno_gravar = {'tipoRetorno': 0, 'mensagemRetorno': 'já estava gravada no Senior',
+                                    'tentativas': int((carta.retorno_gravar or {}).get('tentativas') or 0)}
+            carta.erro = ''
+            ok = True
+        else:
+            ok = _gravar_autorizada(carta)
+        carta.save(update_fields=['payload_gravar', 'retorno_gravar', 'erro'])
+        if ok:
+            _espelhar_no_pedido(pedido, carta)
+            _log(pedido, usuario, carta, acao='carta_correcao_verificada')
+    logger.info('carta_correcao %s: gravação depois da autorização %s', carta_id, 'ok' if ok else 'recusada',
+                extra={'pedido': pedido.id, 'carta': carta_id})
+    if ok:
+        _disparar_etiqueta(pedido, carta)
+    return ok
 
 
 def montar_texto_completo(situacao: dict, anteriores: list[dict]) -> str:

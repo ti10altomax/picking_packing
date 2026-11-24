@@ -23,7 +23,7 @@ JANELA_DIAS = 30
 @registrar_execucao()
 def verificar_cartas_pendentes():
     from .models import CartaCorrecao
-    from .services import reconciliar_nf
+    from .services import completar_gravacoes, reconciliar_nf
 
     limite = timezone.now() - dt.timedelta(days=JANELA_DIAS)
     # "Transmitida" sem protocolo (2026-11-23) também: o Senior respondia "autorizado com
@@ -46,6 +46,13 @@ def verificar_cartas_pendentes():
         except Exception:
             falhas += 1
             logger.exception('carta_correcao: falha ao verificar NF %s', ident[2], extra={'pedido': pedido.id})
-    logger.info('carta_correcao: %d nota(s) verificada(s), %d carta(s) atualizada(s), %d falha(s)',
-                len(notas), mudadas, falhas)
-    return {'notas': len(notas), 'atualizadas': mudadas, 'falhas': falhas}
+    # 2026-11-24: carta autorizada na SEFAZ cuja nota ainda não foi atualizada no Senior (o Gravar
+    # vem depois da transmissão) — inclui as que acabaram de virar Transmitida aqui em cima.
+    try:
+        gravacoes = completar_gravacoes()
+    except Exception:
+        logger.exception('carta_correcao: falha ao completar gravações pendentes')
+        gravacoes = {'erro': True}
+    logger.info('carta_correcao: %d nota(s) verificada(s), %d carta(s) atualizada(s), %d falha(s), gravações %s',
+                len(notas), mudadas, falhas, gravacoes)
+    return {'notas': len(notas), 'atualizadas': mudadas, 'falhas': falhas, 'gravacoes': gravacoes}

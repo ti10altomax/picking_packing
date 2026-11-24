@@ -7,10 +7,13 @@ Leitura — read-only, como todo o resto do projeto:
   - lista de transportadoras (E073TRA) para o combo.
 
 Escrita — só por SOAP, nunca INSERT/UPDATE no Oracle:
-  - `cartadecorrecao.Gravar`: cria a carta (sitCce=1 "Não enviada") e, de carona,
-    atualiza transportadora / CIF-FOB da própria NF. Não transmite.
-  - `documentofiscal.EmitirCartaCorrecao`: transmite à SEFAZ (gera XML ou fala com o eDocs,
-    conforme `tipGer`). Só no modo `gravar_e_transmitir`.
+  - `cartadecorrecao.Gravar`: cria uma linha de carta na E140CCE com a situação informada e,
+    de carona, atualiza transportadora / CIF-FOB / volumes da própria NF. Não transmite.
+  - `documentofiscal.EmitirCartaCorrecao`: cria a própria linha e transmite à SEFAZ (gera XML
+    ou fala com o eDocs, conforme `tipGer`). Só no modo `gravar_e_transmitir`.
+  Ordem desde 2026-11-24 (provada em produção): Emitir PRIMEIRO, Gravar depois com sitCce 3 +
+  protocolo. O Emitir transmite a linha NÃO autorizada de menor sequência que a nota tiver —
+  não o texto da chamada —, então a nota não pode ter linha pendente (ver `bloqueio_por_cartas`).
 
 Contratos conferidos no WSDL/XSD real do servidor em 2026-10-22 (ERP 5.10.4.119):
 tudo é string exceto `numNfv` (int) no Gravar; `cartaCorrecao` e `cabecalho` são listas.
@@ -74,7 +77,7 @@ QUERY_SITUACAO_NF = f"""
 # cancelamento e encerramento).
 TIPEVE_CARTA_CORRECAO = 110110
 QUERY_CARTAS_NF = f"""
-    SELECT cce.seqeve, cce.dateve, cce.horeve, cce.sitcce, cce.descor, cce.numprt, cce.dataut, cce.horaut
+    SELECT cce.seqeve, cce.dateve, cce.horeve, cce.sitcce, cce.descor, cce.numprt, cce.dataut, cce.horaut, cce.usueve
     FROM E140CCE cce
     WHERE cce.codemp = {SENIOR_CODEMP}
       AND cce.codfil = :1
@@ -164,6 +167,8 @@ def _mapear_carta(row: dict) -> dict:
         'hora': _hora(row.get('horeve')),
         'protocolo': str(row.get('numprt') or '').strip(),
         'autorizada_em': f"{_data(row.get('dataut'))} {_hora(row.get('horaut'))}".strip(),
+        # quem criou a linha: 0 = cartadecorrecao.Gravar; o usuário do WS = EmitirCartaCorrecao
+        'usuario_senior': _int(row.get('usueve')),
     }
 
 
@@ -180,7 +185,8 @@ def cartas_anteriores(codfil, codsnf, numnfv) -> dict:
     edocs = eventos_edocs(chave_nf(codfil, codsnf, numnfv))
     cartas = _fundir_com_edocs(cartas, edocs['eventos'])
     cartas, ecos = _separar_ecos(cartas)
-    return {'disponivel': True, 'cartas': cartas, 'ecos_com_erro': ecos, 'erro': '',
+    cartas, copias = _juntar_copias(cartas)
+    return {'disponivel': True, 'cartas': cartas, 'ecos_com_erro': ecos, 'copias': copias, 'erro': '',
             'edocs_disponivel': edocs['disponivel'], 'edocs_erro': edocs['erro']}
 
 
@@ -307,6 +313,23 @@ def _separar_ecos(cartas: list[dict]) -> tuple[list[dict], list[dict]]:
     for c in cartas:
         (ecos if c['sitcce'] == SITCCE_ERRO and norm(c['texto']) in textos_validos else reais).append(c)
     return reais, ecos
+
+
+def _juntar_copias(cartas: list[dict]) -> tuple[list[dict], list[dict]]:
+    """(cartas, cópias). Desde 2026-11-24 cada carta do Separa deixa DUAS linhas Autorizadas com o
+    mesmo protocolo na E140CCE: a do EmitirCartaCorrecao (que transmitiu) e a do Gravar feito
+    depois, já como Autorizada, para atualizar a nota. É uma carta só: a segunda linha sai da
+    lista (não conta como carta anterior nem aparece na tela) e vai em `copias`."""
+    vistos, reais, copias = set(), [], []
+    for c in cartas:
+        prot = (c.get('protocolo') or '').strip()
+        if c.get('sitcce') == 3 and prot:
+            if prot in vistos:
+                copias.append(c)
+                continue
+            vistos.add(prot)
+        reais.append(c)
+    return reais, copias
 
 
 def transportadoras(q: str) -> list[dict]:
