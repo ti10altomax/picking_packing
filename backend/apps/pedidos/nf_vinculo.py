@@ -211,6 +211,8 @@ def conflito_conferencia_dupla(doc: Pedido) -> str:
         if p.status not in (Pedido.Status.CONFERIDO, Pedido.Status.EMBARCADO):
             return f'o pedido {p.numero_externo} dessa NF já está na conferência ({p.get_status_display()})'
         if not p.nf_numero or p.nf_numero == doc.numero_externo:
+            if p.status == Pedido.Status.EMBARCADO and p.status_anterior != Pedido.Status.CONFERIDO:
+                return f'o pedido {p.numero_externo} dessa NF já foi embarcado'
             return f'o pedido {p.numero_externo} já foi conferido e esta NF é o faturamento dele'
     return ''
 

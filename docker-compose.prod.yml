@@ -64,6 +64,9 @@ services:
       - redis
     # Sem --access-logfile: a linha de acesso sai pelo LogRequisicaoMiddleware
     # (JSON, com usuário e duração) — o do gunicorn seria duplicado.
+    # 3 processos × 4 threads (gthread, 2026-11-24): eram 3 workers síncronos = só 3
+    # requisições por vez; uma lista lenta (5 s) segurava a vaga e o bip do conferente
+    # esperava na fila. Com threads, quem espera o banco não trava os outros.
     # PROMETHEUS_MULTIPROC_DIR: os 3 workers do gunicorn escrevem contadores em
     # arquivos e o /metrics/ soma — sem isso cada scrape veria só um worker.
     # A pasta é zerada a cada subida (contadores de processo morto sumiriam errado).
@@ -75,7 +78,7 @@ services:
     command:
       - sh
       - -c
-      - "mkdir -p /tmp/prometheus && rm -f /tmp/prometheus/* && python manage.py migrate --noinput && python manage.py collectstatic --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 60 --error-logfile -"
+      - "mkdir -p /tmp/prometheus && rm -f /tmp/prometheus/* && python manage.py migrate --noinput && python manage.py collectstatic --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3 --worker-class gthread --threads 4 --timeout 60 --error-logfile -"
     # /api/health/ testa Postgres + Redis (apps/core/saude.py). `docker ps` mostra
     # (healthy)/(unhealthy); o Caddy e o frontend só dependem depois de saudável.
     healthcheck:

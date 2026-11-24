@@ -41,6 +41,8 @@ type ListaResposta = {
   outras_sequencias_pendentes: number
   sequencia_disponivel: { id: number; numero: number; descricao?: string } | null
   disponiveis: Pedido[]
+  // a lista vem cortada no servidor (50); este é o total da sequência (2026-11-24)
+  disponiveis_total?: number
 }
 
 // Ponto 4 da diretoria (leitura B): quando o código bipado bate com mais de um documento
@@ -74,6 +76,7 @@ export default function ConferenciaLista() {
   const [lastSync, setLastSync] = useState<Date | null>(null)
   const [seqDisponivel, setSeqDisponivel] = useState<{ id: number; numero: number; descricao?: string } | null>(null)
   const [disponiveis, setDisponiveis] = useState<Pedido[]>([])
+  const [totalDisponiveis, setTotalDisponiveis] = useState(0)
 
   // Barra de bipagem da nota — mesma barra da tela do pedido: recebe o leitor do TC21
   // (DataWedge em modo teclado + Enter), sem teclado virtual.
@@ -98,6 +101,7 @@ export default function ConferenciaLista() {
       setOutras(data.outras_sequencias_pendentes)
       setSeqDisponivel(data.sequencia_disponivel ?? null)
       setDisponiveis(data.disponiveis ?? [])
+      setTotalDisponiveis(data.disponiveis_total ?? (data.disponiveis ?? []).length)
       setLastSync(new Date())
     } catch {
       // mostrar erro depois com Dialog
@@ -340,8 +344,13 @@ export default function ConferenciaLista() {
             seqDisponivel && disponiveis.length > 0 ? (
               <View className="pt-3">
                 <Text className="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-2">
-                  Disponíveis na {rotuloSequencia(seqDisponivel).replace('Sequência', 'sequência')} · {disponiveis.length} · bipe a nota ou toque para pegar
+                  Disponíveis na {rotuloSequencia(seqDisponivel).replace('Sequência', 'sequência')} · {totalDisponiveis} · bipe a nota ou toque para pegar
                 </Text>
+                {totalDisponiveis > disponiveis.length ? (
+                  <Text className="text-xs text-ink-subtle mb-2">
+                    Mostrando as {disponiveis.length} primeiras. Para pegar outra, bipe a nota.
+                  </Text>
+                ) : null}
                 {disponiveis.map((p) => (
                   <Pressable
                     key={`d-${p.id}`}

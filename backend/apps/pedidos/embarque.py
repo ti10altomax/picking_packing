@@ -79,8 +79,31 @@ def chave_nota(codfil, codsnf, numero) -> tuple[str, str, str]:
 
 
 def chave_do_pedido(pedido: Pedido) -> tuple[str, str, str] | None:
-    ident = pedido.identificacao_nf
-    return chave_nota(*ident) if ident else None
+    """Chave da nota do documento (a própria NF, ou a NF vinculada do pedido). Diferente de
+    `identificacao_nf`, aceita documento antigo sem filial — a filial sai '' e quem procura
+    usa `_achar` (série + número)."""
+    if pedido.tipo == Pedido.Tipo.NOTA_FISCAL:
+        codfil, codsnf, numero = pedido.codfil, pedido.codsnf, pedido.numero_externo
+    else:
+        codfil, codsnf, numero = pedido.nf_codfil, pedido.nf_codsnf, pedido.nf_numero
+    if not _s(numero):
+        return None
+    return chave_nota(codfil, codsnf, numero)
+
+
+def _achar(mapa: dict, chave):
+    """(chave que casou, embarque) para a nota em `mapa`, ou (None, None). Documento antigo sem
+    filial casa pela série + número — o mesmo critério na ida e na revisão do desfazer, senão
+    ele seria embarcado e desfeito a cada passada."""
+    if not chave:
+        return None, None
+    if chave in mapa:
+        return chave, mapa[chave]
+    if not chave[0]:
+        for c, emb in mapa.items():
+            if c[1] == chave[1] and c[2] == chave[2]:
+                return c, emb
+    return None, None
 
 
 def embarque_da_linha(row: dict) -> dict:
@@ -220,14 +243,9 @@ def _documentos_das_notas(chaves, status) -> list[tuple[int, tuple]]:
         peds = (Pedido.objects.filter(tipo=Pedido.Tipo.PEDIDO, status__in=status, nf_numero__in=bloco)
                 .values_list('id', 'nf_codfil', 'nf_codsnf', 'nf_numero'))
         for pid, codfil, codsnf, numero in list(nfs) + list(peds):
-            chave = chave_nota(codfil, codsnf, numero)
-            if chave in chaves:
-                achados.append((pid, chave))
-            elif not _s(codfil):
-                # compat: documento antigo sem filial casa pela série + número
-                alt = next((c for c in chaves if c[1] == chave[1] and c[2] == chave[2]), None)
-                if alt:
-                    achados.append((pid, alt))
+            casou, _ = _achar(chaves, chave_nota(codfil, codsnf, numero))
+            if casou:
+                achados.append((pid, casou))
     return achados
 
 
@@ -242,7 +260,7 @@ def sincronizar(rows, consultar_notas=None, dias_desfazer: int = 3) -> dict:
     resultado = {'notas_em_embarque': len(mapa), 'embarcados': 0, 'sem_conferencia': 0,
                  'avisos': 0, 'atualizados': 0, 'desfeitos': 0}
 
-    for pid, chave in _documentos_das_notas(set(mapa), STATUS_OLHADOS):
+    for pid, chave in _documentos_das_notas(mapa, STATUS_OLHADOS):
         try:
             feito = aplicar(pid, mapa[chave])
         except Exception:
@@ -267,7 +285,7 @@ def sincronizar(rows, consultar_notas=None, dias_desfazer: int = 3) -> dict:
     sumidos = []
     for p in recentes:
         chave = chave_do_pedido(p)
-        emb = mapa.get(chave) if chave else None
+        _, emb = _achar(mapa, chave)
         if emb is None:
             sumidos.append((p, chave))
         elif (p.embarque_numero, p.embarque_placa, p.embarque_motorista, p.embarcado_em) != (
@@ -285,16 +303,16 @@ def sincronizar(rows, consultar_notas=None, dias_desfazer: int = 3) -> dict:
             resultado['desfazer'] = 'falha_oracle'
         else:
             ainda = embarques_por_nota(confirmacao)
-            fora = [(p, chave) for p, chave in sumidos if not (chave and chave in ainda)]
+            fora = [(p, chave) for p, chave in sumidos if _achar(ainda, chave)[1] is None]
             if len(fora) > LIMITE_DESFAZER:
                 resultado['desfazer'] = f'ignorado_{len(fora)}_documentos'
                 logger.error('embarque: documentos demais sairiam de embarque de uma vez; desfazer ignorado',
                              extra={'documentos': len(fora), 'limite': LIMITE_DESFAZER})
                 fora = []
             for p, chave in sumidos:
-                if chave and chave in ainda:
-                    if aplicar(p.id, ainda[chave]) == 'atualizado':
-                        resultado['atualizados'] += 1
+                emb = _achar(ainda, chave)[1]
+                if emb is not None and aplicar(p.id, emb) == 'atualizado':
+                    resultado['atualizados'] += 1
             for p, chave in fora:
                 if desfazer(p.id):
                     resultado['desfeitos'] += 1

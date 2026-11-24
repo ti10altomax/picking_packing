@@ -98,6 +98,15 @@ DATABASES = {
         'PASSWORD': config('POSTGRES_PASSWORD'),
         'HOST': config('POSTGRES_HOST', default='postgres'),
         'PORT': config('POSTGRES_PORT', default='5432'),
+        # JIT do Postgres desligado na conexão do Separa (2026-11-24): a fila do Pátio
+        # (`?ordem=transportadora`) rodava em 0,2 s e gastava mais 5 s só compilando — o
+        # planejador superestima o custo das subconsultas e passa do `jit_above_cost`.
+        # Nossas consultas são curtas (OLTP); JIT só serve a relatório pesado. POSTGRES_OPTIONS
+        # vazio no .env volta ao padrão do servidor.
+        'OPTIONS': (
+            {'options': config('POSTGRES_OPTIONS', default='-c jit=off')}
+            if config('POSTGRES_OPTIONS', default='-c jit=off') else {}
+        ),
     }
 }
 

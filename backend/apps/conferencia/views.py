@@ -134,15 +134,44 @@ def _trava_para_pegar(user, seq):
     return None
 
 
+# Quantos "Disponíveis na sequência" vão para a tela do conferente (2026-11-24). A lista
+# inteira, com os itens de cada documento, chegou a 761 documentos / 12 mil itens / 3 MB /
+# 1.500 consultas / 5 s por carregamento (sequência de 1.157 notas), refeita a cada 30 s por
+# conferente — travou o servidor. O cartão só mostra número, cliente, transportadora e
+# quantidade de itens; quem quer um documento fora dos primeiros bipa a nota (`pegar`).
+LIMITE_DISPONIVEIS = 50
+
+
 def _disponiveis(seq):
-    """Pedidos da sequência ainda sem conferente (o Pátio sequenciou, ninguém pegou)."""
+    """Pedidos da sequência ainda sem conferente (o Pátio sequenciou, ninguém pegou).
+    Sem os itens — só a contagem, anotada na própria consulta."""
     return (
         seq.pedidos
         .filter(status=Pedido.Status.SELECIONADO, conferente__isnull=True)
-        .select_related('sequencia')
-        .prefetch_related('itens')
-        .order_by('criado_em')
+        .annotate(n_itens=models.Count('itens'))
+        .order_by('criado_em', 'id')
     )
+
+
+def _serializar_disponivel(p: Pedido, seq) -> dict:
+    """Linha enxuta de "Disponíveis na sequência": o que o cartão mostra e o `pegar` usa."""
+    return {
+        'id': p.id,
+        'tipo': p.tipo,
+        'numero_externo': p.numero_externo,
+        'pedidos_origem': p.pedidos_origem,
+        'frete': p.frete,
+        'frete_label': p.frete_label,
+        'transportadora': p.transportadora,
+        'cliente': p.cliente,
+        'status': p.status,
+        'criado_em': p.criado_em,
+        'sequencia': {'id': seq.id, 'numero': seq.numero, 'descricao': seq.descricao},
+        'qtd_itens': p.n_itens,
+        # ninguém pegou ainda: mantém o formato que as telas esperam de um documento
+        'atribuido_em': None,
+        'percent_conferido': 0,
+    }
 
 
 def _sequencia_para_pegar(user):
@@ -393,7 +422,16 @@ def listar_atribuidos(request):
     # Ponto 4 (leitura B): pedidos sem conferente que ele pode pegar agora — bipando a
     # nota ou tocando na lista. Só da sequência mais antiga liberada pela trava.
     seq_pegar = _sequencia_para_pegar(request.user)
-    disponiveis = list(_disponiveis(seq_pegar)) if seq_pegar else []
+    if seq_pegar:
+        qs_disponiveis = _disponiveis(seq_pegar)
+        disponiveis = list(qs_disponiveis[:LIMITE_DISPONIVEIS])
+        # só conta de novo quando a página veio cheia (pode haver mais)
+        total_disponiveis = (
+            seq_pegar.pedidos.filter(status=Pedido.Status.SELECIONADO, conferente__isnull=True).count()
+            if len(disponiveis) == LIMITE_DISPONIVEIS else len(disponiveis)
+        )
+    else:
+        disponiveis, total_disponiveis = [], 0
 
     return Response({
         'sequencia': {'id': ativa.id, 'numero': ativa.numero, 'descricao': ativa.descricao} if ativa else None,
@@ -405,7 +443,9 @@ def listar_atribuidos(request):
         'sequencia_disponivel': (
             {'id': seq_pegar.id, 'numero': seq_pegar.numero, 'descricao': seq_pegar.descricao} if seq_pegar else None
         ),
-        'disponiveis': [_serializar_pedido(p) for p in disponiveis],
+        'disponiveis': [_serializar_disponivel(p, seq_pegar) for p in disponiveis],
+        # a lista vem cortada em LIMITE_DISPONIVEIS; o total é o da sequência
+        'disponiveis_total': total_disponiveis,
     })
 
 
