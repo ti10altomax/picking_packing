@@ -2,6 +2,7 @@ import logging
 import re
 from datetime import timedelta
 from django.db import models, transaction
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 from rest_framework import status as http_status
 from rest_framework.decorators import api_view
@@ -107,7 +108,7 @@ def _sequencia_ativa(user):
     return None, None
 
 
-def _trava_para_pegar(user, seq):
+def _trava_para_pegar(user, seq, estado=None):
     """Mensagem de bloqueio da trava de sequência para o conferente PEGAR um pedido
     de `seq` (ponto 4 da diretoria, leitura B — 2026-10-06), ou None se pode.
 
@@ -117,7 +118,9 @@ def _trava_para_pegar(user, seq):
     """
     if user.perfil == 'admin':
         return None
-    ativa, aguardando = _sequencia_ativa(user)
+    # `estado` = (ativa, aguardando) já calculado por quem chama em laço (a lista do conferente
+    # perguntava de novo para cada sequência aberta — 2026-11-24)
+    ativa, aguardando = estado if estado is not None else _sequencia_ativa(user)
     if aguardando:
         return f'aguarde a conclusão da sequência {aguardando.numero} para pegar da próxima'
     if ativa and ativa.id != seq.id:
@@ -148,7 +151,13 @@ def _disponiveis(seq):
     return (
         seq.pedidos
         .filter(status=Pedido.Status.SELECIONADO, conferente__isnull=True)
-        .annotate(n_itens=models.Count('itens'))
+        # subconsulta, não JOIN + GROUP BY: o Postgres só conta os itens das linhas que
+        # saem depois do corte (50), em vez de agrupar os itens da sequência inteira
+        .annotate(n_itens=Coalesce(models.Subquery(
+            PedidoItem.objects.filter(pedido=models.OuterRef('pk'))
+            .order_by().values('pedido').annotate(c=models.Count('id')).values('c'),
+            output_field=models.IntegerField(),
+        ), 0))
         .order_by('criado_em', 'id')
     )
 
@@ -174,7 +183,7 @@ def _serializar_disponivel(p: Pedido, seq) -> dict:
     }
 
 
-def _sequencia_para_pegar(user):
+def _sequencia_para_pegar(user, estado=None):
     """Sequência mais antiga com pedidos sem conferente de onde este conferente pode
     pegar agora, ou None. Guia a lista "Disponíveis" do coletor."""
     seqs = (
@@ -183,8 +192,10 @@ def _sequencia_para_pegar(user):
         .filter(pedidos__status=Pedido.Status.SELECIONADO, pedidos__conferente__isnull=True)
         .distinct().order_by('numero')
     )
+    if estado is None and user.perfil != 'admin':
+        estado = _sequencia_ativa(user)
     for seq in seqs:
-        if _trava_para_pegar(user, seq) is None:
+        if _trava_para_pegar(user, seq, estado) is None:
             return seq
     return None
 
@@ -421,7 +432,7 @@ def listar_atribuidos(request):
 
     # Ponto 4 (leitura B): pedidos sem conferente que ele pode pegar agora — bipando a
     # nota ou tocando na lista. Só da sequência mais antiga liberada pela trava.
-    seq_pegar = _sequencia_para_pegar(request.user)
+    seq_pegar = _sequencia_para_pegar(request.user, (ativa, aguardando))
     if seq_pegar:
         qs_disponiveis = _disponiveis(seq_pegar)
         disponiveis = list(qs_disponiveis[:LIMITE_DISPONIVEIS])
