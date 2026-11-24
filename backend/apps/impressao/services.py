@@ -107,7 +107,11 @@ def verificar_elegivel(pedido: Pedido, *, exige_nf: bool | None = None,
     """
     if pedido.status == Pedido.Status.CANCELADO:
         raise ErroImpressao('pedido_cancelado', 'documento cancelado no Senior — não imprime etiqueta')
-    if pedido.status != Pedido.Status.CONFERIDO:
+    # Embarcado que passou pela conferência ainda pode reimprimir (etiqueta perdida no
+    # transporte); o que embarcou sem conferir não tem volumes.
+    conferido = pedido.status == Pedido.Status.CONFERIDO or (
+        pedido.status == Pedido.Status.EMBARCADO and pedido.status_anterior == Pedido.Status.CONFERIDO)
+    if not conferido:
         raise ErroImpressao(
             'nao_conferido',
             f'etiqueta só depois da conferência concluída (status atual: "{pedido.get_status_display()}")',

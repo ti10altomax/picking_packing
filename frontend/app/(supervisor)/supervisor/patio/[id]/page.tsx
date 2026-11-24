@@ -20,6 +20,7 @@ const STATUS_PEDIDO: Record<string, { label: string; cor: string }> = {
   conferido: { label: 'Conferido', cor: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' },
   nao_conforme: { label: 'Não conforme', cor: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300' },
   cancelado: { label: 'Cancelado', cor: 'bg-zinc-200 text-zinc-600 dark:bg-zinc-500/15 dark:text-zinc-400' },
+  embarcado: { label: 'Embarcado', cor: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-500/15 dark:text-cyan-300' },
 }
 
 const STATUS_SEQ: Record<string, { label: string; cor: string }> = {
@@ -37,7 +38,7 @@ const EDITAVEIS = ['selecionado', 'atribuido']
 function semAcento(s: string) {
   return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 }
-const ORDEM_STATUS = ['selecionado', 'atribuido', 'conferindo', 'aguardando_fechamento', 'conferido', 'nao_conforme', 'cancelado']
+const ORDEM_STATUS = ['selecionado', 'atribuido', 'conferindo', 'aguardando_fechamento', 'conferido', 'embarcado', 'nao_conforme', 'cancelado']
 
 export default function SequenciaDetalhePage() {
   const router = useRouter()
@@ -353,6 +354,14 @@ export default function SequenciaDetalhePage() {
                       <span className="font-semibold text-ink">{p.numero_externo}</span>
                       <DocBadges tipo={p.tipo} frete={p.frete} origem={p.pedidos_origem} />
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cfg.cor}`}>{cfg.label}</span>
+                      {p.embarque_numero && p.status !== 'embarcado' && (
+                        <span
+                          className="text-xs px-2 py-0.5 rounded-full font-medium bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300"
+                          title={`A nota já está no embarque ${p.embarque_numero} do Senior`}
+                        >
+                          ⚠ Nota já embarcada
+                        </span>
+                      )}
                     </div>
                     <p className="text-sm text-ink-muted truncate">{p.cliente || '—'}</p>
                     {p.transportadora && (

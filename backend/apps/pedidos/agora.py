@@ -28,6 +28,9 @@ def painel() -> dict:
     hoje = local.replace(hour=0, minute=0, second=0, microsecond=0)
     uma_hora = agora - dt.timedelta(hours=1)
     S = Pedido.Status
+    # Conferido que já embarcou continua contando como conferência feita (`conferido_em`);
+    # o que embarcou sem conferir não tem `conferido_em` e fica de fora sozinho.
+    CONFERIDOS = (S.CONFERIDO, S.EMBARCADO)
 
     # ----- conferentes: o que cada um tem na mão -----
     ultimo_bip = (
@@ -50,7 +53,7 @@ def painel() -> dict:
         .values_list('usuario__username').annotate(n=Count('id')).values_list('usuario__username', 'n')
     )
     conferidos_hoje_por_usuario = dict(
-        Pedido.objects.filter(status=S.CONFERIDO, conferido_em__gte=hoje)
+        Pedido.objects.filter(status__in=CONFERIDOS, conferido_em__gte=hoje)
         .values_list('conferente__username').annotate(n=Count('id')).values_list('conferente__username', 'n')
     )
 
@@ -124,8 +127,8 @@ def painel() -> dict:
         'etiquetas_prontas': etiquetas.filter(pronta).count(),
         # nome mantido por compatibilidade com o APK; é "aguardando o Senior" (transportadora ou NF)
         'etiquetas_aguardando_transportadora': etiquetas.exclude(pronta).count(),
-        'conferidos_hoje': Pedido.objects.filter(status=S.CONFERIDO, conferido_em__gte=hoje).count(),
-        'conferidos_1h': Pedido.objects.filter(status=S.CONFERIDO, conferido_em__gte=uma_hora).count(),
+        'conferidos_hoje': Pedido.objects.filter(status__in=CONFERIDOS, conferido_em__gte=hoje).count(),
+        'conferidos_1h': Pedido.objects.filter(status__in=CONFERIDOS, conferido_em__gte=uma_hora).count(),
         'bips_1h': PedidoLog.objects.filter(acao='item_bipado', criado_em__gte=uma_hora).count(),
         'bips_hoje': PedidoLog.objects.filter(acao='item_bipado', criado_em__gte=hoje).count(),
         'divergencias_hoje': PedidoLog.objects.filter(acao='bip_codigo_divergente', criado_em__gte=hoje).count(),
@@ -145,10 +148,11 @@ def painel() -> dict:
             'selecionados': por_status.get(S.SELECIONADO, 0),
             'atribuidos': por_status.get(S.ATRIBUIDO, 0),
             'em_conferencia': por_status.get(S.CONFERINDO, 0),
-            'finalizados': sum(por_status.get(s, 0) for s in (S.CONFERIDO, S.AGUARDANDO_FECHAMENTO, S.NAO_CONFORME, S.CANCELADO)),
+            'finalizados': sum(por_status.get(s, 0) for s in (S.CONFERIDO, S.AGUARDANDO_FECHAMENTO, S.NAO_CONFORME, S.CANCELADO, S.EMBARCADO)),
             # pendentes devolvidos à fila, legado etc. — ainda contam no total da sequência
             'outros': sum(v for k, v in por_status.items() if k not in (
-                S.SELECIONADO, S.ATRIBUIDO, S.CONFERINDO, S.CONFERIDO, S.AGUARDANDO_FECHAMENTO, S.NAO_CONFORME, S.CANCELADO)),
+                S.SELECIONADO, S.ATRIBUIDO, S.CONFERINDO, S.CONFERIDO, S.AGUARDANDO_FECHAMENTO, S.NAO_CONFORME, S.CANCELADO,
+                S.EMBARCADO)),
             'conferentes': nomes,
             'criado_em': seq.criado_em,
         })
@@ -159,7 +163,7 @@ def painel() -> dict:
         .annotate(h=TruncHour('criado_em')).values_list('h').annotate(n=Count('id')).values_list('h', 'n')
     )
     conf_hora = dict(
-        Pedido.objects.filter(status=S.CONFERIDO, conferido_em__gte=hoje)
+        Pedido.objects.filter(status__in=CONFERIDOS, conferido_em__gte=hoje)
         .annotate(h=TruncHour('conferido_em')).values_list('h').annotate(n=Count('id')).values_list('h', 'n')
     )
     por_hora = []

@@ -35,6 +35,10 @@ def _localizacao(p: Pedido, numero: str) -> dict:
         S.AGUARDANDO_FECHAMENTO: ('fechamentos', 'conferido com sobra, esperando o Sup. Pátio fechar'),
         S.CONFERIDO: ('conferidos', f'conferido{" em " + quando if quando else ""}{" por " + conferente if conferente else ""}'),
         S.NAO_CONFORME: ('nao_conformes', f'marcado como não conforme{" por " + conferente if conferente else ""}'),
+        S.EMBARCADO: ('embarcados', 'embarcado'
+                      + (f' em {timezone.localtime(p.embarcado_em).strftime("%d/%m %H:%M")}' if p.embarcado_em else '')
+                      + (f' no embarque {p.embarque_numero}' if p.embarque_numero else '')
+                      + ('' if p.status_anterior == S.CONFERIDO else ' — saiu sem conferência')),
         S.CANCELADO: ('cancelados', (p.get_cancelado_origem_display() if p.cancelado_origem else 'cancelado').lower()),
     }.get(p.status, ('', p.get_status_display()))
     # como o número bateu: o próprio documento, a NF do pedido faturado ou o pedido de origem da NF
@@ -141,6 +145,13 @@ class PedidoViewSet(viewsets.ModelViewSet):
             qs = qs.filter(transportadora='')
         if self.request.query_params.get('sem_sequencia') == '1':
             qs = qs.filter(sequencia__isnull=True)
+        # Embarcados (2026-11-24): 'com' = passou pela conferência antes de sair;
+        # 'sem' = embarcou direto de Pendente/Selecionado
+        conferencia = self.request.query_params.get('conferencia', '').strip().lower()
+        if conferencia == 'com':
+            qs = qs.filter(status_anterior=Pedido.Status.CONFERIDO)
+        elif conferencia == 'sem':
+            qs = qs.exclude(status_anterior=Pedido.Status.CONFERIDO)
         if marketplace:
             qs = qs.filter(marketplace__slug=marketplace)
         if search:
@@ -149,6 +160,10 @@ class PedidoViewSet(viewsets.ModelViewSet):
             filtro = Q(numero_externo__icontains=search) | Q(cliente__icontains=search) | Q(nf_numero__icontains=search)
             if search.isdigit():
                 filtro |= Q(pedidos_origem__contains=[str(int(search))])
+            if status_filter == Pedido.Status.EMBARCADO:
+                # na lista de Embarcados também se procura pelo caminhão
+                filtro |= (Q(embarque_numero=search) | Q(embarque_placa__icontains=search)
+                           | Q(embarque_motorista__icontains=search) | Q(transportadora__icontains=search))
             qs = qs.filter(filtro)
 
         if self.request.query_params.get('ordem') == 'transportadora':
@@ -181,6 +196,9 @@ class PedidoViewSet(viewsets.ModelViewSet):
                 ),
             )
             return qs.order_by('-qtd_transportadora', 'transportadora', '-criado_em')
+        if self.request.query_params.get('ordem') == 'embarque':
+            # Embarcados: o que saiu por último primeiro, junto por embarque (caminhão)
+            return qs.order_by(models.F('embarcado_em').desc(nulls_last=True), '-embarque_numero', 'numero_externo')
         return qs.order_by('-criado_em')
 
     @action(detail=True, methods=['post'])

@@ -18,6 +18,7 @@ export const COR_STATUS: Record<string, string> = {
   aguardando_fechamento: 'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300',
   conferido: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
   nao_conforme: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300',
+  embarcado: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-500/15 dark:text-cyan-300',
   cancelado: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300',
 }
 
@@ -27,6 +28,7 @@ const ROTA: Record<string, (l: Localizacao) => string> = {
   sequencia: (l) => (l.sequencia ? `/supervisor/patio/${l.sequencia}` : '/supervisor/patio'),
   fechamentos: () => '/supervisor/fechamentos',
   conferidos: () => '/supervisor/conferidos',
+  embarcados: () => '/supervisor/embarcados',
   nao_conformes: () => '/supervisor/nao-conformes',
   cancelados: () => '/supervisor/cancelados',
 }

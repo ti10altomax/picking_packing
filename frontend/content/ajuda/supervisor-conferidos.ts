@@ -127,6 +127,10 @@ export const supervisorConferidos: AjudaTela = {
       oQueFazer: 'O documento mudou desde que a tela abriu (foi devolvido, cancelado ou outra pessoa mexeu nos volumes). Feche a janela, toque em "Atualizar" e confira de novo.',
     },
     {
+      quando: 'Um documento conferido sumiu da lista.',
+      oQueFazer: 'A nota dele entrou num embarque no Senior e o documento foi para Gestão → Embarcados. Lá continuam o Histórico, a reimpressão da etiqueta e o Corrigir NF.',
+    },
+    {
       quando: 'Nenhum pedido conferido.',
       oQueFazer: 'Nada foi concluído ainda, ou a busca não achou nada. Apague a busca e toque em "Atualizar".',
     },
@@ -149,5 +153,5 @@ export const supervisorConferidos: AjudaTela = {
     'Conferente esqueceu de abrir a caixa nova? Antes de pensar em "Devolver para Vendas", use "⇄ Mover itens entre volumes": a conferência continua valendo e só a divisão em volumes muda. Cada mudança fica no Histórico como "Volumes reorganizados".',
     'O código de barras da etiqueta é a chave de acesso do DANFE (44 dígitos), a mesma que a transportadora bipa na nota. A mesma chave sai em QR Code no canto direito do rodapé, para leitores 2D e câmeras.',
   ],
-  relacionadas: ['supervisor-conferidos-sem-transportadora', 'supervisor-etiquetas', 'supervisor-cartas', 'supervisor-agora', 'admin-impressoras'],
+  relacionadas: ['supervisor-conferidos-sem-transportadora', 'supervisor-embarcados', 'supervisor-etiquetas', 'supervisor-cartas', 'supervisor-agora', 'admin-impressoras'],
 }

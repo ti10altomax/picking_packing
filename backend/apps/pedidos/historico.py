@@ -104,6 +104,41 @@ def _nc(p):
     return txt
 
 
+def _quando(iso):
+    from django.utils import timezone
+    from django.utils.dateparse import parse_datetime
+    d = parse_datetime(iso) if iso else None
+    return timezone.localtime(d).strftime('%d/%m %H:%M') if d else ''
+
+
+def _embarque(p):
+    txt = f"embarque {p.get('embarque') or '?'}"
+    if p.get('placa'):
+        txt += f" · placa {p.get('placa')}"
+    if p.get('motorista'):
+        txt += f" · {p.get('motorista')}"
+    saida = _quando(p.get('embarcado_em'))
+    if saida:
+        txt += f' · saída {saida}'
+    return txt
+
+
+def _embarcado(p):
+    txt = _embarque(p)
+    if p.get('sem_conferencia'):
+        anterior = STATUS.get(p.get('status_anterior'), p.get('status_anterior') or '')
+        txt += f' · saiu sem conferência (estava {anterior})'
+    return txt
+
+
+def _embarque_desfeito(p):
+    txt = f"a nota saiu do embarque {p.get('embarque') or '?'} no Senior"
+    volta = STATUS.get(p.get('status'), p.get('status') or '')
+    if volta and not p.get('so_aviso'):
+        txt += f' · voltou a {volta}'
+    return txt
+
+
 def _retomado(p):
     if p.get('modo') == 'sequencia':
         if p.get('numero'):
@@ -163,6 +198,13 @@ ROTULOS = {
                                 f"{len(p.get('volumes_apagados') or [])} volume(s) apagado(s)",
                                 p.get('motivo') or '',
                             ) if x)),
+    # Embarque lido do Senior (E145EBQ/E145NFV, 2026-11-24) — apps/pedidos/embarque.py
+    'embarcado': ('Embarcado', 'fluxo', _embarcado),
+    'embarque_detectado': ('Nota já embarcada no Senior', 'alerta',
+                           lambda p: _embarque(p) + ' · a situação não mudou: o documento está em '
+                                     + str(STATUS.get(p.get('status'), p.get('status') or 'andamento'))),
+    'embarque_alterado': ('Embarque alterado no Senior', 'fluxo', _embarque),
+    'embarque_desfeito': ('Embarque desfeito no Senior', 'alerta', _embarque_desfeito),
     'selecao_retornada': ('Seleção desfeita', 'alerta', lambda p: f"era {p.get('status_anterior') or 'selecionado'}"),
     'cancelado': ('Cancelado', 'alerta', _cancelado),
     'conferencia_transferida': ('Conferência transferida', 'fluxo',

@@ -18,6 +18,7 @@ from apps.pedidos.models import Pedido, PedidoLog, Sequencia, Volume, VolumeItem
 STATUS_FINAIS = (
     Pedido.Status.CONFERIDO, Pedido.Status.NAO_CONFORME,
     Pedido.Status.CANCELADO, Pedido.Status.AGUARDANDO_FECHAMENTO,
+    Pedido.Status.EMBARCADO,
 )
 
 
@@ -163,6 +164,8 @@ def detalhe_ou_excluir(request, pk):
             'conferente_username': p.conferente.username if p.conferente else None,
             'atribuido_em': p.atribuido_em,
             'qtd_itens': p.qtd_itens,
+            # nota já num embarque do Senior (2026-11-24): aviso na linha
+            'embarque_numero': p.embarque_numero,
         }
         for p in pedidos
     ]

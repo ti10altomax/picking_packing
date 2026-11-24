@@ -19,7 +19,7 @@ const PERFIL_LABEL: Record<string, string> = { supervisor_vendas: 'Sup. Vendas',
 
 const STATUS_LABEL: Record<string, string> = {
   pendente: 'Pendente', selecionado: 'Selecionado', atribuido: 'Atribuído', conferindo: 'Em conferência',
-  aguardando_fechamento: 'Aguardando fechamento', conferido: 'Conferido', nao_conforme: 'Não conforme', cancelado: 'Cancelado',
+  aguardando_fechamento: 'Aguardando fechamento', conferido: 'Conferido', embarcado: 'Embarcado', nao_conforme: 'Não conforme', cancelado: 'Cancelado',
 }
 
 const MODO_LABEL: Record<CceModo, string> = {

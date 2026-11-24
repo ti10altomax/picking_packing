@@ -29,6 +29,7 @@ STATUS_BADGES = {
     "conferido":            ("Conferido",       "success"),
     "nao_conforme":         ("Não conforme",    "danger"),
     "cancelado":            ("Cancelado",       "secondary"),
+    "embarcado":            ("Embarcado",       "success"),
     # Estados antigos (escopo congelado) — cinza
     "faturado":             ("Faturado",        "secondary"),
     "aguardando_etiquetar": ("Aguard. etiq.",   "secondary"),

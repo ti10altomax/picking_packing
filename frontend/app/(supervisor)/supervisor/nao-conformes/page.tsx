@@ -26,6 +26,8 @@ type NaoConforme = {
   conferente_ativo?: boolean
   sequencia?: { id: number; numero: number; descricao?: string } | null
   conferencia_iniciada?: boolean
+  // Nota já num embarque do Senior (2026-11-24): a mercadoria saiu com o documento parado aqui
+  embarque?: { numero: string; placa: string; motorista: string; embarcado_em: string | null } | null
 }
 
 type Item = {
@@ -234,6 +236,14 @@ export default function NaoConformesPage() {
                         {p.separado_por && ` · separado por: ${p.separado_por}`}
                         {p.sequencia && ` · ${rotuloSequencia(p.sequencia, true)}`}
                       </p>
+                      {p.embarque && (
+                        <p className="text-xs mt-1">
+                          <span className="bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300 px-2 py-0.5 rounded-full font-medium">
+                            ⚠ Nota já embarcada · embarque {p.embarque.numero}{p.embarque.placa ? ` · ${p.embarque.placa}` : ''}
+                            {p.embarque.embarcado_em ? ` · ${new Date(p.embarque.embarcado_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : ''}
+                          </span>
+                        </p>
+                      )}
                       {p.separador_nao_identificado && (
                         <p className="text-xs mt-1">
                           <span className="bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300 px-2 py-0.5 rounded-full font-medium">

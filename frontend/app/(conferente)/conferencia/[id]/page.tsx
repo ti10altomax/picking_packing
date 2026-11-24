@@ -58,6 +58,8 @@ type Pedido = {
   qtd_itens: number
   percent_conferido: number
   estimativa_caixas?: EstimativaCaixas | null
+  // Nota já num embarque do Senior (2026-11-24) — só aviso; a conferência segue normal
+  embarque?: { numero: string; placa: string; motorista: string; embarcado_em: string | null } | null
   separado_por: { id: number; nome: string; apelido: string } | null
   separador_nao_identificado: boolean
   itens: ItemPedido[]
@@ -696,6 +698,7 @@ export default function ConferenciaPedidoPage() {
             {pedido.qtd_itens} {pedido.qtd_itens === 1 ? 'item' : 'itens'} · {totalPedido} unidade(s)
           </p>
 
+          <AvisoEmbarque embarque={pedido.embarque} className="w-full max-w-md mb-3 text-left" />
           <AvisoCaixas estimativa={pedido.estimativa_caixas} className="w-full max-w-md mb-6 text-left" />
 
           <div className="w-full max-w-md text-left mb-6">
@@ -751,6 +754,7 @@ export default function ConferenciaPedidoPage() {
         <p className="text-xs text-ink-subtle mt-1">
           {totalConferido} / {totalPedido} unidades · {volumes.length} volume(s)
         </p>
+        <AvisoEmbarque embarque={pedido.embarque} className="mt-2" />
         <AvisoCaixas estimativa={pedido.estimativa_caixas} className="mt-2" />
         <div className="flex items-center gap-1 mt-0.5">
           <p className="text-xs text-ink-subtle">
@@ -1090,6 +1094,18 @@ function AvisoCaixas({ estimativa, className = '' }: { estimativa?: EstimativaCa
         Estimativa pelas medidas do Senior: ≈ {caixas} caixas
         {estimativa.itens_sem_medida > 0 &&
           ` · ${estimativa.itens_sem_medida} ${estimativa.itens_sem_medida === 1 ? 'item sem medida' : 'itens sem medida'} (fora da conta)`}
+      </p>
+    </div>
+  )
+}
+
+function AvisoEmbarque({ embarque, className = '' }: { embarque?: Pedido['embarque']; className?: string }) {
+  if (!embarque) return null
+  return (
+    <div className={`rounded-xl border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10 px-3 py-2 ${className}`}>
+      <p className="text-sm font-bold text-amber-800 dark:text-amber-300">🚚 Esta nota já consta como embarcada</p>
+      <p className="text-xs text-amber-700 dark:text-amber-400">
+        Embarque {embarque.numero}{embarque.placa ? ` · placa ${embarque.placa}` : ''} no Senior. Se a mercadoria ainda está aqui, avise o supervisor.
       </p>
     </div>
   )

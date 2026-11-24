@@ -275,6 +275,16 @@ def _serializar_volume(v: Volume) -> dict:
     }
 
 
+def _embarque_do_pedido(p: Pedido) -> dict | None:
+    """Dados do embarque do Senior quando a nota do documento já está num (apps.pedidos.embarque)."""
+    if not p.embarque_numero:
+        return None
+    return {
+        'numero': p.embarque_numero, 'placa': p.embarque_placa,
+        'motorista': p.embarque_motorista, 'embarcado_em': p.embarcado_em,
+    }
+
+
 def _serializar_pedido(p: Pedido, com_volumes: bool = False) -> dict:
     from apps.pedidos.alias_barra import alternativos_por_ean
     from .caixas import estimar as estimar_caixas, volume_caixa, volume_unitario
@@ -313,6 +323,8 @@ def _serializar_pedido(p: Pedido, com_volumes: bool = False) -> dict:
         'cancelado_origem': p.cancelado_origem,
         'status_anterior': p.status_anterior,
         'transferido_para_id': p.transferido_para_id,
+        # Nota já num embarque do Senior (2026-11-24) — aviso na tela do conferente
+        'embarque': _embarque_do_pedido(p),
         'qtd_itens': len(itens),
         'percent_conferido': percent,
         # soma(qtd × medidas da derivação) / caixa padrão; > 1 → avisar que não cabe numa caixa
@@ -1478,6 +1490,7 @@ def listar_nao_conformes(request):
                 if p.sequencia else None
             ),
             'conferencia_iniciada': bool(p.conferencia_iniciada_em),
+            'embarque': _embarque_do_pedido(p),
         }
         for p in qs
     ])

@@ -14,6 +14,7 @@ const COR_STATUS: Record<string, string> = {
   aguardando_fechamento: 'bg-violet-100 text-violet-800 dark:bg-violet-500/15 dark:text-violet-300',
   conferido: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300',
   nao_conforme: 'bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-300',
+  embarcado: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-500/15 dark:text-cyan-300',
   cancelado: 'bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-300',
 }
 

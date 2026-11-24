@@ -24,6 +24,7 @@ const GESTAO_ITEMS: { href: string; label: string; soPatio?: boolean; soCce?: bo
   { href: '/supervisor/cartas', label: 'Cartas de correção', soCce: true },   // quem pode: Configuracao.cce_perfis (Django Admin)
   { href: '/supervisor/erros', label: 'Erros de separação' },
   { href: '/supervisor/conferidos', label: 'Conferidos' },
+  { href: '/supervisor/embarcados', label: 'Embarcados' },   // nota num embarque do Senior (2026-11-24)
 ]
 
 export default function SupervisorLayout({ children }: { children: React.ReactNode }) {

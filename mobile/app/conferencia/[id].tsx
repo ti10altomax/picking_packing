@@ -83,6 +83,8 @@ type Pedido = {
   cancelado_em?: string | null
   qtd_itens: number
   estimativa_caixas?: EstimativaCaixas | null
+  // Nota já num embarque do Senior (2026-11-24) — só aviso; a conferência segue normal
+  embarque?: { numero: string; placa: string; motorista: string; embarcado_em: string | null } | null
   separado_por: { id: number; nome: string; apelido: string } | null
   separador_nao_identificado: boolean
   itens: ItemPedido[]
@@ -93,6 +95,18 @@ type Pedido = {
 type EstimativaCaixas = { caixas: number; itens_sem_medida: number }
 // devolvido pelo bipar só na leitura que fez a caixa passar de 1 caixa padrão
 type CaixaCheia = { ocupacao: number }
+
+// Nota que o Senior já tem num embarque: uma linha só (o bloco de cima é fixo, ver 0.15.3).
+function AvisoEmbarque({ embarque, className = '' }: { embarque?: { numero: string; placa: string } | null; className?: string }) {
+  if (!embarque) return null
+  return (
+    <View className={`rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 ${className}`}>
+      <Text className="text-sm font-bold text-amber-400">
+        🚚 Nota já embarcada no Senior · embarque {embarque.numero}{embarque.placa ? ` · ${embarque.placa}` : ''}
+      </Text>
+    </View>
+  )
+}
 
 // Aviso de que o documento não cabe numa caixa só. Compacto: no coletor o bloco de cima
 // é fixo e não pode crescer (ver o fix do Concluir sumindo, 0.15.3).
@@ -771,6 +785,7 @@ export default function ConferenciaDetalhe() {
             {pedido.qtd_itens} {pedido.qtd_itens === 1 ? 'item' : 'itens'} · {totalPedido} unidade(s)
           </Text>
 
+          <AvisoEmbarque embarque={pedido.embarque} className="mb-2" />
           <AvisoCaixas estimativa={pedido.estimativa_caixas} className="mb-6" />
 
           <Text className="text-sm font-semibold text-ink mb-2">Quem separou este pedido? *</Text>
@@ -811,6 +826,7 @@ export default function ConferenciaDetalhe() {
         <Text className="text-xs text-ink-subtle mt-1">
           {totalConferido} / {totalPedido} unidades · {volumes.length} volume(s)
         </Text>
+        <AvisoEmbarque embarque={pedido.embarque} className="mt-1.5" />
         <AvisoCaixas estimativa={pedido.estimativa_caixas} className="mt-1.5" />
         <View className="flex-row items-center gap-1 mt-0.5">
           <Text className="text-xs text-ink-subtle">

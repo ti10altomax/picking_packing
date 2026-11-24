@@ -626,6 +626,56 @@ def vincular_nfs_pedidos():
     return resultado
 
 
+# Janela (dias sobre a geração do embarque) que o beat relê a cada passada. O embarque é
+# lançado no Senior na hora em que o caminhão sai (saída e geração no mesmo dia), então a
+# janela larga só serve para o documento que chega depois ao Separa (pedido faturado cujo
+# vínculo com a NF demorou) e para a primeira passada depois do deploy.
+EMBARQUE_JANELA_DIAS = 30
+
+
+def _embarque_com_problema(resultado) -> bool:
+    """Oracle fora, ou o desfazer foi travado por leitura suspeita (aparece em Admin → Saúde)."""
+    return _teve_falha_oracle(resultado) or "'desfazer': 'ignorado_" in str(resultado)
+
+
+@shared_task
+@registrar_execucao(erro_se=_embarque_com_problema)
+def sincronizar_embarques(dias: int | None = None):
+    """
+    Embarque das notas (2026-11-24): lê E145EBQ + E145NFV e leva para **Embarcado** o
+    documento cuja nota entrou num embarque — Conferido (caminho normal) e também Pendente /
+    Selecionado (saiu sem conferência; deixa as filas de Vendas e do Pátio). Documento na mão
+    de um conferente ou Não conforme só ganha o aviso. Nota tirada do embarque no Senior →
+    volta à situação anterior. Regra em `apps.pedidos.embarque`.
+    Uma consulta por passada (≈ 3 mil linhas em 30 dias); a cada 2 min via Celery Beat.
+    """
+    from .oracle import QUERY_EMBARQUES_RECENTES, QUERY_EMBARQUES_DAS_NOTAS
+    from apps.pedidos import embarque
+
+    janela = max(int(dias or EMBARQUE_JANELA_DIAS), 1)
+    rows = _oracle_fetch_safe(QUERY_EMBARQUES_RECENTES, [janela])
+    if rows is None:
+        return {'erro': 'falha_oracle'}
+
+    def _das_notas(numeros):
+        linhas = []
+        for bloco in _blocos(sorted({int(n) for n in numeros if str(n).isdigit()})):
+            placeholders = ','.join(':' + str(i + 1) for i in range(len(bloco)))
+            parte = _oracle_fetch_safe(QUERY_EMBARQUES_DAS_NOTAS.format(placeholders=placeholders), bloco)
+            if parte is None:
+                return None
+            linhas += parte
+        return linhas
+
+    resultado = {'janela_dias': janela, **embarque.sincronizar(rows, consultar_notas=_das_notas)}
+    if resultado['embarcados'] or resultado['desfeitos']:
+        logger.info(
+            f"sincronizar_embarques: {resultado['embarcados']} embarcados "
+            f"({resultado['sem_conferencia']} sem conferência), {resultado['desfeitos']} desfeitos"
+        )
+    return resultado
+
+
 @shared_task
 def monitorar_faturamento():
     """

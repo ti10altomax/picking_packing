@@ -66,6 +66,10 @@ export const supervisorPatio: AjudaTela = {
   ],
   situacoes: [
     {
+      quando: 'Um documento sumiu da fila ou aparece como "Embarcado" dentro da sequência.',
+      oQueFazer: 'A nota dele entrou num embarque no Senior antes de ser conferida. Ele sai da fila sozinho e passa a contar como finalizado na sequência. Veja em Gestão → Embarcados, filtro "Sem conferência".',
+    },
+    {
       quando: '"Nenhuma sequência em aberto — selecione pedidos abaixo e crie a primeira."',
       oQueFazer: 'Marque documentos na fila e toque em "Criar sequência".',
     },
@@ -87,5 +91,5 @@ export const supervisorPatio: AjudaTela = {
     'Documentos da mesma transportadora ficam juntos na fila. Marque o grupo inteiro para montar uma sequência por transportadora.',
     'Os documentos de uma sequência só podem ser conferidos pelo conferente na ordem das sequências: a mais antiga primeiro.',
   ],
-  relacionadas: ['supervisor-sequencia', 'supervisor-vendas', 'supervisor-separadores', 'conferencia'],
+  relacionadas: ['supervisor-sequencia', 'supervisor-vendas', 'supervisor-separadores', 'supervisor-embarcados', 'conferencia'],
 }

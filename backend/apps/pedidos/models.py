@@ -27,6 +27,10 @@ class Pedido(models.Model):
         CONFERIDO = 'conferido', 'Conferido'
         NAO_CONFORME = 'nao_conforme', 'Não conforme'
         CANCELADO = 'cancelado', 'Cancelado'
+        # A nota entrou num embarque no Senior (E145EBQ/E145NFV) — saiu do galpão (2026-11-24).
+        # Vem de Conferido e também de Pendente/Selecionado (embarcou sem conferência);
+        # `status_anterior` guarda de onde veio. Ver apps/pedidos/embarque.py.
+        EMBARCADO = 'embarcado', 'Embarcado'
         # Escopo antigo (CONGELADO — fluxo de etiquetagem marketplace/VTEX)
         FATURADO = 'faturado', 'Faturado'
         AGUARDANDO_ETIQUETAR = 'aguardando_etiquetar', 'Aguardando etiquetar'
@@ -145,11 +149,22 @@ class Pedido(models.Model):
     cancelado_origem = models.CharField(
         max_length=20, choices=OrigemCancelamento.choices, blank=True
     )
-    status_anterior = models.CharField(max_length=30, blank=True)  # status na hora do cancelamento
+    # status na hora do cancelamento — ou, no Embarcado, de onde o documento veio
+    # ('conferido' = passou pela conferência; 'pendente'/'selecionado' = embarcou sem conferir)
+    status_anterior = models.CharField(max_length=30, blank=True)
     transferido_para = models.ForeignKey(
         'self', null=True, blank=True,
         on_delete=models.SET_NULL, related_name='transferido_de_set',
     )
+
+    # Embarque (2026-11-24): a nota do documento entrou num embarque do Senior (E145EBQ +
+    # E145NFV). Preenchidos pelo beat `sincronizar_embarques`. Com o documento na mão de um
+    # conferente ou Não conforme, ficam só como aviso ("nota já embarcada") e a situação não
+    # muda; Pendente, Selecionado e Conferido viram Embarcado.
+    embarque_numero = models.CharField(max_length=20, blank=True, db_index=True)
+    embarque_placa = models.CharField(max_length=20, blank=True)
+    embarque_motorista = models.CharField(max_length=120, blank=True)
+    embarcado_em = models.DateTimeField(null=True, blank=True)   # saída do embarque (ou fechamento/geração)
 
     # Senior — atualização pós-conferência (WS a definir)
     senior_atualizado_em = models.DateTimeField(null=True, blank=True)
@@ -308,6 +323,7 @@ class Sequencia(models.Model):
         finais = (
             Pedido.Status.CONFERIDO, Pedido.Status.NAO_CONFORME,
             Pedido.Status.CANCELADO, Pedido.Status.AGUARDANDO_FECHAMENTO,
+            Pedido.Status.EMBARCADO,
         )
         status_pedidos = list(self.pedidos.values_list('status', flat=True))
         if status_pedidos and all(s in finais for s in status_pedidos):

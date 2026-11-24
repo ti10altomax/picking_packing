@@ -67,6 +67,14 @@ export const supervisorSequencia: AjudaTela = {
   ],
   situacoes: [
     {
+      quando: 'Etiqueta âmbar "⚠ Nota já embarcada" na linha.',
+      oQueFazer: 'A nota entrou num embarque no Senior com o documento ainda atribuído ou em conferência. Nada muda sozinho: confirme com o conferente se a mercadoria saiu. Quando a conferência for concluída, o documento vai para Gestão → Embarcados.',
+    },
+    {
+      quando: 'Documento com a situação "Embarcado".',
+      oQueFazer: 'Estava sem conferente e a nota saiu num embarque. Conta como finalizado na sequência.',
+    },
+    {
       quando: 'Documento sem caixa de marcação',
       oQueFazer:
         'O documento já está em conferência ou terminou. Só dá para mexer enquanto estiver "Sem conferente" ou "Atribuído".',

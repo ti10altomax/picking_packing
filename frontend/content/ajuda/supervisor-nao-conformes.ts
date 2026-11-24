@@ -72,6 +72,10 @@ export const supervisorNaoConformes: AjudaTela = {
       oQueFazer: 'Não há nada esperando decisão. Tela em dia.',
     },
     {
+      quando: 'Etiqueta âmbar "⚠ Nota já embarcada" no cartão.',
+      oQueFazer: 'A nota saiu num embarque do Senior com o documento ainda parado aqui. Confirme se a mercadoria foi mesmo. Se foi, decida: retomar e concluir a conferência, soltar na sequência (o documento vai sozinho para Embarcados) ou cancelar.',
+    },
+    {
       quando: 'Confirmação "Retomar conferência?".',
       oQueFazer: 'Toque em "Retomar". Avise o conferente: o documento volta para a lista dele, no ponto em que parou.',
     },

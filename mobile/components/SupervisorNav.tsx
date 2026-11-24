@@ -14,6 +14,7 @@ const ABAS: Aba[] = [
   { href: '/supervisor/patio', label: 'Pátio', perfis: ['supervisor_patio', 'admin'] },
   { href: '/supervisor/separadores', label: 'Separadores', perfis: ['supervisor_patio', 'admin'] },
   { href: '/supervisor/conferidos', label: 'Conferidos' },
+  { href: '/supervisor/embarcados', label: 'Embarcados' },
   { href: '/supervisor/etiquetas', label: 'Etiquetas' },
   { href: '/supervisor/nao-conformes', label: 'Não conformes' },
   { href: '/supervisor/cancelados', label: 'Cancelados' },

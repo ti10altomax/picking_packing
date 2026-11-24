@@ -35,6 +35,8 @@ type NaoConforme = {
   conferente_ativo?: boolean
   sequencia?: { id: number; numero: number; descricao?: string } | null
   conferencia_iniciada?: boolean
+  // Nota já num embarque do Senior (2026-11-24)
+  embarque?: { numero: string; placa: string; motorista: string; embarcado_em: string | null } | null
 }
 
 function formatarData(iso: string): string {
@@ -190,6 +192,13 @@ export default function NaoConformes() {
                 {nc.separado_por ? ` · separado por: ${nc.separado_por}` : ''}
                 {nc.sequencia ? ` · ${rotuloSequencia(nc.sequencia, true)}` : ''}
               </Text>
+              {nc.embarque ? (
+                <View className="self-start px-2 py-1 rounded-full bg-amber-500/15 mb-2">
+                  <Text className="text-xs font-semibold text-amber-300">
+                    ⚠ Nota já embarcada · embarque {nc.embarque.numero}{nc.embarque.placa ? ` · ${nc.embarque.placa}` : ''}
+                  </Text>
+                </View>
+              ) : null}
               {nc.separador_nao_identificado ? (
                 <View className="self-start px-2 py-1 rounded-full bg-amber-500/15 mb-2">
                   <Text className="text-xs font-semibold text-amber-300">⚠ Separador não identificado</Text>

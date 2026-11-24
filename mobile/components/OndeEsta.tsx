@@ -18,6 +18,7 @@ const COR: Record<string, { fundo: string; texto: string }> = {
   aguardando_fechamento: { fundo: 'bg-violet-500/15', texto: 'text-violet-300' },
   conferido: { fundo: 'bg-emerald-500/15', texto: 'text-emerald-300' },
   nao_conforme: { fundo: 'bg-red-500/15', texto: 'text-red-300' },
+  embarcado: { fundo: 'bg-cyan-500/15', texto: 'text-cyan-300' },
   cancelado: { fundo: 'bg-red-500/15', texto: 'text-red-300' },
 }
 
@@ -27,6 +28,7 @@ const ROTA: Record<string, (l: Localizacao) => string> = {
   patio: () => '/supervisor/patio',
   sequencia: (l) => (l.sequencia ? `/supervisor/sequencia/${l.sequencia}` : '/supervisor/patio'),
   conferidos: () => '/supervisor/conferidos',
+  embarcados: () => '/supervisor/embarcados',
   nao_conformes: () => '/supervisor/nao-conformes',
   cancelados: () => '/supervisor/cancelados',
 }

@@ -170,6 +170,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'apps.senior.tasks.vincular_nfs_pedidos',
         'schedule': 300.0,  # pedido em andamento → NF emitida (E140IPV); base da carta de correção
     },
+    'sincronizar-embarques': {
+        'task': 'apps.senior.tasks.sincronizar_embarques',
+        'schedule': 120.0,  # nota que entrou num embarque no Senior (E145EBQ/E145NFV) → Embarcado
+    },
     'verificar-cartas-pendentes': {
         'task': 'apps.carta_correcao.tasks.verificar_cartas_pendentes',
         'schedule': 120.0,  # carta gravada/aguardando SDE → confere no eDocs se a SEFAZ autorizou (10 min até 2026-11-23)

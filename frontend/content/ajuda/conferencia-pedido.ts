@@ -123,6 +123,10 @@ export const conferenciaPedido: AjudaTela = {
   ],
   situacoes: [
     {
+      quando: 'Aparece o aviso âmbar "🚚 Esta nota já consta como embarcada".',
+      oQueFazer: 'No Senior a nota já está num embarque. Se a mercadoria ainda está na sua frente, avise o supervisor antes de continuar. A conferência não fica travada: é só um aviso.',
+    },
+    {
       quando: 'Aparece o aviso âmbar "📦 Mais de uma caixa".',
       oQueFazer: 'Pelas medidas dos produtos no Senior, o documento não cabe numa caixa só. Já separe mais de uma caixa e abra a próxima com + Volume quando a primeira encher. É uma estimativa: itens sem medida no Senior ficam de fora da conta.',
     },

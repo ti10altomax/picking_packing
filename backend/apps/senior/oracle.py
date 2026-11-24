@@ -180,6 +180,33 @@ QUERY_SITUACAO_NFS = f"""
       AND nfv.numnfv IN ({{placeholders}})
 """
 
+# Embarque (2026-11-24): E145EBQ = o embarque (placa, motorista, saída, fechamento) e
+# E145NFV = as notas dele (uma linha por nota; `filnfv`/`snfnfv`/`numnfv` identificam a nota,
+# `codfil` é a filial do embarque). Datas com hora em minutos desde a meia-noite (`horsai`…),
+# data vazia = 31/12/1900. `sitebq`: 1 aberto, 2 fechado. Consulta indicada pela TI.
+# :1 = janela em dias sobre a geração do embarque.
+_SELECT_EMBARQUE = f"""
+    SELECT ebq.codfil, ebq.numebq, ebq.sitebq, ebq.plavei, ebq.nommot,
+           ebq.datsai, ebq.horsai, ebq.datger, ebq.horger, ebq.datfec, ebq.horfec,
+           nfv.filnfv, nfv.snfnfv, nfv.numnfv
+    FROM E145EBQ ebq
+    JOIN E145NFV nfv
+        ON nfv.codemp = ebq.codemp
+       AND nfv.codfil = ebq.codfil
+       AND nfv.numebq = ebq.numebq
+    WHERE ebq.codemp = {SENIOR_CODEMP}
+"""
+
+QUERY_EMBARQUES_RECENTES = _SELECT_EMBARQUE + """
+      AND ebq.datger >= TRUNC(SYSDATE) - :1
+"""
+
+# As mesmas colunas para notas específicas, sem janela — confirma se a nota saiu mesmo de
+# todo embarque antes de desfazer um Embarcado. {placeholders} = números de NF (blocos ≤ 500).
+QUERY_EMBARQUES_DAS_NOTAS = _SELECT_EMBARQUE + """
+      AND nfv.numnfv IN ({placeholders})
+"""
+
 # Vínculo pedido → NF emitida (2026-10-22). A NF que nasce de um pedido não entra como
 # documento próprio no Separa (é a mesma venda, conferida como pedido), mas a carta de
 # correção precisa dela: só NF autorizada aceita CC-e. O elo está nos itens da nota

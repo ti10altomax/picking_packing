@@ -84,6 +84,10 @@ export const supervisorVendas: AjudaTela = {
   ],
   situacoes: [
     {
+      quando: 'Um documento pendente sumiu da lista sem ninguém enviar.',
+      oQueFazer: 'A nota dele entrou num embarque no Senior: o documento foi sozinho para Gestão → Embarcados, marcado "Sem conferência". Procure o número lá.',
+    },
+    {
       quando: 'Nenhum documento pendente com esses filtros.',
       oQueFazer: 'Tire algum filtro ou apague a busca. Se ainda assim estiver vazio, toque em "Atualizar" e espere o próximo ciclo do Senior.',
     },
@@ -127,5 +131,5 @@ export const supervisorVendas: AjudaTela = {
     'Filtre por "Sem transportadora" antes de enviar: dá tempo de acertar o cadastro no Senior e a etiqueta sai sem espera.',
     'Documento cancelado no Senior some da lista sozinho.',
   ],
-  relacionadas: ['supervisor-patio', 'supervisor-etiquetas', 'supervisor-agora'],
+  relacionadas: ['supervisor-patio', 'supervisor-etiquetas', 'supervisor-embarcados', 'supervisor-agora'],
 }

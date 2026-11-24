@@ -243,6 +243,7 @@ export type SequenciaPedido = {
   conferente_username: string | null
   atribuido_em: string | null
   qtd_itens: number
+  embarque_numero?: string   // nota já num embarque do Senior (2026-11-24)
 }
 
 export const sequenciasApi = {
@@ -317,7 +318,7 @@ export type Localizacao = {
   status_label: string
   descricao: string
   via: string
-  lista: 'vendas' | 'patio' | 'sequencia' | 'fechamentos' | 'conferidos' | 'nao_conformes' | 'cancelados' | ''
+  lista: 'vendas' | 'patio' | 'sequencia' | 'fechamentos' | 'conferidos' | 'embarcados' | 'nao_conformes' | 'cancelados' | ''
   sequencia: number | null
   sequencia_numero: number | null
   conferente: string | null
@@ -404,6 +405,13 @@ export const supervisorApi = {
   listarConferidos: (params: { search?: string; page?: number; transportadora?: 'com' | 'sem' | '' } = {}) =>
     api.get('/api/pedidos/', {
       params: { status: 'conferido', ...params },
+    }).then((r) => r.data),
+  // Embarcados (2026-11-24): nota que entrou num embarque do Senior. `conferencia`:
+  // 'com' = passou pela conferência antes de sair | 'sem' = embarcou direto de Pendente/Selecionado.
+  // A busca também acha por embarque, placa, motorista e transportadora.
+  listarEmbarcados: (params: { search?: string; page?: number; conferencia?: 'com' | 'sem' | '' } = {}) =>
+    api.get('/api/pedidos/', {
+      params: { status: 'embarcado', ordem: 'embarque', ...params },
     }).then((r) => r.data),
   // Relatório das notas conferidas que ainda precisam de transportadora (2026-11-23).
   // O backend relê a transportadora no Senior antes de responder.

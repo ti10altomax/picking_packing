@@ -29,6 +29,7 @@ export const visaoGeral: AjudaTela = {
     { nome: 'Em conferência', descricao: 'Azul. O conferente está bipando e montando volumes.' },
     { nome: 'Aguardando fechamento', descricao: 'Roxo. Conferência terminou com sobra; a Sup. Pátio precisa fechar.' },
     { nome: 'Conferido', descricao: 'Verde. Concluído; volumes registrados e etiqueta liberada.' },
+    { nome: 'Embarcado', descricao: 'Azul-claro. A nota saiu num embarque lançado no Senior. O Separa lê sozinho; se saiu sem passar pela conferência, aparece marcado "Sem conferência".' },
     { nome: 'Não conforme', descricao: 'Vermelho. Problema na conferência (falta, produto errado, divergência). Espera ação da supervisão.' },
     { nome: 'Cancelado', descricao: 'Vermelho. Cancelado no Senior ou pela supervisão; o que já foi conferido fica guardado para transferência.' },
     { nome: 'Botão ?', descricao: 'No cabeçalho de qualquer tela, abre a ajuda daquela tela. No coletor, abre este manual no navegador do aparelho.' },

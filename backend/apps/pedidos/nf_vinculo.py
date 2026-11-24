@@ -141,6 +141,7 @@ STATUS_EM_CONFERENCIA = (
     Pedido.Status.AGUARDANDO_FECHAMENTO,
     Pedido.Status.NAO_CONFORME,
     Pedido.Status.CONFERIDO,
+    Pedido.Status.EMBARCADO,   # conferido (ou não) e já saiu: a nota dele continua sendo o faturamento
 )
 
 
@@ -190,9 +191,12 @@ def conflito_conferencia_dupla(doc: Pedido) -> str:
     """Motivo para NÃO mandar `doc` para separação, ou ''. Barra conferir duas vezes a mesma
     mercadoria: o pedido e a nota que saiu dele (faturamento parcial, 2026-11-05)."""
     livres = (Pedido.Status.PENDENTE, Pedido.Status.CANCELADO)
+    # Embarcado que veio direto de Pendente nunca entrou na conferência: continua "livre",
+    # como era antes de existir a situação Embarcado (2026-11-24).
+    embarcado_sem_entrar = dict(status=Pedido.Status.EMBARCADO, status_anterior=Pedido.Status.PENDENTE)
     if doc.tipo == Pedido.Tipo.PEDIDO:
         nfs = (Pedido.objects.filter(tipo=Pedido.Tipo.NOTA_FISCAL, pedidos_origem__contains=[doc.numero_externo])
-               .exclude(status__in=livres))
+               .exclude(status__in=livres).exclude(**embarcado_sem_entrar))
         if doc.codfil:  # numeração é por filial; o pedido sai faturado na própria filial
             nfs = nfs.filter(codfil__in=[doc.codfil, ''])
         nf = nfs.first()
@@ -201,9 +205,10 @@ def conflito_conferencia_dupla(doc: Pedido) -> str:
         return ''
     origens = [(doc.codfil, n) for n in doc.pedidos_origem or []]
     for p in _pedidos_das_origens(origens):
-        if p.status in livres:
+        if p.status in livres or (
+                p.status == Pedido.Status.EMBARCADO and p.status_anterior == Pedido.Status.PENDENTE):
             continue
-        if p.status != Pedido.Status.CONFERIDO:
+        if p.status not in (Pedido.Status.CONFERIDO, Pedido.Status.EMBARCADO):
             return f'o pedido {p.numero_externo} dessa NF já está na conferência ({p.get_status_display()})'
         if not p.nf_numero or p.nf_numero == doc.numero_externo:
             return f'o pedido {p.numero_externo} já foi conferido e esta NF é o faturamento dele'

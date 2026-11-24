@@ -32,6 +32,7 @@ const STATUS_PEDIDO: Record<string, { label: string; cor: string; texto: string 
   conferido: { label: 'Conferido', cor: 'bg-emerald-500/15', texto: 'text-emerald-300' },
   nao_conforme: { label: 'Não conforme', cor: 'bg-red-500/15', texto: 'text-red-300' },
   cancelado: { label: 'Cancelado', cor: 'bg-zinc-500/15', texto: 'text-zinc-400' },
+  embarcado: { label: 'Embarcado', cor: 'bg-cyan-500/15', texto: 'text-cyan-300' },
 }
 
 const EDITAVEIS = ['selecionado', 'atribuido']
@@ -42,7 +43,7 @@ const EDITAVEIS = ['selecionado', 'atribuido']
 function semAcento(s: string) {
   return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 }
-const ORDEM_STATUS = ['selecionado', 'atribuido', 'conferindo', 'aguardando_fechamento', 'conferido', 'nao_conforme', 'cancelado']
+const ORDEM_STATUS = ['selecionado', 'atribuido', 'conferindo', 'aguardando_fechamento', 'conferido', 'embarcado', 'nao_conforme', 'cancelado']
 
 export default function SequenciaDetalhe() {
   const { id } = useLocalSearchParams<{ id: string }>()
@@ -297,6 +298,11 @@ export default function SequenciaDetalhe() {
                     <View className={`px-2 py-0.5 rounded-full ${cfg.cor}`}>
                       <Text className={`text-xs font-medium ${cfg.texto}`}>{cfg.label}</Text>
                     </View>
+                    {p.embarque_numero && p.status !== 'embarcado' ? (
+                      <View className="px-2 py-0.5 rounded-full bg-amber-500/15">
+                        <Text className="text-xs font-medium text-amber-300">⚠ Nota já embarcada</Text>
+                      </View>
+                    ) : null}
                   </View>
                   <Text className="text-sm text-ink-muted" numberOfLines={1}>{p.cliente || '—'}</Text>
                   {p.transportadora ? (

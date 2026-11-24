@@ -154,6 +154,7 @@ export type SequenciaPedido = {
   conferente_username: string | null
   atribuido_em: string | null
   qtd_itens: number
+  embarque_numero?: string   // nota já num embarque do Senior (2026-11-24)
 }
 
 export const sequenciasApi = {
@@ -279,7 +280,7 @@ export type Localizacao = {
   status_label: string
   descricao: string
   via: string
-  lista: 'vendas' | 'patio' | 'sequencia' | 'fechamentos' | 'conferidos' | 'nao_conformes' | 'cancelados' | ''
+  lista: 'vendas' | 'patio' | 'sequencia' | 'fechamentos' | 'conferidos' | 'embarcados' | 'nao_conformes' | 'cancelados' | ''
   sequencia: number | null
   sequencia_numero: number | null
   conferente: string | null
@@ -299,6 +300,10 @@ export const supervisorApi = {
   // `transportadora`: 'com' | 'sem' filtra pela presença da transportadora (2026-11-09)
   listarConferidos: (params: { search?: string; page?: number; transportadora?: 'com' | 'sem' | '' } = {}) =>
     api.get('/api/pedidos/', { params: { status: 'conferido', ...params } }).then((r) => r.data),
+  // Embarcados (2026-11-24): nota num embarque do Senior. `conferencia`: 'com' = foi conferido
+  // antes de sair | 'sem' = embarcou direto de Pendente/Selecionado.
+  listarEmbarcados: (params: { search?: string; page?: number; conferencia?: 'com' | 'sem' | '' } = {}) =>
+    api.get('/api/pedidos/', { params: { status: 'embarcado', ordem: 'embarque', ...params } }).then((r) => r.data),
   listarNaoConformes: () =>
     api.get('/api/nao-conformes/').then((r) => r.data),
   cancelarNaoConforme: (id: number) =>
