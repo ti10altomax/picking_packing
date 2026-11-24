@@ -296,8 +296,10 @@ def _fundir_com_edocs(cartas: list[dict], eventos: list[dict]) -> list[dict]:
 def _separar_ecos(cartas: list[dict]) -> tuple[list[dict], list[dict]]:
     """(cartas de verdade, ecos). Eco = linha com sitcce 10 cujo texto é igual ao de outra linha
     da nota que NÃO está em erro: é a sobra da transmissão, não uma carta a mais — não entra em
-    sequência, bloqueio nem no texto das correções anteriores. Linha com erro e texto próprio
-    continua na lista (é uma carta que falhou e alguém precisa acertar no Senior)."""
+    sequência nem no texto das correções anteriores. Desde 2026-11-24 ela BLOQUEIA carta nova
+    (`carta_sobra_senior`): o EmitirCartaCorrecao transmitiria essa linha no lugar da próxima.
+    Linha com erro e texto próprio continua na lista (é uma carta que falhou e alguém precisa
+    acertar no Senior)."""
     def norm(t):
         return ' '.join((t or '').upper().split())
     textos_validos = {norm(c['texto']) for c in cartas if c['sitcce'] != SITCCE_ERRO}

@@ -313,7 +313,9 @@ def bloqueio_por_cartas(anteriores: dict, sumidas: list) -> dict | None:
     """Por que a nota NÃO pode receber carta nova agora (a SEFAZ exige as cartas em sequência):
     carta anterior ainda não transmitida/autorizada no Senior, carta rejeitada, ou carta do Separa
     transmitida que sumiu da E140CCE (2026-11-19), ou carta autorizada na SEFAZ (eDocs) que o ERP
-    ainda não tem como Autorizada (2026-11-24)."""
+    ainda não tem como Autorizada, ou sobra de transmissão com erro (2026-11-24). Regra geral
+    desde 24/11: a nota não pode ter NENHUMA linha não autorizada na E140CCE, porque é a linha
+    não autorizada mais antiga que o Senior transmite na próxima chamada."""
     for c in anteriores.get('cartas', []):
         seq = c.get('sequencia')
         if c.get('fonte') == 'edocs' and c.get('sitcce_erp') not in (None, 3):
@@ -336,6 +338,18 @@ def bloqueio_por_cartas(anteriores: dict, sumidas: list) -> dict | None:
             return {'codigo': 'carta_rejeitada_senior', 'sequencia': seq,
                     'mensagem': f"A carta {seq} desta nota está '{c.get('sitcce_label')}' no Senior. Acerte essa carta no "
                                 "Senior (reenviar ou excluir) antes de gravar outra."}
+    ecos = anteriores.get('ecos_com_erro') or []
+    if ecos:
+        # 2026-11-24 (NF 150786): o EmitirCartaCorrecao não transmite o texto da chamada — transmite
+        # a linha NÃO autorizada de menor sequência que a nota tem na E140CCE. A sobra da
+        # transmissão anterior (linha do usuário do WS, situação 10) sairia no lugar da carta nova,
+        # com o texto velho e sem erro nenhum. Qualquer linha não autorizada segura a nota.
+        seq = ecos[0].get('sequencia')
+        return {'codigo': 'carta_sobra_senior', 'sequencia': seq,
+                'mensagem': f"A nota tem no Senior uma sobra de transmissão: a carta {seq}, com erro, repetindo uma "
+                            "carta já enviada. Enquanto essa linha existir, o Senior transmite ela no lugar da "
+                            f"próxima carta, com o texto antigo. Avise a TI ou o fiscal para apagar a carta {seq} no "
+                            "Senior antes de corrigir de novo."}
     if sumidas:
         c = sumidas[0]
         quando = timezone.localtime(c.criado_em).strftime('%d/%m %H:%M')

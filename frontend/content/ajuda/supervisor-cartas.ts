@@ -104,6 +104,10 @@ export const supervisorCartas: AjudaTela = {
       oQueFazer: 'A carta anterior valeu na SEFAZ, mas o Senior não registrou. Uma nova carta agora seria recusada como duplicata e ainda trocaria os dados da nota. Avise a TI ou o fiscal para acertar a carta N no Senior. Depois toque em "Já foi resolvido no Senior? Conferir de novo".',
     },
     {
+      quando: '"A nota tem no Senior uma sobra de transmissão: a carta N, com erro…"',
+      oQueFazer: 'Ficou no Senior uma linha de carta com erro. Se você corrigir agora, o Senior envia essa linha antiga no lugar da carta nova. Avise a TI ou o fiscal para apagar a carta N no Senior. Depois toque em "Já foi resolvido no Senior? Conferir de novo".',
+    },
+    {
       quando: '"A carta do Separa de … foi AUTORIZADA na SEFAZ … e não está mais na E140CCE do Senior."',
       oQueFazer: 'Alguém apagou a carta no Senior depois de transmitida. Apagar não desfaz nada na SEFAZ. Toque em "Reimportar carta no Senior" e depois corrija normalmente.',
     },
