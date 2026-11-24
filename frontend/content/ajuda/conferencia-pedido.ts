@@ -67,7 +67,22 @@ export const conferenciaPedido: AjudaTela = {
     {
       nome: '⇄ Mover itens',
       descricao:
-        'Ao lado de "Volumes". Para quando bipou na caixa errada ou esqueceu de abrir a caixa nova. Marque os lançamentos, escolha o volume de destino ou + Novo volume e toque em Mover. O lançamento vai inteiro, sem bipar de novo. O destino fica como volume ativo. Volume que ficar vazio some. Caixa ou fardo de OP não entra.',
+        'Ao lado de "Volumes (N)", no web e no coletor. Passa lançamentos já bipados de um volume para outro sem apagar e sem bipar de novo: para quando bipou na caixa errada ou esqueceu de abrir a caixa nova. Só aparece com o documento Em conferência (azul) e quando existe pelo menos um volume com lançamento que não seja de OP. Como fazer: toque em ⇄ Mover itens, marque os lançamentos, escolha o destino em "Mover para" (um volume que já existe ou um volume novo) e toque em Mover. As quantidades do pedido e a barra de progresso não mudam: só muda a caixa onde a peça está.',
+    },
+    {
+      nome: 'Janela de mover: marcar lançamentos',
+      descricao:
+        'Mostra todos os volumes com os lançamentos (SKU e quantidade, ex.: 6×). Toque no lançamento para marcar; toque de novo para desmarcar. Pode marcar lançamentos de volumes diferentes ao mesmo tempo. O lançamento vai inteiro: um lançamento de 6× vai com as 6 peças, não dá para levar só parte. No web, a caixa de marcar no título do volume marca ou desmarca todos os lançamentos dele de uma vez; no coletor, marque um por um. Volume de OP aparece apagado com "fábrica · não move" e não deixa marcar. No web a janela se chama "Mover itens entre volumes"; no coletor, "Mover itens".',
+    },
+    {
+      nome: 'Mover para: volume existente ou novo volume',
+      descricao:
+        'Escolha para onde vão os marcados. No web é uma lista ("Novo volume" e os volumes do documento); no coletor são botões ("+ Novo volume" e os volumes). Com novo volume, escolha caixa, fardo ou outro e confira o identificador: o sistema já sugere o próximo número (ex.: "Caixa 3") e você pode trocar. O volume novo nasce aberto, igual ao do + Volume, e você continua bipando nele. Volume de OP não aparece como destino.',
+    },
+    {
+      nome: 'Mover N (verde) e Cancelar',
+      descricao:
+        'O número no botão é quantos lançamentos estão marcados. Fica apagado enquanto nada está marcado ou quando o destino é o mesmo volume de onde os marcados vieram. Depois de mover: aviso verde "N lançamento(s) movido(s)", o volume de destino vira o volume ativo e o volume de onde tudo saiu, se ficou vazio, é apagado sozinho. Cancelar fecha a janela sem mudar nada.',
     },
     {
       nome: 'Qtd',
@@ -117,7 +132,27 @@ export const conferenciaPedido: AjudaTela = {
     },
     {
       quando: 'Esqueci de abrir a caixa nova e bipei tudo na mesma.',
-      oQueFazer: 'Toque em ⇄ Mover itens, marque o que está na caixa nova, escolha + Novo volume e toque em Mover. Continue bipando: a caixa nova já fica ativa.',
+      oQueFazer: 'Toque em ⇄ Mover itens, marque os lançamentos das peças que estão fisicamente na caixa nova, escolha novo volume ("Novo volume" no web, "+ Novo volume" no coletor), confira o tipo e o nome e toque em Mover. Continue bipando: a caixa nova já fica ativa.',
+    },
+    {
+      quando: 'Quero levar só parte de um lançamento (ex.: 3 das 6 peças de um 6×).',
+      oQueFazer: 'Não dá: o lançamento vai inteiro. Abra o volume, toque na lixeira do lançamento de 6×, deixe o volume certo ativo e bipe de novo as peças em cada caixa.',
+    },
+    {
+      quando: 'Não aparece o botão ⇄ Mover itens.',
+      oQueFazer: 'Ele só aparece com a conferência iniciada e com pelo menos um volume com lançamento que não seja de OP. Se o documento já foi concluído, quem move é o Sup. Pátio, pelo web, em Gestão → Conferidos ou Gestão → Fechamentos.',
+    },
+    {
+      quando: 'Na janela de mover, um volume aparece apagado com "fábrica · não move".',
+      oQueFazer: 'É caixa ou fardo fechado da fábrica (OP). Ele não sai do lugar nem recebe lançamento de outro volume. Para corrigir uma OP, use Desfazer OP no volume.',
+    },
+    {
+      quando: 'Botão Mover apagado com o aviso amarelo "Os lançamentos marcados já estão nesse volume." (no coletor: "Os marcados já estão nesse volume.")',
+      oQueFazer: 'O destino escolhido é o mesmo volume de onde os marcados saíram. Escolha outro volume ou novo volume.',
+    },
+    {
+      quando: 'Mensagem em vermelho na janela de mover, como "algum lançamento não pertence a este documento" ou "volume de destino não pertence ao documento".',
+      oQueFazer: 'A tela estava desatualizada (outra pessoa ou outro aparelho mexeu nos volumes). Toque em Cancelar, espere a tela recarregar e faça de novo. Se repetir, avise o Sup. Pátio.',
     },
     {
       quando: 'Aparece "Passa do pedido — nada foi lançado" com o multiplicador ligado.',
@@ -180,7 +215,7 @@ export const conferenciaPedido: AjudaTela = {
     },
     {
       quando: 'Lançou no volume errado.',
-      oQueFazer: 'Abra o volume, toque na lixeira ao lado do lançamento e bipe de novo no volume certo.',
+      oQueFazer: 'Toque em ⇄ Mover itens, marque o lançamento, escolha o volume certo e toque em Mover. Não precisa apagar nem bipar de novo.',
     },
     {
       quando: 'Sobrou mercadoria. Ao tocar em Concluir ✓, a tela pergunta "Sobrou mercadoria?".',
@@ -217,6 +252,7 @@ export const conferenciaPedido: AjudaTela = {
   dicas: [
     'Peça a peça, só bipe. Caixa fechada com muitas unidades: toque em Qtd e bipe uma vez. Vários pacotes iguais: use ×2, ×4, ×6 ou ×12 e confira o número no botão antes de bipar.',
     'Apague só volumes vazios. Com itens, remova os lançamentos antes.',
+    'Esqueceu de abrir a caixa nova? Não apague e não bipe de novo: use ⇄ Mover itens.',
   ],
   relacionadas: ['conferencia', 'login'],
 }
