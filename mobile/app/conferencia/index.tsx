@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { useToast } from '@/components/Toast'
 import { useDialog } from '@/components/Dialog'
 import {
@@ -12,7 +12,7 @@ import {
   Vibration,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { useRouter } from 'expo-router'
+import { useRouter, useFocusEffect } from 'expo-router'
 import { Header } from '@/components/Header'
 import { DocBadges } from '@/components/DocBadges'
 import { CameraScanner } from '@/components/CameraScanner'
@@ -186,17 +186,31 @@ export default function ConferenciaLista() {
     setTimeout(() => { scanRef.current?.blur(); setTimeout(() => scanRef.current?.focus(), 50) }, 0)
   }
 
-  useEffect(() => {
-    const t = setTimeout(() => scanRef.current?.focus(), 300)
-    return () => clearTimeout(t)
-  }, [])
-
-  useEffect(() => {
-    carregar()
-    // Polling a cada 30s
-    const id = setInterval(() => carregar(true), 30_000)
-    return () => clearInterval(id)
-  }, [carregar])
+  // Só a tela em foco carrega e faz o polling de 30 s (2026-11-25). Antes o relógio ficava
+  // preso à tela montada, e a tela de conferência saía com router.replace('/conferencia'):
+  // a lista antiga continuava embaixo na pilha e nascia outra por cima — cada conferência
+  // concluída deixava mais um relógio pedindo a lista (medido em produção: 5 conclusões =
+  // 6 chamadas a cada 30 s no mesmo coletor; com 10 conferentes, dezenas à tarde).
+  // Ao voltar da conferência a tela recomeça do zero, como quando era recriada: limpa as
+  // listas (o documento recém-concluído não fica na tela para ser tocado) e recarrega.
+  const jaCarregou = useRef(false)
+  useFocusEffect(
+    useCallback(() => {
+      if (jaCarregou.current) {
+        setPedidos([])
+        setDisponiveis([])
+        setTotalDisponiveis(0)
+      }
+      jaCarregou.current = true
+      carregar()
+      const id = setInterval(() => carregar(true), 30_000)
+      const t = setTimeout(() => scanRef.current?.focus(), 300)
+      return () => {
+        clearInterval(id)
+        clearTimeout(t)
+      }
+    }, [carregar]),
+  )
 
   const syncLabel = lastSync
     ? lastSync.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })

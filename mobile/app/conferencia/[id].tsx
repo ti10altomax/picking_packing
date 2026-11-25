@@ -246,6 +246,14 @@ export default function ConferenciaDetalhe() {
     return () => clearInterval(t)
   }, [loading, cancelado, carregar])
 
+  // Sai para "Atribuídos a mim" voltando à lista que já está embaixo na pilha (2026-11-25).
+  // Era router.replace('/conferencia'): trocava só esta tela por uma lista nova e a antiga
+  // continuava montada embaixo, com o polling dela — uma a mais por conferência concluída.
+  function voltarParaLista() {
+    if (router.canGoBack()) router.back()
+    else router.replace('/conferencia')
+  }
+
   // Qualquer ação recusada por cancelamento: recarrega (o status vira `cancelado`
   // e a tela troca pelo bloqueio). Devolve true se tratou.
   async function tratarCancelado(err: unknown) {
@@ -356,7 +364,7 @@ export default function ConferenciaDetalhe() {
           return
         }
       }
-      router.replace('/conferencia')
+      voltarParaLista()
     } catch (e: unknown) {
       if (await tratarCancelado(e)) return
       const msg = (e as { response?: { data?: { erro?: string } } })?.response?.data?.erro
@@ -427,7 +435,7 @@ export default function ConferenciaDetalhe() {
     setModalNaoConforme(false)
     try {
       await conferenciaApi.marcarNaoConforme(pedidoId, motivo, detalhe)
-      router.replace('/conferencia')
+      voltarParaLista()
     } catch (err: unknown) {
       if (await tratarCancelado(err)) return
       setErro('Erro ao marcar como não conforme')
@@ -768,7 +776,7 @@ export default function ConferenciaDetalhe() {
 
   // Estado: documento cancelado no Senior — bloqueio total, só volta à lista
   if (pedido.status === 'cancelado') {
-    return <TelaCancelada pedido={pedido} onVoltar={() => router.replace('/conferencia')} />
+    return <TelaCancelada pedido={pedido} onVoltar={() => voltarParaLista()} />
   }
 
   // Estado: ainda não iniciou conferência
@@ -1148,7 +1156,7 @@ export default function ConferenciaDetalhe() {
       <EscolherImpressora
         visible={modalImpressora}
         pedidoId={pedidoId}
-        onClose={() => { setModalImpressora(false); router.replace('/conferencia') }}
+        onClose={() => { setModalImpressora(false); voltarParaLista() }}
       />
 
       {modalConcluir ? (
