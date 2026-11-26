@@ -37,6 +37,7 @@ const ICONES: Record<string, React.ReactNode> = {
   divergencias: <path d="M3 5v14M8 5v14M12 5v14M17 5v14M21 5v14" />,
   etiquetas: <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82zM7 7h.01" />,
   saude: <path d="M22 12h-4l-3 9L9 3l-3 9H2" />,
+  desempenho: <><path d="M3 3v18h18" /><path d="M7 16v-5" /><path d="M12 16V8" /><path d="M17 16v-9" /></>,
   agora: <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 5v5l3 2" />,
 }
 
@@ -254,7 +255,7 @@ export default function AdminPage() {
         return (
           <Link
             href="/admin/saude"
-            className={`group flex items-center gap-3 bg-surface-card border rounded-xl px-4 py-3.5 mb-10 transition-all hover:-translate-y-0.5 hover:shadow-lg dark:hover:shadow-black/30 ${borda}`}
+            className={`group flex items-center gap-3 bg-surface-card border rounded-xl px-4 py-3.5 mb-3 transition-all hover:-translate-y-0.5 hover:shadow-lg dark:hover:shadow-black/30 ${borda}`}
           >
             <span className="text-ink-subtle group-hover:text-ink transition-colors"><Icone nome="saude" /></span>
             <span className="text-sm font-medium text-ink leading-snug">Saúde do sistema</span>
@@ -265,13 +266,17 @@ export default function AdminPage() {
         )
       })()}
 
-      {/* Desempenho (2026-11-26): o dia em números — atividade e tempos de resposta */}
-      <p className="text-xs text-ink-subtle -mt-8 mb-10">
-        <Link href="/admin/desempenho" className="underline underline-offset-2 hover:text-ink transition-colors">
-          Desempenho do dia
-        </Link>
-        {' '}— bips, conferências e tempo de resposta, hora a hora
-      </p>
+      {/* Desempenho (2026-11-26): o dia em números — atividade e tempos de resposta.
+          Mesmo formato da linha da Saúde (um texto pequeno aqui passou despercebido). */}
+      <Link
+        href="/admin/desempenho"
+        className="group flex items-center gap-3 bg-surface-card border border-surface-border rounded-xl px-4 py-3.5 mb-10 transition-all hover:-translate-y-0.5 hover:shadow-lg dark:hover:shadow-black/30"
+      >
+        <span className="text-ink-subtle group-hover:text-ink transition-colors"><Icone nome="desempenho" /></span>
+        <span className="text-sm font-medium text-ink leading-snug">Desempenho do dia</span>
+        <span className="text-sm text-ink-muted flex-1 truncate">bips, conferências e tempo de resposta, hora a hora</span>
+        <span className="text-ink-subtle opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all">→</span>
+      </Link>
 
       {/* Cadastros */}
       <p className="text-xs text-ink-subtle mb-2">
