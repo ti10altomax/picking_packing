@@ -265,6 +265,14 @@ export default function AdminPage() {
         )
       })()}
 
+      {/* Desempenho (2026-11-26): o dia em números — atividade e tempos de resposta */}
+      <p className="text-xs text-ink-subtle -mt-8 mb-10">
+        <Link href="/admin/desempenho" className="underline underline-offset-2 hover:text-ink transition-colors">
+          Desempenho do dia
+        </Link>
+        {' '}— bips, conferências e tempo de resposta, hora a hora
+      </p>
+
       {/* Cadastros */}
       <p className="text-xs text-ink-subtle mb-2">
         Cadastros:{' '}

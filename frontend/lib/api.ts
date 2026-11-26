@@ -751,6 +751,36 @@ export const saudeApi = {
   completa: () => api.get('/api/saude/').then((r) => r.data as SaudeSistema),
 }
 
+// Admin → Desempenho (2026-11-26): atividade e tempos de resposta de um dia
+export type DesempenhoAcao = {
+  acao: string; rotulo: string; n: number
+  mediana_ms: number | null; p95_ms: number | null; max_ms: number; media_ms: number | null
+  soma_min: number; ate_300: number; ate_1000: number; acima_2000: number; erros: number
+}
+export type DesempenhoHora = {
+  hora: number; bips: number; ops: number; conclusoes: number; conferentes_bipando: number
+  bip_mediana_ms: number | null; bip_p95_ms: number | null; bip_max_ms: number | null
+}
+export type DesempenhoDia = {
+  data: string
+  tem_tempos: boolean   // false = dia anterior ao deploy: só a atividade (PedidoLog) existe
+  resumo: {
+    bips: number; ops: number; conclusoes: number; conferentes: number
+    requisicoes: number; erros: number; ate_300_pct: number | null; ate_1000_pct: number | null
+    requisicoes_sem_agente: number; ate_300_pct_sem_agente: number | null; acima_2000: number
+    bip_mediana_ms: number | null; bip_p95_ms: number | null
+  }
+  horas: DesempenhoHora[]
+  acoes_conferente: DesempenhoAcao[]
+  demais: DesempenhoAcao[]
+  conferentes: { usuario: string; bips: number; ops: number; conclusoes: number; primeiro: string; ultimo: string }[]
+  lentas: { quando: string; acao: string; rotulo: string; metodo: string; caminho: string; status_http: number; duracao_ms: number; usuario: string | null; perfil: string | null }[]
+  limites_ms: { lenta_conferente: number; lenta: number }
+}
+export const desempenhoApi = {
+  dia: (data?: string) => api.get('/api/desempenho/', { params: data ? { data } : {} }).then((r) => r.data as DesempenhoDia),
+}
+
 export type ErroClienteItem = {
   id: number
   origem: 'web' | 'mobile'

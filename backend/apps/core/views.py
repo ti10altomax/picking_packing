@@ -68,6 +68,24 @@ def saude_completa(request):
     return Response(saude.completo())
 
 
+@api_view(['GET'])
+def desempenho_dia(request):
+    """Tela Admin → Desempenho (2026-11-26): atividade e tempos de resposta de um dia
+    (`?data=AAAA-MM-DD`, padrão hoje). Só admin."""
+    if request.user.perfil != 'admin':
+        return Response({'erro': 'sem permissão'}, status=http_status.HTTP_403_FORBIDDEN)
+    import datetime as dt
+    from django.utils import timezone
+    from . import desempenho
+    bruto = (request.query_params.get('data') or '').strip()
+    try:
+        dia = dt.date.fromisoformat(bruto) if bruto else timezone.localdate()
+    except ValueError:
+        return Response({'erro': 'data inválida — use AAAA-MM-DD'}, status=http_status.HTTP_400_BAD_REQUEST)
+    desempenho.descarregar()   # o que este processo ainda tinha em memória entra na conta
+    return Response(desempenho.relatorio(dia))
+
+
 # ---------------------------------------------------------------------------
 # Erros de cliente — web e coletor (observabilidade, 2026-10-08)
 # ---------------------------------------------------------------------------

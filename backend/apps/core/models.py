@@ -175,3 +175,63 @@ class User(AbstractUser):
 
     def __str__(self):
         return f'{self.username} ({self.get_perfil_display()})'
+
+
+class MedidaRequisicao(models.Model):
+    """Tempos de resposta da API resumidos por janela de 5 minutos, ação e perfil (Admin →
+    Desempenho, 2026-11-26 — ver apps/core/desempenho.py). `f0`…`f14` são o histograma: quantas
+    requisições caíram em cada faixa de `desempenho.LIMITES_MS` (a última é "acima do maior
+    limite"); com ele a tela estima mediana e 95% sem guardar uma linha por requisição."""
+
+    inicio = models.DateTimeField(db_index=True)   # começo da janela
+    acao = models.CharField(max_length=40)         # desempenho.classificar()
+    perfil = models.CharField(max_length=20, blank=True)
+    n = models.IntegerField(default=0)
+    soma_ms = models.BigIntegerField(default=0)
+    max_ms = models.IntegerField(default=0)
+    erros = models.IntegerField(default=0)         # respostas 5xx
+    f0 = models.IntegerField(default=0)
+    f1 = models.IntegerField(default=0)
+    f2 = models.IntegerField(default=0)
+    f3 = models.IntegerField(default=0)
+    f4 = models.IntegerField(default=0)
+    f5 = models.IntegerField(default=0)
+    f6 = models.IntegerField(default=0)
+    f7 = models.IntegerField(default=0)
+    f8 = models.IntegerField(default=0)
+    f9 = models.IntegerField(default=0)
+    f10 = models.IntegerField(default=0)
+    f11 = models.IntegerField(default=0)
+    f12 = models.IntegerField(default=0)
+    f13 = models.IntegerField(default=0)
+    f14 = models.IntegerField(default=0)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['inicio', 'acao', 'perfil'], name='medida_requisicao_unica')]
+        verbose_name = 'Medida de requisições'
+        verbose_name_plural = 'Medidas de requisições'
+
+    def __str__(self):
+        return f'{self.inicio:%d/%m %H:%M} {self.acao} [{self.perfil or "-"}] n={self.n}'
+
+
+class RequisicaoLenta(models.Model):
+    """Requisição demorada, guardada uma a uma (2026-11-26): acima de 1 s para o conferente,
+    de 2 s para os demais. É o "que tela, de quem, a que horas" de Admin → Desempenho."""
+
+    quando = models.DateTimeField(db_index=True)
+    metodo = models.CharField(max_length=8)
+    caminho = models.CharField(max_length=200)
+    acao = models.CharField(max_length=40)
+    status_http = models.IntegerField()
+    duracao_ms = models.IntegerField()
+    usuario = models.CharField(max_length=150, blank=True)
+    perfil = models.CharField(max_length=20, blank=True)
+
+    class Meta:
+        ordering = ['-quando']
+        verbose_name = 'Requisição lenta'
+        verbose_name_plural = 'Requisições lentas'
+
+    def __str__(self):
+        return f'{self.quando:%d/%m %H:%M:%S} {self.metodo} {self.caminho} {self.duracao_ms} ms'

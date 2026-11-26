@@ -6,6 +6,7 @@ urlpatterns = [
     # Observabilidade (2026-10-08)
     path('health/', views.health, name='health'),                 # Docker healthcheck, sem auth
     path('saude/', views.saude_completa, name='saude_completa'),  # Admin → Saúde
+    path('desempenho/', views.desempenho_dia, name='desempenho_dia'),  # Admin → Desempenho (2026-11-26)
     path('erros-cliente/', views.registrar_erro_cliente, name='registrar_erro_cliente'),  # POST, sem auth obrigatória
     path('erros-cliente/lista/', views.listar_erros_cliente, name='listar_erros_cliente'),
 ]

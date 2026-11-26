@@ -59,4 +59,7 @@ class LogRequisicaoMiddleware:
                 'ip': request.META.get('HTTP_X_FORWARDED_FOR', request.META.get('REMOTE_ADDR', '')).split(',')[0].strip(),
             },
         )
+        # Admin → Desempenho (2026-11-26): soma nos contadores do dia (nunca levanta erro)
+        from .desempenho import registrar
+        registrar(request.method, caminho, status, duracao_ms, usuario, perfil)
         return response

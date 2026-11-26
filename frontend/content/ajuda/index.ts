@@ -21,6 +21,7 @@ import { supervisorConferidosSemTransportadora } from './supervisor-conferidos-s
 import { supervisorEmbarcados } from './supervisor-embarcados'
 import { admin } from './admin'
 import { adminSaude } from './admin-saude'
+import { adminDesempenho } from './admin-desempenho'
 import { adminApp } from './admin-app'
 import { adminImpressoras } from './admin-impressoras'
 import { adminAgents } from './admin-agents'
@@ -55,6 +56,7 @@ export const TELAS: AjudaTela[] = [
   supervisorEmbarcados,
   admin,
   adminSaude,
+  adminDesempenho,
   adminApp,
   adminImpressoras,
   adminAgents,
