@@ -639,6 +639,19 @@ def _embarque_com_problema(resultado) -> bool:
 
 
 @shared_task
+@registrar_execucao()
+def verificar_cotacoes():
+    """Notas em cotação de frete (2026-11-26): relê a transportadora no Senior e, se mudou,
+    encerra a cotação e libera a etiqueta. Os outros beats só preenchem transportadora vazia;
+    este é o que enxerga a troca feita direto no ERP. Regra em apps/pedidos/cotacao.py."""
+    from apps.pedidos import cotacao
+    resultado = cotacao.verificar_no_senior()
+    if resultado['em_cotacao']:
+        logger.info('verificar_cotacoes: %s', resultado)
+    return resultado
+
+
+@shared_task
 @registrar_execucao(erro_se=_embarque_com_problema)
 def sincronizar_embarques(dias: int | None = None):
     """

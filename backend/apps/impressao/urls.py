@@ -11,6 +11,11 @@ urlpatterns = [
     path('impressao/pedidos/<int:pk>/imprimir/', views.imprimir, name='impressao_imprimir'),
     path('impressao/pendentes/', views.pendentes, name='impressao_pendentes'),
     path('impressao/impressoras/', views.impressoras, name='impressao_impressoras'),
+    # Impressora de cada conferente (2026-11-26): a própria, e a gestão pelo admin
+    path('impressao/minha-impressora/', views.minha_impressora, name='impressao_minha_impressora'),
+    path('impressao/conferentes/', views.conferentes_impressoras, name='impressao_conferentes'),
+    path('impressao/conferentes/trocar/', views.trocar_impressora_conferentes, name='impressao_conferentes_trocar'),
+    path('impressao/conferentes/<int:user_id>/', views.impressora_do_conferente, name='impressao_conferente'),
     path('impressao/config/', views.config, name='impressao_config'),
 ]
 

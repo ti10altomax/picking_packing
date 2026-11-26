@@ -349,11 +349,8 @@ export default function ConferenciaPedidoPage() {
   const avisarEtiqueta = async (e: VereditoEtiqueta) => {
     const vols = `${e.qtd_volumes} volume(s)`
     if (e.resultado === 'enfileirada') {
-      await dialog.alert({
-        title: 'Etiquetas enviadas',
-        message: `${vols} → impressora ${e.impressora}. Cole uma etiqueta em cada caixa.`,
-        variant: 'success',
-      })
+      // 2026-11-26: só avisa, sem botão — a etiqueta saiu sozinha na impressora do conferente
+      toast.ok('Etiquetas enviadas', { detalhe: `${vols} → ${e.impressora}. Cole uma em cada caixa.`, duracao: 5000 })
       return
     }
     if (e.resultado === 'sem_transportadora') {
@@ -373,10 +370,23 @@ export default function ConferenciaPedidoPage() {
       return
     }
     if (e.resultado === 'volumes_divergentes') {
-      await dialog.alert({
+      await dialog.alert(e.carta_automatica ? {
+        // 2026-11-26: a carta dos volumes sai sozinha, em segundo plano
+        title: 'Ajustando os volumes da nota',
+        message: 'A quantidade de volumes é diferente da nota fiscal. A carta de correção está sendo gerada automaticamente; em instantes a etiqueta pode ser impressa em Gestão → Conferidos.',
+        variant: 'info',
+      } : {
         title: 'Volumes diferentes da NF',
         message: `${e.mensagem ?? 'A quantidade de volumes não bate com a nota fiscal.'} A etiqueta sai sozinha depois da carta de correção (Gestão → Cartas de correção).`,
         variant: 'warning',
+      })
+      return
+    }
+    if (e.resultado === 'em_cotacao') {
+      await dialog.alert({
+        title: 'Nota em cotação',
+        message: 'A transportadora desta nota ainda vai mudar. A etiqueta não sai agora — o supervisor imprime quando a cotação terminar.',
+        variant: 'info',
       })
       return
     }

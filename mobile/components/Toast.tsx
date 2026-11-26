@@ -23,7 +23,7 @@ export type ToastOpcoes = {
   detalhe?: string
   /** código lido pelo leitor/câmera — aparece em mono para o conferente conferir o que bipou */
   codigo?: string
-  /** ms; padrão por tipo (erro 6 s, aviso 5 s, ok/info 3,5 s) */
+  /** ms; padrão por tipo (erro 6 s, aviso 5 s, info 3,5 s, ok 2 s) */
   duracao?: number
   chave?: string
 }
@@ -38,7 +38,8 @@ type ToastApi = {
   fechar: (id: number) => void
 }
 
-const DURACAO: Record<ToastTipo, number> = { erro: 6000, aviso: 5000, ok: 3500, info: 3500 }
+// Sucesso fica 2 s (era 3,5 s; pedido de 2026-11-26: a faixa verde demorava a sair da frente)
+const DURACAO: Record<ToastTipo, number> = { erro: 6000, aviso: 5000, ok: 2000, info: 3500 }
 const MAX_VISIVEIS = 3
 
 const ESTILO: Record<ToastTipo, { caixa: string; texto: string; icone: string; simbolo: string; barra: string }> = {

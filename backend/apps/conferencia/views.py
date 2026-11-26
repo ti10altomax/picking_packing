@@ -999,6 +999,14 @@ def _finalizar_conferido(pedido: Pedido, user) -> tuple[bool, str]:
     except Exception:  # nunca derruba o concluir por causa da etiqueta
         logger.exception(f'etiqueta de volume: falha ao decidir impressão de {pedido}')
         etiqueta = {'resultado': 'erro', 'impressora': None}
+    # Carta de correção automática dos volumes (2026-11-26): se o documento entra na regra,
+    # a carta é gerada em segundo plano e a tela do conferente avisa em vez de só dizer "≠ NF".
+    try:
+        from apps.carta_correcao import automatica
+        if automatica.agendar(pedido):
+            etiqueta = {**etiqueta, 'carta_automatica': True}
+    except Exception:
+        logger.exception(f'carta automática: falha ao agendar para {pedido}')
     return sucesso, msg_erro, etiqueta
 
 

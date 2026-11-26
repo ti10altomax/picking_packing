@@ -55,6 +55,34 @@ class ImpressaoEtiqueta(models.Model):
         return f'{self.pedido} · {self.get_canal_display()} · {self.get_status_display()}'
 
 
+class ImpressoraUsuario(models.Model):
+    """Impressora de etiquetas de cada conferente (2026-11-26).
+
+    O Pátio tem mais de uma impressora e cada conferente imprime na que está perto dele; a
+    impressora padrão única obrigava a perguntar no fim de toda conferência. Com esta linha, a
+    etiqueta sai sozinha na impressora do conferente do documento — ao concluir e também quando
+    a etiqueta fica para depois (NF/transportadora que chega, carta de correção dos volumes,
+    fim da cotação). O próprio conferente troca na tela dele; o admin também. Sem linha = vale
+    a regra antiga (impressão automática + impressora padrão, ou a pergunta).
+    """
+
+    usuario = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='impressora_etiqueta',
+    )
+    impressora = models.ForeignKey(Impressora, on_delete=models.CASCADE, related_name='usuarios_etiqueta')
+    definido_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+',
+    )
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Impressora do conferente'
+        verbose_name_plural = 'Impressoras dos conferentes'
+
+    def __str__(self):
+        return f'{self.usuario} → {self.impressora}'
+
+
 def _caminho_agente(instancia, nome):
     return f'agente/SeparaAgente-{instancia.versao}.exe'
 

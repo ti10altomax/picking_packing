@@ -12,6 +12,7 @@ import {
   Vibration,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { MinhaImpressora } from '@/components/MinhaImpressora'
 import { useRouter, useFocusEffect } from 'expo-router'
 import { Header } from '@/components/Header'
 import { DocBadges } from '@/components/DocBadges'
@@ -247,6 +248,9 @@ export default function ConferenciaLista() {
           </Pressable>
         </View>
       </View>
+
+      {/* Impressora do conferente (2026-11-26): a etiqueta sai nela sozinha ao concluir */}
+      <MinhaImpressora />
 
       {/* Bipar a nota para pegar (ou abrir) o pedido — ponto 4 da diretoria */}
       <View

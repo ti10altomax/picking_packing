@@ -244,6 +244,7 @@ export type SequenciaPedido = {
   atribuido_em: string | null
   qtd_itens: number
   embarque_numero?: string   // nota já num embarque do Senior (2026-11-24)
+  em_cotacao?: boolean       // cotação de frete: etiqueta segura (2026-11-26)
 }
 
 export const sequenciasApi = {
@@ -371,7 +372,7 @@ export const supervisorApi = {
   localizar: (q: string) =>
     api.get('/api/pedidos/localizar/', { params: { q } }).then((r) => r.data as Localizacao[]),
   // `para`: 'vendas' (default, busca no Senior o que falta) | 'patio' (só o que já está no Separa)
-  buscarLote: (numeros: string[], para: 'vendas' | 'patio' = 'vendas') =>
+  buscarLote: (numeros: string[], para: 'vendas' | 'patio' | 'consulta' = 'vendas') =>
     api.post('/api/pedidos/buscar_lote/', { numeros, para }).then((r) => r.data as BuscaLote),
   listarPendentes: (params: { search?: string; page?: number; tipo?: string; frete?: string; transportadora?: 'com' | 'sem' | '' } = {}) =>
     api.get('/api/pedidos/', {
@@ -402,14 +403,16 @@ export const supervisorApi = {
   transferirConferencia: (id: number, destinoId: number) =>
     api.post(`/api/cancelados/${id}/transferir/`, { destino_id: destinoId }).then((r) => r.data),
   // `transportadora`: 'com' | 'sem' filtra pela presença da transportadora (2026-11-09)
-  listarConferidos: (params: { search?: string; page?: number; transportadora?: 'com' | 'sem' | '' } = {}) =>
+  // `etiqueta`: 'nao_impressa' = sem etiqueta de volume impressa (2026-11-26)
+  // `ids`: "1,2,3" = só os documentos da lista colada (2026-11-26)
+  listarConferidos: (params: { search?: string; page?: number; transportadora?: 'com' | 'sem' | ''; etiqueta?: 'nao_impressa' | 'impressa' | ''; ids?: string } = {}) =>
     api.get('/api/pedidos/', {
       params: { status: 'conferido', ...params },
     }).then((r) => r.data),
   // Embarcados (2026-11-24): nota que entrou num embarque do Senior. `conferencia`:
   // 'com' = passou pela conferência antes de sair | 'sem' = embarcou direto de Pendente/Selecionado.
   // A busca também acha por embarque, placa, motorista e transportadora.
-  listarEmbarcados: (params: { search?: string; page?: number; conferencia?: 'com' | 'sem' | '' } = {}) =>
+  listarEmbarcados: (params: { search?: string; page?: number; conferencia?: 'com' | 'sem' | ''; ids?: string } = {}) =>
     api.get('/api/pedidos/', {
       params: { status: 'embarcado', ordem: 'embarque', ...params },
     }).then((r) => r.data),
@@ -418,6 +421,10 @@ export const supervisorApi = {
   relatorioSemTransportadora: () =>
     api.get('/api/conferidos/sem_transportadora/').then((r) => r.data as RelatorioSemTransportadora),
   // Devolver para Vendas (admin, 2026-11-16): Conferido → Pendente, apaga volumes e zera o separado
+  // Em cotação de frete (2026-11-26): segura a etiqueta de volume até a transportadora mudar
+  cotacao: (id: number, emCotacao: boolean) =>
+    api.post(`/api/pedidos/${id}/cotacao/`, { em_cotacao: emCotacao })
+      .then((r) => r.data as { id: number; em_cotacao: boolean; codtra?: string; transportadora?: string; etiqueta_bloqueio: BloqueioEtiqueta | null }),
   devolverConferido: (id: number, motivo?: string) =>
     api.post(`/api/conferidos/${id}/devolver/`, { motivo: motivo ?? '' }).then((r) => r.data),
   // Mover lançamentos inteiros entre volumes de um Conferido / Aguardando fechamento (2026-11-19)
@@ -556,11 +563,23 @@ export type EtiquetaPendente = {
 /** Motivo de a etiqueta não poder sair agora (regra única no backend) */
 export type BloqueioEtiqueta = { codigo: string; mensagem: string }
 
+/** Linha de Admin → Impressoras: o conferente e a impressora em que as etiquetas dele saem (2026-11-26) */
+export type ConferenteImpressora = {
+  id: number
+  username: string
+  nome: string
+  impressora_id: number | null
+  impressora: string | null
+  impressora_ativa: boolean | null
+}
+
 /** Veredito da impressão automática devolvido pelo concluir / fechar sobra */
 export type VereditoEtiqueta = {
   resultado: 'enfileirada' | 'sem_transportadora' | 'sem_nf' | 'volumes_divergentes' | 'sem_impressora_padrao' | 'desligada' | 'erro'
-    | 'nao_conferido' | 'pedido_cancelado' | 'sem_volumes'
+    | 'nao_conferido' | 'pedido_cancelado' | 'sem_volumes' | 'em_cotacao'
   impressora: string | null
+  /** a carta de correção dos volumes foi agendada para sair sozinha (2026-11-26) */
+  carta_automatica?: boolean
   impressora_id?: number
   mensagem?: string
   qtd_volumes: number
@@ -592,14 +611,26 @@ export const impressaoApi = {
   },
   imprimir: (pedidoId: number, body: { impressora_id?: number; canal?: 'navegador'; volumes?: string }) =>
     api.post(`/api/impressao/pedidos/${pedidoId}/imprimir/`, body)
-      .then((r) => r.data as { resultado: string; erro: string | null; impressao: ImpressaoEtiqueta }),
+      // `minha_impressora`: esta foi a primeira que o conferente escolheu e ficou como a dele
+      .then((r) => r.data as { resultado: string; erro: string | null; impressao: ImpressaoEtiqueta; minha_impressora?: { id: number; nome: string } }),
   pendentes: () =>
     api.get('/api/impressao/pendentes/')
       // `aguardando_transportadora` = aguardando o Senior (transportadora ou, com exige_nf, a NF)
       .then((r) => r.data as { prontas: EtiquetaPendente[]; aguardando_transportadora: EtiquetaPendente[]; exige_nf: boolean; exige_volumes?: boolean }),
   impressoras: () =>
     api.get('/api/impressao/impressoras/')
-      .then((r) => r.data as { impressoras: ImpressoraEtiqueta[]; impressora_padrao: number | null; automatica: boolean; exige_nf: boolean }),
+      // `minha` = impressora do próprio usuário (2026-11-26)
+      .then((r) => r.data as { impressoras: ImpressoraEtiqueta[]; impressora_padrao: number | null; automatica: boolean; exige_nf: boolean; minha?: number | null }),
+  // Impressora por conferente (2026-11-26): a própria (null = perguntar sempre) e a gestão do admin
+  definirMinhaImpressora: (impressoraId: number | null) =>
+    api.put('/api/impressao/minha-impressora/', { impressora_id: impressoraId })
+      .then((r) => r.data as { impressora: { id: number; nome: string } | null }),
+  conferentesImpressoras: () =>
+    api.get('/api/impressao/conferentes/').then((r) => r.data as { conferentes: ConferenteImpressora[] }),
+  definirImpressoraConferente: (userId: number, impressoraId: number | null) =>
+    api.put(`/api/impressao/conferentes/${userId}/`, { impressora_id: impressoraId }).then((r) => r.data as ConferenteImpressora),
+  trocarImpressoraConferentes: (de: number, para: number) =>
+    api.post('/api/impressao/conferentes/trocar/', { de, para }).then((r) => r.data as { trocados: number }),
   config: () =>
     api.get('/api/impressao/config/').then((r) => r.data as ConfigEtiqueta),
   salvarConfig: (dados: { impressora_padrao?: number | null; automatica?: boolean; exige_nf?: boolean; exige_volumes?: boolean; modelo?: ModeloEtiqueta }) =>
@@ -842,6 +873,9 @@ export type CceConfig = {
   tipger: number
   texto: CceTexto
   perfis: string[]   // quem pode corrigir (Configuracao.cce_perfis + admin) — só leitura; muda no Django Admin
+  // carta dos volumes gerada sozinha ao concluir (2026-11-26); `_desde` = quando foi ligada (ISO)
+  volumes_automatica?: boolean
+  volumes_automatica_desde?: string | null
   dry_run: boolean
   wsdl_carta_configurado: boolean
   wsdl_documento_configurado: boolean
@@ -857,6 +891,7 @@ export type CceCarta = {
   id: number
   criado_em: string
   usuario: string | null
+  automatica?: boolean   // gerada sozinha pelo sistema (volumes)
   pedido_id: number
   numero_externo: string
   tipo: string
@@ -964,6 +999,6 @@ export const cartaCorrecaoApi = {
   config: () => api.get('/api/carta-correcao/config/').then((r) => r.data as CceConfig),
   // o usuário logado pode corrigir NF? (esconde menu e botão; a regra de verdade é o 403 do backend)
   permissao: () => api.get('/api/carta-correcao/permissao/').then((r) => r.data as { pode: boolean; perfis: string[] }),
-  salvarConfig: (dados: { modo?: CceModo; tipger?: '1' | '2' ; texto?: CceTexto }) =>
+  salvarConfig: (dados: { modo?: CceModo; tipger?: '1' | '2' ; texto?: CceTexto; volumes_automatica?: boolean }) =>
     api.put('/api/carta-correcao/config/', dados).then((r) => r.data as CceConfig),
 }

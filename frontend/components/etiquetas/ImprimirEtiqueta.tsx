@@ -45,6 +45,7 @@ export function rotuloBloqueio(b: BloqueioEtiqueta | null | undefined): string {
   if (b.codigo === 'sem_transportadora') return 'Sem transportadora'
   if (b.codigo === 'sem_nf') return 'Sem NF'
   if (b.codigo === 'volumes_divergentes') return 'Volumes ≠ NF'
+  if (b.codigo === 'em_cotacao') return 'EM COTAÇÃO'
   return 'Indisponível'
 }
 
@@ -170,6 +171,9 @@ export function ImprimirEtiqueta({
             // Alerta (2026-11-17): volumes do Separa ≠ volumes da NF — alguém precisa agir
             // (Corrigir NF). Verde desabilitado passava despercebido.
             ? 'border-amber-400 bg-amber-50 text-amber-800 dark:border-amber-500/50 dark:bg-amber-500/15 dark:text-amber-300'
+            : bloqueio?.codigo === 'em_cotacao'
+              // Em cotação de frete (2026-11-26): é uma situação da nota, não um defeito — azul-claro
+              ? 'border-sky-400 bg-sky-50 text-sky-800 font-semibold tracking-wide dark:border-sky-500/50 dark:bg-sky-500/15 dark:text-sky-300'
             : bloqueio
               ? 'border-surface-border bg-surface-card text-ink-muted opacity-60'
               : impressaEm

@@ -24,6 +24,10 @@ export const conferencia: AjudaTela = {
   ],
   elementos: [
     {
+      nome: 'Minha impressora',
+      descricao: 'A impressora em que as etiquetas das suas conferências saem sozinhas quando você conclui, sem perguntar. Toque para escolher ou trocar (por exemplo, quando for trabalhar perto da outra impressora). Em "Perguntar sempre" o sistema pergunta ao concluir e guarda a primeira que você escolher.',
+    },
+    {
       nome: 'Sequência N (badge azul)',
       descricao:
         'Sequência em que você está trabalhando agora. Você só confere documentos dela até terminar.',

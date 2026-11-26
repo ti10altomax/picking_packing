@@ -67,6 +67,9 @@ export default function Conferidos() {
   // '' | 'com' | 'sem' — separar o que já pode sair do que ainda espera transportadora (2026-11-09)
   const [transportadora, setTransportadora] = useState<'' | 'com' | 'sem'>('')
   const transportadoraRef = useRef<'' | 'com' | 'sem'>('')
+  // '' | 'nao_impressa' — só o que ainda não teve etiqueta de volume impressa (2026-11-26)
+  const [etiqueta, setEtiqueta] = useState<'' | 'nao_impressa'>('')
+  const etiquetaRef = useRef<'' | 'nao_impressa'>('')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const buscaAtivaRef = useRef('')
 
@@ -84,6 +87,7 @@ export default function Conferidos() {
     try {
       const data: Paginado | Pedido[] = await supervisorApi.listarConferidos({
         search, page, transportadora: transportadoraRef.current || undefined,
+        etiqueta: etiquetaRef.current || undefined,
       })
       if (Array.isArray(data)) {
         setPedidos(data); setCount(data.length); setProximaPagina(null)
@@ -104,10 +108,11 @@ export default function Conferidos() {
 
   useEffect(() => {
     transportadoraRef.current = transportadora
+    etiquetaRef.current = etiqueta
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => carregar(busca, 1, false), 300)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
-  }, [busca, transportadora, carregar])
+  }, [busca, transportadora, etiqueta, carregar])
 
   async function alternarExpansao(id: number) {
     setExpandidos((prev) => {
@@ -151,6 +156,11 @@ export default function Conferidos() {
           valor={transportadora}
           onChange={(v) => setTransportadora(v as '' | 'com' | 'sem')}
           opcoes={[['', 'Todos'], ['com', 'Com transp.'], ['sem', 'Sem transp.']]}
+        />
+        <FiltroChips
+          valor={etiqueta}
+          onChange={(v) => setEtiqueta(v as '' | 'nao_impressa')}
+          opcoes={[['', 'Etiqueta: todas'], ['nao_impressa', 'Não impressa']]}
         />
       </View>
 
@@ -252,7 +262,9 @@ export default function Conferidos() {
                     (transportadora e, se configurado, NF emitida) em `etiqueta_bloqueio` */}
                 <View className="flex-row items-center justify-between px-4 pb-3 -mt-1">
                   <Text className="text-xs text-ink-subtle">
-                    {p.etiqueta_volume_em
+                    {bloqueioEtiqueta(p)?.codigo === 'em_cotacao'
+                      ? 'a transportadora vai mudar — etiqueta segura'
+                      : p.etiqueta_volume_em
                       ? `etiqueta impressa ${formatarData(p.etiqueta_volume_em)}`
                       : bloqueioEtiqueta(p) ? `${rotuloBloqueio(bloqueioEtiqueta(p))} — etiqueta aguardando` : 'etiqueta não impressa'}
                   </Text>
@@ -261,6 +273,8 @@ export default function Conferidos() {
                     disabled={!!bloqueioEtiqueta(p)}
                     className={`h-10 px-3 rounded-lg border items-center justify-center ${
                       bloqueioEtiqueta(p)?.codigo === 'volumes_divergentes' ? 'border-amber-500/60 bg-amber-500/15'
+                        // Em cotação de frete (2026-11-26): situação da nota, em azul-claro
+                        : bloqueioEtiqueta(p)?.codigo === 'em_cotacao' ? 'border-sky-500/60 bg-sky-500/15'
                         : bloqueioEtiqueta(p) ? 'border-surface-border opacity-40'
                         : p.etiqueta_volume_em ? 'border-surface-border bg-surface-card'
                         : 'border-emerald-500/40 bg-emerald-500/15'
@@ -269,9 +283,12 @@ export default function Conferidos() {
                     {/* Volumes ≠ NF em âmbar (2026-11-17): precisa de ação (Corrigir NF no web) */}
                     <Text className={`text-sm font-semibold ${
                       bloqueioEtiqueta(p)?.codigo === 'volumes_divergentes' ? 'text-amber-300'
+                        : bloqueioEtiqueta(p)?.codigo === 'em_cotacao' ? 'text-sky-300'
                         : p.etiqueta_volume_em || bloqueioEtiqueta(p) ? 'text-ink-muted' : 'text-emerald-300'
                     }`}>
-                      {bloqueioEtiqueta(p)?.codigo === 'volumes_divergentes' ? 'Volumes ≠ NF' : p.etiqueta_volume_em ? 'Reimprimir' : 'Etiqueta'}
+                      {bloqueioEtiqueta(p)?.codigo === 'volumes_divergentes' ? 'Volumes ≠ NF'
+                        : bloqueioEtiqueta(p)?.codigo === 'em_cotacao' ? 'EM COTAÇÃO'
+                        : p.etiqueta_volume_em ? 'Reimprimir' : 'Etiqueta'}
                     </Text>
                   </Pressable>
                 </View>

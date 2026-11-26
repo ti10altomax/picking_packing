@@ -21,6 +21,10 @@ export const adminImpressoras: AjudaTela = {
     'Escolha o Modelo da etiqueta. Cada mudança é salva na hora e aparece "Salvo." ao lado.',
   ],
   elementos: [
+    {
+      nome: 'Impressora de cada conferente',
+      descricao: 'Para quando há mais de uma impressora no Pátio. Com a impressora definida, a etiqueta sai nela sozinha quando o conferente conclui, mesmo com "Imprimir automaticamente ao concluir" desmarcado. O próprio conferente escolhe e troca na tela dele; aqui você acerta por ele. "Passar todos de … para …" serve para quando uma impressora para.',
+    },
     { nome: 'Impressora padrão', descricao: 'A que imprime a etiqueta sozinha. Em "nenhuma (só pelo botão)", nada sai sozinho: a etiqueta é impressa pelo botão em Gestão → Etiquetas.' },
     { nome: 'Imprimir automaticamente ao concluir', descricao: 'Marcado: a etiqueta sai quando o documento vira Conferido, se houver impressora padrão e transportadora. Desmarcado: só pelo botão.' },
     { nome: 'Só imprimir com NF emitida', descricao: 'Marcado: o pedido só imprime depois de faturado. Até lá o botão fica desabilitado e o documento espera em Gestão → Etiquetas. Documento que já é NF não muda. Desmarcado: basta ter transportadora.' },

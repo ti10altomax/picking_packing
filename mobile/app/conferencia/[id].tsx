@@ -381,11 +381,9 @@ export default function ConferenciaDetalhe() {
   async function avisarEtiqueta(e: VereditoEtiqueta): Promise<boolean> {
     const vols = `${e.qtd_volumes} volume(s)`
     if (e.resultado === 'enfileirada') {
-      await dialog.alert({
-        variant: 'success',
-        title: 'Etiquetas enviadas',
-        message: `${vols} → impressora ${e.impressora}. Cole uma etiqueta em cada caixa.`,
-      })
+      // 2026-11-26: só avisa (sem botão para tocar) — a etiqueta sai sozinha na impressora do
+      // conferente e a reclamação era justamente o passo a mais no fim da conferência
+      toast.ok('Etiquetas enviadas', { detalhe: `${vols} → ${e.impressora}. Cole uma em cada caixa.`, duracao: 5000 })
       return false
     }
     if (e.resultado === 'sem_transportadora') {
@@ -405,10 +403,23 @@ export default function ConferenciaDetalhe() {
       return false
     }
     if (e.resultado === 'volumes_divergentes') {
-      await dialog.alert({
+      await dialog.alert(e.carta_automatica ? {
+        // 2026-11-26: a carta dos volumes sai sozinha, em segundo plano
+        variant: 'info',
+        title: 'Ajustando os volumes da nota',
+        message: 'A quantidade de volumes é diferente da nota fiscal. A carta de correção está sendo gerada automaticamente; em instantes a etiqueta pode ser impressa pelo supervisor em Conferidos.',
+      } : {
         variant: 'warning',
         title: 'Volumes diferentes da NF',
         message: `${e.mensagem ?? 'A quantidade de volumes não bate com a nota fiscal.'} A etiqueta sai sozinha depois da carta de correção (Gestão → Cartas de correção, no web).`,
+      })
+      return false
+    }
+    if (e.resultado === 'em_cotacao') {
+      await dialog.alert({
+        variant: 'info',
+        title: 'Nota em cotação',
+        message: 'A transportadora desta nota ainda vai mudar. A etiqueta não sai agora — o supervisor imprime quando a cotação terminar.',
       })
       return false
     }
@@ -622,7 +633,7 @@ export default function ConferenciaDetalhe() {
             r.qtd_separada >= r.qtd_pedida ? ' — item completo' : ''
           }${r.codigo_alternativo ? ' · barra errada da fábrica (registrada)' : ''}`,
           chave: 'leitor',
-          duracao: 2500,
+          duracao: 1500,
         })
         if (r.caixa_cheia) avisarCaixaCheia(r.caixa_cheia)
         // os lançamentos do volume (com id para a lixeira) vêm do servidor; uma recarga
@@ -786,7 +797,15 @@ export default function ConferenciaDetalhe() {
         <CabecalhoSimples pedido={pedido} percent={0} segundos={segundos} onBack={() => router.back()} />
         <ScrollView
           className="flex-1"
-          contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 24 }}
+          // paddingBottom com a barra de navegação do aparelho: com muitos separadores a lista rola e
+          // o botão Iniciar ficava metade atrás dos controles do Android (2026-11-26).
+          contentContainerStyle={{
+            flexGrow: 1,
+            justifyContent: 'center',
+            paddingHorizontal: 24,
+            paddingTop: 24,
+            paddingBottom: Math.max(insets.bottom, 16) + 24,
+          }}
         >
           <Text className="text-lg font-semibold text-ink mb-1 text-center">Pronto para iniciar</Text>
           <Text className="text-sm text-ink-subtle mb-6 text-center">

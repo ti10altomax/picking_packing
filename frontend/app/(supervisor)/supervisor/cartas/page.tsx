@@ -5,6 +5,7 @@ import { ChipStatusCarta, ModalCarta, IconeCaminhao, resumoMudancas, rotuloDocum
 import { cartaCorrecaoApi, type CceCarta, type CceConfig, type CceDocumento, type CceModo, type CceTexto } from '@/lib/api'
 import { useAuthStore } from '@/stores/authStore'
 import { useCcePermissao } from '@/lib/useCcePermissao'
+import { useDialog } from '@/components/Dialog'
 
 const PERFIL_LABEL: Record<string, string> = { supervisor_vendas: 'Sup. Vendas', supervisor_patio: 'Sup. Pátio', admin: 'Admin' }
 
@@ -35,6 +36,7 @@ function fmt(iso: string) {
 export default function CartasCorrecaoPage() {
   const { user } = useAuthStore()
   const admin = user?.perfil === 'admin'
+  const dialog = useDialog()
   const podeCce = useCcePermissao()   // null = carregando; false = perfil fora de Configuracao.cce_perfis
 
   const [busca, setBusca] = useState('')
@@ -115,6 +117,31 @@ export default function CartasCorrecaoPage() {
     setErroConfig(null)
     try {
       setConfig(await cartaCorrecaoApi.salvarConfig({ texto }))
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { erro?: string } } }
+      setErroConfig(err.response?.data?.erro ?? 'Falha ao salvar.')
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  // Carta dos volumes gerada sozinha (2026-11-26): é o sistema mandando evento para a SEFAZ sem
+  // ninguém clicar — por isso liga com confirmação.
+  async function salvarAutomatica(ligar: boolean) {
+    if (ligar) {
+      const ok = await dialog.confirm({
+        title: 'Gerar sozinha a carta dos volumes?',
+        message: 'Toda nota concluída daqui em diante com a quantidade de volumes diferente da NF, com transportadora e fora de cotação, vai ter a carta de correção transmitida à SEFAZ e gravada no Senior sem ninguém clicar. Uma carta por conferência; as notas que já estão paradas continuam pelo Corrigir NF.',
+        variant: 'warning',
+        confirmText: 'Ligar',
+        cancelText: 'Voltar',
+      })
+      if (!ok) return
+    }
+    setSalvando(true)
+    setErroConfig(null)
+    try {
+      setConfig(await cartaCorrecaoApi.salvarConfig({ volumes_automatica: ligar }))
     } catch (e: unknown) {
       const err = e as { response?: { data?: { erro?: string } } }
       setErroConfig(err.response?.data?.erro ?? 'Falha ao salvar.')
@@ -219,6 +246,26 @@ export default function CartasCorrecaoPage() {
               </div>
             )}
           </div>
+          {/* Carta automática dos volumes (2026-11-26): só faz sentido no modo que transmite */}
+          {config.modo === 'gravar_e_transmitir' && (
+            <label className={`mt-2 flex items-start gap-2 text-sm ${admin ? 'cursor-pointer' : ''}`}>
+              <input
+                type="checkbox"
+                checked={!!config.volumes_automatica}
+                disabled={!admin || salvando}
+                onChange={(e) => salvarAutomatica(e.target.checked)}
+                className="w-5 h-5 mt-0.5 accent-emerald-600"
+              />
+              <span>
+                <strong>Gerar sozinha a carta dos volumes</strong> quando a nota for concluída com quantidade diferente da NF,
+                já tiver transportadora e não estiver em cotação
+                {config.volumes_automatica && config.volumes_automatica_desde && (
+                  <span className="text-ink-muted"> · ligada desde {fmt(config.volumes_automatica_desde)}</span>
+                )}
+                {!admin && <span className="text-ink-muted"> · só o admin muda</span>}
+              </span>
+            </label>
+          )}
           {erroConfig && <p className="text-xs text-red-600 dark:text-red-400 mt-1">{erroConfig}</p>}
           {config.modo === 'gravar_e_transmitir' && !config.dry_run && (
             <p className="text-xs mt-2 text-red-700 dark:text-red-300">
@@ -310,7 +357,7 @@ export default function CartasCorrecaoPage() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-ink">{rotuloDocumento(c)}</span>
                       <ChipStatusCarta carta={c} />
-                      <span className="text-xs text-ink-subtle">{fmt(c.criado_em)} · {c.usuario ?? '—'}</span>
+                      <span className="text-xs text-ink-subtle">{fmt(c.criado_em)} · {c.automatica ? 'automática' : (c.usuario ?? '—')}</span>
                       <span className={`ml-auto text-ink-subtle text-sm transition-transform ${expandida ? 'rotate-90' : ''}`}>▸</span>
                     </div>
                     <p className="text-sm text-ink-muted truncate">

@@ -57,10 +57,17 @@ export function separarNumeros(texto: string): string[] {
   return analisarLista(texto).numeros
 }
 
-export type ModoLista = 'vendas' | 'patio'
+// 'consulta' (2026-11-26): a lista colada vira FILTRO da tela (Conferidos, Embarcados, Não
+// conformes, Fechamentos, Cancelados, Etiquetas, sequência). Não envia nada a lugar nenhum.
+export type ModoLista = 'vendas' | 'patio' | 'consulta'
 
-/** O que já pode ir: Vendas envia Pendente; Pátio sequencia Selecionado ainda sem sequência. */
-function pronto(d: LinhaLote, modo: ModoLista): boolean {
+/** Diz se o documento aparece na tela que abriu o modal (modo consulta). */
+export type NaTela = (d: LinhaLote) => boolean
+
+/** O que já pode ir: Vendas envia Pendente; Pátio sequencia Selecionado ainda sem sequência;
+ * na consulta, o que está na tela. */
+function pronto(d: LinhaLote, modo: ModoLista, naTela?: NaTela): boolean {
+  if (modo === 'consulta') return naTela ? naTela(d) : true
   return modo === 'vendas' ? d.status === 'pendente' : d.status === 'selecionado' && !d.sequencia
 }
 
@@ -85,6 +92,15 @@ const TEXTOS: Record<ModoLista, {
     enviar: (n) => n ? `Enviar ${n} para a sequência` : 'Enviar para a sequência',
     naoEncontradas: 'Não estão no Separa. Se a nota ainda não foi enviada por Vendas, peça lá — o Pátio só sequencia o que já foi selecionado.',
     cor: 'bg-amber-500 hover:bg-amber-400', corFraca: 'bg-amber-50 dark:bg-amber-500/10', sombra: 'shadow-amber-500/30', accent: 'accent-amber-500',
+  },
+  consulta: {
+    setor: 'Consulta',
+    descricao: 'Cole os números separados por vírgula ou um por linha, ou abra o arquivo .txt. Um intervalo como 151281-151290 vale pelos dez números. A tela passa a mostrar só as notas da lista que estão nela.',
+    prontas: 'Nesta tela',
+    nenhuma: 'Nenhuma nota da lista está nesta tela.',
+    enviar: (n) => n ? `Mostrar ${n} na tela` : 'Mostrar na tela',
+    naoEncontradas: 'Não estão no Separa. Confira o número; a nota pode não ter sido importada ainda.',
+    cor: 'bg-blue-600 hover:bg-blue-500', corFraca: 'bg-blue-50 dark:bg-blue-500/10', sombra: 'shadow-blue-500/30', accent: 'accent-blue-600',
   },
 }
 
@@ -113,10 +129,14 @@ function agrupar(r: BuscaLote): { docs: Doc[]; semDocumento: string[] } {
 /** Prontos que vêm marcados: o próprio documento do número (`via` vazio); quando um número
  * só achou documentos "por tabela" (o pedido faturado nessa NF, a NF que saiu desse pedido),
  * esses. Pedido e NF dele não vêm os dois marcados — o servidor barraria o envio. */
-function sugeridos(r: BuscaLote, modo: ModoLista): Set<number> {
+function sugeridos(r: BuscaLote, modo: ModoLista, naTela?: NaTela): Set<number> {
   const ids = new Set<number>()
   for (const res of r.resultados) {
-    const prontos = res.documentos.filter((d) => pronto(d, modo))
+    const prontos = res.documentos.filter((d) => pronto(d, modo, naTela))
+    if (modo === 'consulta') {   // filtro: tudo o que está na tela, sem escolher entre pedido e NF
+      for (const d of prontos) ids.add(d.id)
+      continue
+    }
     const diretos = prontos.filter((d) => !d.via)
     for (const d of (diretos.length ? diretos : prontos)) ids.add(d.id)
   }
@@ -129,15 +149,18 @@ function rotulo(d: LinhaLote) {
 
 // onEnviar devolve se deu certo (a tela já mostra o toast); só então o modal fecha.
 // `rodape`: o Pátio põe aqui o seletor "Nova sequência / Sequência N".
+// `naTela` + `nomeTela` (modo consulta): quais documentos pertencem à tela que abriu o modal.
 type Props = {
   onClose: () => void
   onEnviar: (ids: number[]) => Promise<boolean>
   modo?: ModoLista
   rodape?: ReactNode
+  naTela?: NaTela
+  nomeTela?: string
 }
 
-export function ListaNotasModal({ onClose, onEnviar, modo = 'vendas', rodape }: Props) {
-  const T = TEXTOS[modo]
+export function ListaNotasModal({ onClose, onEnviar, modo = 'vendas', rodape, naTela, nomeTela }: Props) {
+  const T = modo === 'consulta' && nomeTela ? { ...TEXTOS.consulta, setor: nomeTela } : TEXTOS[modo]
   const [texto, setTexto] = useState('')
   const [resultado, setResultado] = useState<BuscaLote | null>(null)
   const [buscando, setBuscando] = useState(false)
@@ -155,8 +178,8 @@ export function ListaNotasModal({ onClose, onEnviar, modo = 'vendas', rodape }: 
   const { numeros, intervalosGrandes } = useMemo(() => analisarLista(texto), [texto])
   const excesso = numeros.length > LOTE_MAX
   const grupos = useMemo(() => (resultado ? agrupar(resultado) : null), [resultado])
-  const pendentes = grupos?.docs.filter((d) => pronto(d, modo)) ?? []
-  const outros = grupos?.docs.filter((d) => !pronto(d, modo)) ?? []
+  const pendentes = grupos?.docs.filter((d) => pronto(d, modo, naTela)) ?? []
+  const outros = grupos?.docs.filter((d) => !pronto(d, modo, naTela)) ?? []
 
   async function abrirArquivo(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0]
@@ -175,7 +198,7 @@ export function ListaNotasModal({ onClose, onEnviar, modo = 'vendas', rodape }: 
     try {
       const r = await supervisorApi.buscarLote(numeros, modo)
       setResultado(r)
-      setMarcados(sugeridos(r, modo))
+      setMarcados(sugeridos(r, modo, naTela))
     } catch (e) {
       const msg = (e as { response?: { data?: { erro?: string } } })?.response?.data?.erro
       setErro(msg || 'Não foi possível buscar a lista. Tente de novo.')
@@ -295,7 +318,7 @@ export function ListaNotasModal({ onClose, onEnviar, modo = 'vendas', rodape }: 
                             <p className={`text-xs truncate ${d.transportadora ? 'text-ink-muted' : 'text-amber-600 dark:text-amber-400'}`}>
                               {d.transportadora ? `🚚 ${d.transportadora}` : 'Sem transportadora'}
                             </p>
-                            {d.via && <p className="text-xs text-ink-subtle">{d.via} — envie só um dos dois</p>}
+                            {d.via && <p className="text-xs text-ink-subtle">{d.via}{modo === 'consulta' ? '' : ' — envie só um dos dois'}</p>}
                           </div>
                           <span className="text-xs text-ink-muted whitespace-nowrap">{d.qtd_itens} {d.qtd_itens === 1 ? 'item' : 'itens'}</span>
                         </li>
@@ -308,7 +331,7 @@ export function ListaNotasModal({ onClose, onEnviar, modo = 'vendas', rodape }: 
               {outros.length > 0 && (
                 <section>
                   <h3 className="text-sm font-semibold text-ink mb-1.5">
-                    Já em outra etapa <span className="text-ink-muted font-normal">· {outros.length}</span>
+                    {modo === 'consulta' ? 'Em outra tela' : 'Já em outra etapa'} <span className="text-ink-muted font-normal">· {outros.length}</span>
                   </h3>
                   <ul className="space-y-1.5">
                     {outros.map((d) => {
@@ -376,6 +399,68 @@ export function ListaNotasModal({ onClose, onEnviar, modo = 'vendas', rodape }: 
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+// -----------------------------------------------------------------------------
+// Filtro por lista colada (2026-11-26) — telas de consulta: Conferidos, Embarcados, Não
+// conformes, Fechamentos, Cancelados, Etiquetas e a tela da sequência. A tela guarda os ids
+// (`number[] | null`) e mostra só eles; listas paginadas mandam `?ids=` ao servidor, as que
+// já recebem tudo filtram no navegador.
+// -----------------------------------------------------------------------------
+
+/** Botão "Colar lista" do cabeçalho: abre o modal em modo consulta e devolve os ids escolhidos. */
+export function ColarListaBotao({ nomeTela, naTela, onFiltrar }: {
+  nomeTela: string
+  naTela: NaTela
+  onFiltrar: (ids: number[]) => void
+}) {
+  const [aberto, setAberto] = useState(false)
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setAberto(true)}
+        className="bg-surface-card hover:bg-surface-elev border border-surface-border text-ink rounded-lg px-4 min-h-[44px] text-sm font-medium transition-colors whitespace-nowrap"
+        title="Colar a relação de notas (ou abrir um .txt) e mostrar só elas nesta tela"
+      >
+        Colar lista
+      </button>
+      {aberto && (
+        <ListaNotasModal
+          modo="consulta"
+          nomeTela={nomeTela}
+          naTela={naTela}
+          onClose={() => setAberto(false)}
+          onEnviar={async (ids) => { onFiltrar(ids); return true }}
+        />
+      )}
+    </>
+  )
+}
+
+/** Faixa acima da lista enquanto o filtro está ligado. `mostrando` = quantas a tela exibe agora
+ * (pode ser menos que a lista: paginação, ou a nota mudou de etapa). */
+export function FaixaListaColada({ ids, mostrando, onLimpar }: {
+  ids: number[] | null
+  mostrando?: number
+  onLimpar: () => void
+}) {
+  if (!ids) return null
+  return (
+    <div className="mb-3 flex items-center gap-3 flex-wrap rounded-xl border border-blue-300 bg-blue-50 dark:border-blue-500/40 dark:bg-blue-500/10 px-3 py-2 text-sm text-blue-900 dark:text-blue-200 print:hidden">
+      <span className="mr-auto">
+        Mostrando só a <strong>lista colada</strong>: {ids.length} nota{ids.length === 1 ? '' : 's'}
+        {mostrando !== undefined && mostrando !== ids.length && <> · {mostrando} na tela agora</>}
+      </span>
+      <button
+        type="button"
+        onClick={onLimpar}
+        className="rounded-lg border border-blue-300 dark:border-blue-500/40 px-3 min-h-[36px] font-semibold hover:bg-blue-100 dark:hover:bg-blue-500/20 transition-colors"
+      >
+        Limpar filtro
+      </button>
     </div>
   )
 }

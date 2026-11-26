@@ -86,6 +86,7 @@ class PedidoListSerializer(serializers.ModelSerializer):
             'separado_por', 'separado_por_nome', 'separador_nao_identificado',
             'qtd_itens', 'qtd_divergencias', 'tempo_espera', 'duracao_conferencia',
             'etiqueta_volume_em', 'etiqueta_bloqueio',
+            'em_cotacao',   # cotação de frete: etiqueta segura até a transportadora mudar (2026-11-26)
             # Embarque do Senior (2026-11-24): preenchidos = a nota já está num embarque
             # (Embarcado, ou aviso "nota já embarcada" nas outras situações)
             'embarque_numero', 'embarque_placa', 'embarque_motorista', 'embarcado_em', 'status_anterior',

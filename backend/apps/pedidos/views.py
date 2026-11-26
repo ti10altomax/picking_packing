@@ -5,7 +5,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.generics import get_object_or_404
 from django.db import models
-from django.db.models import Case, Count, IntegerField, OuterRef, Q, Subquery, Value, When
+from django.db.models import Case, Count, Exists, IntegerField, OuterRef, Q, Subquery, Value, When
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from .models import DivergenciaBarra, Pedido, PedidoItem, PedidoLog
@@ -145,6 +145,18 @@ class PedidoViewSet(viewsets.ModelViewSet):
             qs = qs.filter(transportadora='')
         if self.request.query_params.get('sem_sequencia') == '1':
             qs = qs.filter(sequencia__isnull=True)
+        # Lista colada (2026-11-26): `ids=1,2,3` restringe a lista aos documentos que o
+        # `buscar_lote` (para=consulta) achou — o filtro das telas de consulta.
+        ids = self.request.query_params.get('ids', '').strip()
+        if ids:
+            qs = qs.filter(pk__in=[int(i) for i in ids.split(',') if i.strip().isdigit()][:LOTE_MAX])
+        # Etiqueta de volume (2026-11-26, filtro de Conferidos): 'nao_impressa' = nenhuma impressão
+        # confirmada (`ok`) — a mesma regra do botão "Etiqueta" × "Reimprimir"; 'impressa' = o contrário.
+        etiqueta = self.request.query_params.get('etiqueta', '').strip().lower()
+        if etiqueta in ('nao_impressa', 'impressa'):
+            from apps.impressao.models import ImpressaoEtiqueta
+            tem_etiqueta = Exists(ImpressaoEtiqueta.objects.filter(pedido=OuterRef('pk'), status='ok'))
+            qs = qs.filter(tem_etiqueta) if etiqueta == 'impressa' else qs.filter(~tem_etiqueta)
         # Embarcados (2026-11-24): 'com' = passou pela conferência antes de sair;
         # 'sem' = embarcou direto de Pendente/Selecionado
         conferencia = self.request.query_params.get('conferencia', '').strip().lower()
@@ -289,6 +301,33 @@ class PedidoViewSet(viewsets.ModelViewSet):
     # procurar em Vendas um pedido que já está em conferência voltava "nada". As telas
     # chamam isto quando a busca vem vazia e dizem em que etapa ele está.
     # ------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # Em cotação de frete (2026-11-26): a nota tem transportadora, mas ela vai mudar — a etiqueta
+    # de volume fica segura. `{em_cotacao: true|false}`. Regra em apps/pedidos/cotacao.py.
+    # ------------------------------------------------------------------
+    @action(detail=True, methods=['post'])
+    def cotacao(self, request, pk=None):
+        from . import cotacao as regra
+        if request.user.perfil not in regra.PERFIS:
+            return Response({'erro': 'restrito aos supervisores'}, status=status.HTTP_403_FORBIDDEN)
+        pedido = get_object_or_404(Pedido, pk=pk)
+        valor = request.data.get('em_cotacao')
+        if not isinstance(valor, bool):
+            return Response({'erro': 'informe em_cotacao: true ou false'}, status=status.HTTP_400_BAD_REQUEST)
+        if valor:
+            try:
+                regra.marcar(pedido, request.user)
+            except regra.ErroCotacao as e:
+                return Response({'erro': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        elif regra.encerrar(pedido, request.user, regra.MOTIVO_MANUAL):
+            regra.liberar_etiqueta(pedido)
+        from apps.impressao.services import motivo_bloqueio
+        return Response({
+            'id': pedido.id, 'em_cotacao': pedido.em_cotacao,
+            'codtra': pedido.codtra, 'transportadora': pedido.transportadora,
+            'etiqueta_bloqueio': motivo_bloqueio(pedido),
+        })
+
     @action(detail=False, methods=['get'])
     def localizar(self, request):
         q = request.query_params.get('q', '').strip()
@@ -324,8 +363,12 @@ class PedidoViewSet(viewsets.ModelViewSet):
             perfis, consultar_senior, restrito = ('supervisor_vendas', 'admin'), True, 'Supervisor de Vendas'
         elif para == 'patio':
             perfis, consultar_senior, restrito = ('supervisor_patio', 'admin'), False, 'Supervisor de Pátio'
+        elif para == 'consulta':
+            # 2026-11-26: a lista colada só FILTRA a tela (Conferidos, Embarcados, Não conformes…).
+            # Vale para os dois supervisores e não vai ao Senior — é só "onde estão estas notas".
+            perfis, consultar_senior, restrito = ('supervisor_vendas', 'supervisor_patio', 'admin'), False, 'supervisor'
         else:
-            return Response({'erro': "para deve ser 'vendas' ou 'patio'"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'erro': "para deve ser 'vendas', 'patio' ou 'consulta'"}, status=status.HTTP_400_BAD_REQUEST)
         if request.user.perfil not in perfis:
             return Response({'erro': f'restrito ao {restrito}'}, status=status.HTTP_403_FORBIDDEN)
         brutos = request.data.get('numeros')

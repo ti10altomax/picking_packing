@@ -6,6 +6,7 @@ import { conferenciaApi } from '@/lib/api'
 import { useToast } from '@/components/Toast'
 import { useDialog } from '@/components/Dialog'
 import { rotuloSequencia } from '@/lib/sequencia'
+import { MinhaImpressora } from '@/components/etiquetas/MinhaImpressora'
 
 type PedidoLista = {
   id: number
@@ -182,7 +183,9 @@ export default function ConferenciaListaPage() {
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            {/* a etiqueta sai sozinha nesta impressora ao concluir (2026-11-26) */}
+            <MinhaImpressora />
             {syncLabel && <span className="text-xs text-ink-subtle">sync {syncLabel}</span>}
             <button
               onClick={carregar}

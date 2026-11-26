@@ -74,6 +74,10 @@ export const supervisorCartas: AjudaTela = {
         'O sistema põe o texto montado no campo "Texto da carta" e você pode editar, apagar tudo ou escrever outro. O campo é obrigatório. "Remontar pelo sistema" volta ao texto original. Transportadora, frete e volumes continuam sendo alterados pelos campos acima.',
     },
     {
+      nome: 'Gerar sozinha a carta dos volumes',
+      descricao: 'Caixa de marcar na faixa de configuração (só o admin muda; aparece no modo "Gravar e transmitir"). Ligada, toda nota concluída dali em diante com quantidade de volumes diferente da NF, que já tenha transportadora e não esteja em cotação, ganha a carta de correção sozinha, em segundo plano. É uma carta por conferência: se o Senior recusar, ou se os volumes mudarem depois, o acerto volta a ser feito pelo "Corrigir NF". Na lista, essas cartas aparecem como "automática" no lugar do nome do usuário.',
+    },
+    {
       nome: 'Quem pode',
       descricao:
         'Perfis liberados para corrigir NF. Só o admin muda isso, em outra tela do sistema. Aqui você só lê.',

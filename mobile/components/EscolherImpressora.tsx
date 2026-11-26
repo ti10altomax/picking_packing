@@ -71,6 +71,13 @@ export function EscolherImpressora({
       onImpresso?.()
       const quais = r.impressao.volumes_texto ? ` (volumes ${r.impressao.volumes_texto})` : ''
       toast.ok('Etiquetas enviadas', { detalhe: `${r.impressao.qtd_etiquetas} etiqueta(s)${quais} → ${r.impressao.impressora}` })
+      // 2026-11-26: a primeira impressora que o conferente escolhe fica como a dele
+      if (r.minha_impressora) {
+        toast.info(`${r.minha_impressora.nome} ficou como a sua impressora`, {
+          detalhe: 'As próximas etiquetas saem nela sozinhas. Para trocar: "Minha impressora" em Atribuídos a mim.',
+          duracao: 8000,
+        })
+      }
     } catch (e: unknown) {
       const d = (e as { response?: { data?: { erro?: string } } })?.response?.data
       setErro(d?.erro ?? 'Falha ao imprimir')

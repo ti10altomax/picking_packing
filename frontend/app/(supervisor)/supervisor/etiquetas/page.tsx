@@ -5,6 +5,7 @@ import { DocBadges } from '@/components/ui/DocBadges'
 import { ImprimirEtiqueta, escolhaInicial, guardarUltimaImpressora, rotuloBloqueio } from '@/components/etiquetas/ImprimirEtiqueta'
 import { impressaoApi, type EtiquetaPendente, type ImpressoraEtiqueta } from '@/lib/api'
 import { useAuthStore } from '@/stores/authStore'
+import { ColarListaBotao, FaixaListaColada } from '@/components/pedidos/ListaNotas'
 
 /**
  * Etiquetas de volume pendentes — conferidos (janela do sync) ainda sem
@@ -20,8 +21,13 @@ function fmt(iso: string | null) {
 
 export default function EtiquetasPendentesPage() {
   const { user } = useAuthStore()
-  const [prontas, setProntas] = useState<EtiquetaPendente[]>([])
-  const [aguardando, setAguardando] = useState<EtiquetaPendente[]>([])
+  // Lista colada (2026-11-26): as duas seções mostram só essas notas ("Imprimir todas" também
+  // passa a valer só para elas); null = sem filtro
+  const [prontasTodas, setProntas] = useState<EtiquetaPendente[]>([])
+  const [aguardandoTodas, setAguardando] = useState<EtiquetaPendente[]>([])
+  const [listaColada, setListaColada] = useState<number[] | null>(null)
+  const prontas = listaColada ? prontasTodas.filter((p) => listaColada.includes(p.id)) : prontasTodas
+  const aguardando = listaColada ? aguardandoTodas.filter((p) => listaColada.includes(p.id)) : aguardandoTodas
   const [carregando, setCarregando] = useState(true)
   const [impressoras, setImpressoras] = useState<ImpressoraEtiqueta[]>([])
   const [padrao, setPadrao] = useState<number | null>(null)
@@ -87,8 +93,14 @@ export default function EtiquetasPendentesPage() {
             )}
           </p>
         </div>
-        <button onClick={carregar} className="text-sm text-blue-600 dark:text-blue-400 min-h-[44px] px-2">Atualizar</button>
+        <div className="flex items-center gap-1 shrink-0">
+          {/* as pendentes de etiqueta são documentos Conferidos */}
+          <ColarListaBotao nomeTela="Etiquetas de volume" naTela={(d) => d.lista === 'conferidos'} onFiltrar={setListaColada} />
+          <button onClick={carregar} className="text-sm text-blue-600 dark:text-blue-400 min-h-[44px] px-2">Atualizar</button>
+        </div>
       </div>
+
+      <FaixaListaColada ids={listaColada} mostrando={carregando ? undefined : prontas.length + aguardando.length} onLimpar={() => setListaColada(null)} />
 
       {carregando ? (
         <p className="text-ink-muted">Carregando…</p>
@@ -172,6 +184,9 @@ function Linha({ p, onImpresso }: { p: EtiquetaPendente; onImpresso: () => void 
             ? <strong className="text-ink">{p.transportadora}</strong>
             : <span className="text-amber-600 dark:text-amber-400">sem transportadora</span>}
           {p.bloqueio?.codigo === 'sem_nf' && <> · <span className="text-amber-600 dark:text-amber-400">sem NF emitida</span></>}
+          {p.bloqueio?.codigo === 'em_cotacao' && (
+            <> · <span className="font-semibold text-sky-700 dark:text-sky-300" title={p.bloqueio.mensagem}>EM COTAÇÃO — a transportadora vai mudar</span></>
+          )}
           {p.bloqueio?.codigo === 'volumes_divergentes' && (
             <> · <span className="text-amber-600 dark:text-amber-400" title={p.bloqueio.mensagem}>
               volumes ≠ NF ({p.qtd_volumes} aqui × {p.nf_volumes ?? '?'} na nota) — corrija a NF

@@ -7,6 +7,7 @@ import { useDialog } from '@/components/Dialog'
 import { useToast } from '@/components/Toast'
 import { useAuthStore } from '@/stores/authStore'
 import { rotuloSequencia } from '@/lib/sequencia'
+import { ColarListaBotao, FaixaListaColada } from '@/components/pedidos/ListaNotas'
 
 type NaoConforme = {
   id: number
@@ -48,7 +49,10 @@ const COR_MOTIVO: Record<string, string> = {
 
 export default function NaoConformesPage() {
   const dialog = useDialog()
-  const [lista, setLista] = useState<NaoConforme[]>([])
+  // Lista colada (2026-11-26): a tela mostra só essas notas; null = sem filtro
+  const [listaTodos, setLista] = useState<NaoConforme[]>([])
+  const [listaColada, setListaColada] = useState<number[] | null>(null)
+  const lista = listaColada ? listaTodos.filter((p) => listaColada.includes(p.id)) : listaTodos
   const [carregando, setCarregando] = useState(true)
   const [agindo, setAgindo] = useState<number | null>(null)
   const toast = useToast()
@@ -189,10 +193,15 @@ export default function NaoConformesPage() {
             Pedidos com problema na conferência aguardando ação
           </p>
         </div>
-        <button onClick={carregar} className="text-sm text-blue-600 dark:text-blue-400 min-h-[44px] px-2">
-          Atualizar
-        </button>
+        <div className="flex items-center gap-1 shrink-0">
+          <ColarListaBotao nomeTela="Não conformes" naTela={(d) => d.lista === 'nao_conformes'} onFiltrar={setListaColada} />
+          <button onClick={carregar} className="text-sm text-blue-600 dark:text-blue-400 min-h-[44px] px-2">
+            Atualizar
+          </button>
+        </div>
       </div>
+
+      <FaixaListaColada ids={listaColada} mostrando={carregando ? undefined : lista.length} onLimpar={() => setListaColada(null)} />
 
       {carregando ? (
         <p className="text-ink-muted">Carregando…</p>

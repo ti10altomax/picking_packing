@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { supervisorApi, type Paginado } from '@/lib/api'
 import { DocBadges } from '@/components/ui/DocBadges'
+import { CotacaoBotao, SeloCotacao } from '@/components/pedidos/CotacaoBotao'
 import { OndeEsta } from '@/components/pedidos/OndeEsta'
 import { ListaNotasModal } from '@/components/pedidos/ListaNotas'
 import { useToast } from '@/components/Toast'
@@ -14,6 +15,7 @@ type Pedido = {
   pedidos_origem?: string[]
   nfs_documento?: string[]
   transportadora?: string
+  em_cotacao?: boolean
   cliente: string
   status: string
   criado_em: string
@@ -292,6 +294,7 @@ export default function SupervisorVendasPage() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-ink">{p.numero_externo}</span>
                         <DocBadges tipo={p.tipo} frete={p.frete} origem={p.pedidos_origem} nfs={p.nfs_documento} />
+                        {p.em_cotacao && <SeloCotacao />}
                         <span className="text-xs text-ink-subtle">{p.tempo_espera}</span>
                       </div>
                       <p className="text-sm text-ink-muted truncate">{p.cliente || '—'}</p>
@@ -299,6 +302,13 @@ export default function SupervisorVendasPage() {
                         {p.transportadora ? `🚚 ${p.transportadora}` : 'Sem transportadora'}
                       </p>
                     </div>
+                    {/* Em cotação de frete (2026-11-26): marcar aqui segura a etiqueta lá no fim */}
+                    <CotacaoBotao
+                      pedidoId={p.id}
+                      numero={p.numero_externo}
+                      emCotacao={!!p.em_cotacao}
+                      onMudou={(r) => setPedidos((prev) => prev.map((x) => (x.id === p.id ? { ...x, em_cotacao: r.em_cotacao } : x)))}
+                    />
                     <span className="text-xs text-ink-muted whitespace-nowrap">
                       {p.qtd_itens} {p.qtd_itens === 1 ? 'item' : 'itens'}
                     </span>

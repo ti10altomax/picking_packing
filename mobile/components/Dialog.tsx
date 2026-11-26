@@ -175,7 +175,7 @@ function DialogUI({
               onPress={confirmar}
               className={`flex-1 h-11 rounded-xl items-center justify-center active:opacity-80 ${cor.button}`}
             >
-              <Text className="text-white font-bold">
+              <Text className={`font-bold ${cor.buttonText}`}>
                 {cfg.confirmText ?? 'OK'}
               </Text>
             </Pressable>
@@ -197,30 +197,38 @@ function corPorVariante(v: Variant) {
         bg: 'bg-emerald-500/15',
         icon: '#34d399', // emerald-400
         button: 'bg-emerald-500',
+        buttonText: 'text-white',
       }
     case 'danger':
       return {
         bg: 'bg-red-500/15',
         icon: '#f87171', // red-400
         button: 'bg-red-500',
+        buttonText: 'text-white',
       }
     case 'warning':
       return {
         bg: 'bg-amber-500/15',
         icon: '#fbbf24', // amber-400
         button: 'bg-amber-500',
+        buttonText: 'text-white',
       }
     case 'info':
       return {
         bg: 'bg-blue-500/15',
         icon: '#60a5fa', // blue-400
         button: 'bg-blue-500',
+        buttonText: 'text-white',
       }
     default:
       return {
         bg: 'bg-zinc-800',
         icon: '#fafafa',
-        button: 'bg-zinc-100',
+        // Pergunta: botão na cor do texto do tema (escuro no claro, claro no escuro) com a
+        // letra na cor do cartão — como no web. Era bg-zinc-100 com letra branca: o texto sumia
+        // e o botão parecia desabilitado (2026-11-26).
+        button: 'bg-ink',
+        buttonText: 'text-surface-card',
       }
   }
 }

@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { adminApi, impressaoApi, type ModeloEtiqueta } from '@/lib/api'
+import { ImpressorasDosConferentes } from '@/components/etiquetas/MinhaImpressora'
 
 type Impressora = {
   id: number
@@ -141,6 +142,9 @@ export default function ImpressorasPage() {
       </div>
 
       <ConfigEtiquetas impressoras={lista.filter((i) => i.ativa)} />
+
+      {/* Impressora de cada conferente (2026-11-26): mais de uma impressora no Pátio */}
+      {!carregando && <ImpressorasDosConferentes impressoras={lista.filter((i) => i.ativa)} />}
 
       {carregando ? (
         <p className="text-ink-muted">Carregando…</p>

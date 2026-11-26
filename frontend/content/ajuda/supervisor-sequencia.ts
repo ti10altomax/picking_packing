@@ -25,6 +25,10 @@ export const supervisorSequencia: AjudaTela = {
   ],
   elementos: [
     {
+      nome: 'Colar lista',
+      descricao: 'Recebeu uma relação de notas? Toque em "Colar lista", cole os números (vírgula, espaço ou um por linha; 151281-151290 vale pelo intervalo) ou abra o .txt e toque em "Buscar". O sistema mostra quais estão nesta tela, quais estão em outra (com o botão "Ver") e quais não achou. "Mostrar N na tela" deixa a tela só com essas notas; a faixa azul "Mostrando só a lista colada" tem o botão "Limpar filtro" para voltar ao normal.',
+    },
+    {
       nome: 'Nome da sequência (ao lado do número)',
       descricao:
         'Texto livre do Pátio — hoje, a aba da planilha paralela. Toque nele (ou em "+ nome") para escrever ou trocar; Enter salva, Esc cancela. Aparece nos cards do Pátio, no seletor de destino, no coletor do conferente e no relatório.',
@@ -50,6 +54,10 @@ export const supervisorSequencia: AjudaTela = {
     {
       nome: 'Cancelado (cinza)',
       descricao: 'O documento foi cancelado. Veja o que fazer em Gestão → Cancelados.',
+    },
+    {
+      nome: 'Em cotação / Tirar de cotação',
+      descricao: 'Use quando a nota foi faturada com uma transportadora que ainda vai mudar (o frete está em cotação). Marcada, a etiqueta de volume não sai e as telas mostram "EM COTAÇÃO". A nota sai de cotação sozinha quando a transportadora mudar (carta de correção ou troca no Senior); se a cotação terminar sem troca, toque em "Tirar de cotação".',
     },
     {
       nome: 'Nome à direita do documento',

@@ -24,6 +24,10 @@ export const supervisorEtiquetas: AjudaTela = {
   ],
   elementos: [
     {
+      nome: 'Colar lista',
+      descricao: 'Recebeu uma relação de notas? Toque em "Colar lista", cole os números (vírgula, espaço ou um por linha; 151281-151290 vale pelo intervalo) ou abra o .txt e toque em "Buscar". O sistema mostra quais estão nesta tela, quais estão em outra (com o botão "Ver") e quais não achou. "Mostrar N na tela" deixa a tela só com essas notas; a faixa azul "Mostrando só a lista colada" tem o botão "Limpar filtro" para voltar ao normal.',
+    },
+    {
       nome: 'Linha do topo',
       descricao:
         '"Impressão automática ligada/desligada": se ligada, a etiqueta sai sozinha quando o documento é conferido e está liberado. "Padrão": a impressora usada pela impressão automática. "Só com NF: sim/não": se o pedido só imprime depois de faturado.',

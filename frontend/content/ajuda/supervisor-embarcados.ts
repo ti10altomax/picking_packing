@@ -19,6 +19,10 @@ export const supervisorEmbarcados: AjudaTela = {
   ],
   elementos: [
     {
+      nome: 'Colar lista',
+      descricao: 'Recebeu uma relação de notas? Toque em "Colar lista", cole os números (vírgula, espaço ou um por linha; 151281-151290 vale pelo intervalo) ou abra o .txt e toque em "Buscar". O sistema mostra quais estão nesta tela, quais estão em outra (com o botão "Ver") e quais não achou. "Mostrar N na tela" deixa a tela só com essas notas; a faixa azul "Mostrando só a lista colada" tem o botão "Limpar filtro" para voltar ao normal.',
+    },
+    {
       nome: 'Cabeçalho do embarque',
       descricao:
         'Número do embarque no Senior, placa do veículo, motorista e data e hora da saída. À direita, quantos documentos do embarque estão na tela.',

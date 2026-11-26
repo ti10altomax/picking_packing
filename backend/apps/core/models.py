@@ -22,6 +22,8 @@ class Configuracao(models.Model):
         CCE_TIPGER = 'cce_tipger', 'Carta de correção: tipo de geração (tipGer)'
         CCE_TEXTO = 'cce_texto', 'Carta de correção: texto (montado | livre)'
         CCE_PERFIS = 'cce_perfis', 'Carta de correção: perfis que podem corrigir'
+        CCE_VOLUMES_AUTOMATICA = 'cce_volumes_automatica', 'Carta de correção: gerar sozinha a dos volumes'
+        CCE_VOLUMES_AUTOMATICA_DESDE = 'cce_volumes_automatica_desde', 'Carta de correção automática: ligada desde'
         VOLUME_CAIXA = 'volume_caixa', 'Volume da caixa padrão (cm³) — aviso de caixa cheia'
 
     # valores válidos por chave (documentação viva; o admin não valida à força)
@@ -62,6 +64,12 @@ class Configuracao(models.Model):
         # De propósito só editável aqui (Django Admin), nunca em Gestão → Cartas de
         # correção: um supervisor não pode dar a permissão a si mesmo.
         'cce_perfis': 'supervisor_vendas,supervisor_patio',
+        # Carta automática dos volumes (2026-11-26): 'sim' = documento Conferido com volumes
+        # diferentes dos da nota, com transportadora e fora de cotação, ganha a carta sozinho
+        # (apps/carta_correcao/automatica.py). Só vale no modo gravar_e_transmitir e só para o
+        # que for concluído depois de ligada — `_desde` (ISO) é gravado ao ligar pelo painel.
+        'cce_volumes_automatica': 'nao',                           # | sim
+        'cce_volumes_automatica_desde': '',
         # Caixa cheia na conferência (2026-11-23): volume interno da caixa padrão, na unidade
         # das medidas da E075DER (cm → cm³). soma(qtd × COMDER × LARDER × ALTDER) / este valor
         # > 1 = não cabe. Ver apps/conferencia/caixas.py.

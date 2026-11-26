@@ -53,6 +53,23 @@ def verificar_cartas_pendentes():
     except Exception:
         logger.exception('carta_correcao: falha ao completar gravações pendentes')
         gravacoes = {'erro': True}
-    logger.info('carta_correcao: %d nota(s) verificada(s), %d carta(s) atualizada(s), %d falha(s), gravações %s',
-                len(notas), mudadas, falhas, gravacoes)
-    return {'notas': len(notas), 'atualizadas': mudadas, 'falhas': falhas, 'gravacoes': gravacoes}
+    # 2026-11-26: carta automática dos volumes — rede de segurança da task do concluir e os
+    # casos em que a nota/transportadora chega depois ou a cotação termina.
+    try:
+        from . import automatica
+        automaticas = automatica.varrer()
+    except Exception:
+        logger.exception('carta_correcao: falha na varredura da carta automática')
+        automaticas = {'erro': True}
+    logger.info('carta_correcao: %d nota(s) verificada(s), %d carta(s) atualizada(s), %d falha(s), gravações %s, automáticas %s',
+                len(notas), mudadas, falhas, gravacoes, automaticas)
+    return {'notas': len(notas), 'atualizadas': mudadas, 'falhas': falhas, 'gravacoes': gravacoes,
+            'automaticas': automaticas}
+
+
+@shared_task
+def carta_volumes_automatica(pedido_id: int):
+    """Agendada pelo concluir (automatica.agendar): gera a carta dos volumes em segundo plano.
+    Sob demanda — sem `registrar_execucao`, que é o batimento das tarefas periódicas."""
+    from . import automatica
+    return automatica.gerar(pedido_id)

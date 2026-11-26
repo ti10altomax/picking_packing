@@ -1,6 +1,7 @@
 'use client'
 import { DocBadges } from '@/components/ui/DocBadges'
 import { OndeEsta } from '@/components/pedidos/OndeEsta'
+import { ColarListaBotao, FaixaListaColada } from '@/components/pedidos/ListaNotas'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { supervisorApi, pedidosApi, type Paginado } from '@/lib/api'
 import { ImprimirEtiqueta } from '@/components/etiquetas/ImprimirEtiqueta'
@@ -59,6 +60,9 @@ export default function EmbarcadosPage() {
   const [expandidos, setExpandidos] = useState<Set<number>>(new Set())
   const [itensCache, setItensCache] = useState<Record<number, Detalhe>>({})
   const [carregandoItens, setCarregandoItens] = useState<Set<number>>(new Set())
+  // Lista colada (2026-11-26): a tela mostra só essas notas (`?ids=`); null = sem filtro
+  const [listaColada, setListaColada] = useState<number[] | null>(null)
+  const listaRef = useRef<number[] | null>(null)
 
   const carregar = useCallback(async (search: string, page = 1, append = false) => {
     if (page === 1) setCarregando(true)
@@ -66,6 +70,7 @@ export default function EmbarcadosPage() {
     try {
       const data: Paginado<Pedido> | Pedido[] = await supervisorApi.listarEmbarcados({
         search, page, conferencia: filtroRef.current || undefined,
+        ids: listaRef.current ? (listaRef.current.join(',') || '0') : undefined,
       })
       if (Array.isArray(data)) {
         setPedidos(data)
@@ -88,6 +93,7 @@ export default function EmbarcadosPage() {
 
   useEffect(() => {
     filtroRef.current = filtro
+    listaRef.current = listaColada
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
       setBuscaAtiva(busca)
@@ -96,7 +102,7 @@ export default function EmbarcadosPage() {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
     }
-  }, [busca, filtro, carregar])
+  }, [busca, filtro, listaColada, carregar])
 
   async function alternarExpansao(id: number) {
     setExpandidos((prev) => {
@@ -137,10 +143,15 @@ export default function EmbarcadosPage() {
           <h1 className="text-2xl font-semibold text-ink">Embarcados</h1>
           <p className="text-sm text-ink-muted">Notas que já saíram num embarque do Senior</p>
         </div>
-        <button onClick={() => carregar(buscaAtiva, 1, false)} className="text-sm text-blue-600 dark:text-blue-400 min-h-[44px] px-2 shrink-0">
-          Atualizar
-        </button>
+        <div className="flex items-center gap-1 shrink-0">
+          <ColarListaBotao nomeTela="Embarcados" naTela={(d) => d.lista === 'embarcados'} onFiltrar={setListaColada} />
+          <button onClick={() => carregar(buscaAtiva, 1, false)} className="text-sm text-blue-600 dark:text-blue-400 min-h-[44px] px-2 shrink-0">
+            Atualizar
+          </button>
+        </div>
       </div>
+
+      <FaixaListaColada ids={listaColada} mostrando={carregando ? undefined : pedidos.length} onLimpar={() => setListaColada(null)} />
 
       <div className="mb-3 flex flex-col sm:flex-row gap-2">
         <input

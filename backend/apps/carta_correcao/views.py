@@ -256,4 +256,12 @@ def config(request):
             if texto not in services.TEXTOS:
                 return Response({'erro': f'texto inválido; use {", ".join(services.TEXTOS)}'}, status=http_status.HTTP_400_BAD_REQUEST)
             Configuracao.objects.update_or_create(chave=Configuracao.Chave.CCE_TEXTO, defaults={'valor': texto})
+        # Carta dos volumes gerada sozinha (2026-11-26): ao ligar, vale só para o que for
+        # concluído dali em diante (automatica.configurar grava o instante).
+        if 'volumes_automatica' in request.data:
+            valor = request.data.get('volumes_automatica')
+            if not isinstance(valor, bool):
+                return Response({'erro': 'volumes_automatica deve ser true ou false'}, status=http_status.HTTP_400_BAD_REQUEST)
+            from . import automatica
+            automatica.configurar(valor)
     return Response(services.configuracao())

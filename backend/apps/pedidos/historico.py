@@ -81,6 +81,8 @@ def _carta(p):
         txt += f" · volumes {p.get('volumes_de') if p.get('volumes_de') is not None else '?'} → {p.get('volumes_para')}"
     if p.get('protocolo'):
         txt += f" · protocolo {p.get('protocolo')}"
+    if p.get('automatica'):
+        txt = 'automática · ' + txt
     if p.get('erro'):
         txt += f" — {p.get('erro')}"
     return txt
@@ -206,6 +208,14 @@ ROTULOS = {
     'embarque_alterado': ('Embarque alterado no Senior', 'fluxo', _embarque),
     'embarque_desfeito': ('Embarque desfeito no Senior', 'alerta', _embarque_desfeito),
     'selecao_retornada': ('Seleção desfeita', 'alerta', lambda p: f"era {p.get('status_anterior') or 'selecionado'}"),
+    # Cotação de frete (2026-11-26) — apps/pedidos/cotacao.py
+    'cotacao_marcada': ('Em cotação de frete', 'alerta',
+                        lambda p: ('transportadora atual: ' + p['transportadora'] + ' — ' if p.get('transportadora') else '')
+                                  + 'a etiqueta fica segura'),
+    'cotacao_encerrada': ('Saiu de cotação', 'fluxo',
+                          lambda p: (('a transportadora mudou para ' + (p.get('transportadora') or p.get('codtra') or '?'))
+                                     if p.get('motivo') == 'transportadora_alterada'
+                                     else ('tirada pelo usuário' if p.get('motivo') == 'manual' else (p.get('motivo') or '')))),
     'cancelado': ('Cancelado', 'alerta', _cancelado),
     'conferencia_transferida': ('Conferência transferida', 'fluxo',
                                 lambda p: f"para {p.get('destino_numero') or p.get('destino') or 'documento reemitido'}"),
@@ -215,6 +225,8 @@ ROTULOS = {
     'etiqueta_enfileirada': ('Etiqueta na fila do agente USB', 'etiqueta', _etiqueta),
     'etiqueta_erro': ('Falha ao imprimir etiqueta', 'alerta', lambda p: p.get('erro') or ''),
     'carta_correcao': ('Carta de correção', 'fluxo', _carta),
+    'carta_automatica_recusada': ('Carta automática dos volumes não saiu', 'alerta',
+                                  lambda p: f"{p.get('mensagem') or p.get('codigo') or ''} — faça pelo Corrigir NF"),
     'carta_correcao_transmissao': ('Carta de correção transmitida', 'fluxo', _carta),
     'carta_correcao_verificada': ('Carta de correção verificada no Senior', 'fluxo', _carta),
     'carta_correcao_reenvio': ('Carta de correção reenviada (completa)', 'fluxo', _carta),

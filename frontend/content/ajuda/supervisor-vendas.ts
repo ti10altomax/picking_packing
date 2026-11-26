@@ -65,6 +65,10 @@ export const supervisorVendas: AjudaTela = {
         'Filtro e badge. Entrega: o frete é por conta da Altomax e a mercadoria vai por transportadora. Retira: o cliente busca. Sem frete: o documento não tem frete.',
     },
     {
+      nome: 'Em cotação / Tirar de cotação',
+      descricao: 'Use quando a nota foi faturada com uma transportadora que ainda vai mudar (o frete está em cotação). Marcada, a etiqueta de volume não sai e as telas mostram "EM COTAÇÃO". A nota sai de cotação sozinha quando a transportadora mudar (carta de correção ou troca no Senior); se a cotação terminar sem troca, toque em "Tirar de cotação".',
+    },
+    {
       nome: 'Com transportadora / Sem transportadora',
       descricao: 'Filtra pelo que o Senior já informou. Use "Sem transportadora" para achar documentos que ainda precisam de cadastro.',
     },

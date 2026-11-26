@@ -12,6 +12,7 @@ export default function SeparadoresPage() {
   const [carregando, setCarregando] = useState(true)
   const [busca, setBusca] = useState('')
   const [agindo, setAgindo] = useState<number | null>(null)
+  const [liberandoTodos, setLiberandoTodos] = useState(false)
   const toast = useToast()
 
   // Cadastro rápido
@@ -75,6 +76,24 @@ export default function SeparadoresPage() {
     }
   }
 
+  // Liberar todos (2026-11-26, pedido do Pátio): libera de uma vez os ativos da lista que ainda
+  // não estão liberados hoje — quem não veio é desmarcado um a um. Com busca, vale só o que aparece.
+  async function liberarTodos() {
+    const ids = lista.filter((s) => s.ativo && !s.liberado_hoje).map((s) => s.id)
+    if (!ids.length) return
+    setLiberandoTodos(true)
+    try {
+      const r = await separadoresApi.liberar(ids)
+      const feitos = new Set<number>(r.liberados ?? ids)
+      setLista((prev) => prev.map((x) => (feitos.has(x.id) ? { ...x, liberado_hoje: true } : x)))
+      toast.ok(`${feitos.size} separador${feitos.size === 1 ? '' : 'es'} liberado${feitos.size === 1 ? '' : 's'} hoje`)
+    } catch {
+      toast.erro('Erro ao liberar os separadores')
+    } finally {
+      setLiberandoTodos(false)
+    }
+  }
+
   async function alternarAtivo(s: SeparadorCadastro) {
     if (s.ativo) {
       const ok = await dialog.confirm({
@@ -98,6 +117,7 @@ export default function SeparadoresPage() {
   }
 
   const liberadosHoje = lista.filter((s) => s.ativo && s.liberado_hoje).length
+  const aLiberar = lista.filter((s) => s.ativo && !s.liberado_hoje).length
 
   return (
     <div className="p-4">
@@ -108,9 +128,18 @@ export default function SeparadoresPage() {
             Cadastro e liberação do dia · <span className="font-semibold text-emerald-600 dark:text-emerald-400">{liberadosHoje} liberado{liberadosHoje === 1 ? '' : 's'} hoje</span>
           </p>
         </div>
-        <button onClick={carregar} className="text-sm text-blue-600 dark:text-blue-400 min-h-[44px] px-2">
-          Atualizar
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={liberarTodos}
+            disabled={liberandoTodos || aLiberar === 0}
+            className="h-11 px-4 rounded-lg text-sm font-semibold bg-emerald-600 text-white disabled:bg-surface-elev disabled:text-ink-subtle transition-colors"
+          >
+            {aLiberar === 0 ? 'Todos liberados' : `Liberar todos (${aLiberar})`}
+          </button>
+          <button onClick={carregar} className="text-sm text-blue-600 dark:text-blue-400 min-h-[44px] px-2">
+            Atualizar
+          </button>
+        </div>
       </div>
 
       {/* Cadastro rápido */}
@@ -195,7 +224,7 @@ export default function SeparadoresPage() {
               {s.ativo && (
                 <button
                   onClick={() => alternarLiberacao(s)}
-                  disabled={agindo === s.id}
+                  disabled={agindo === s.id || liberandoTodos}
                   className={`h-11 px-4 rounded-lg text-sm font-semibold shrink-0 transition-colors disabled:opacity-50 ${
                     s.liberado_hoje
                       ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30'

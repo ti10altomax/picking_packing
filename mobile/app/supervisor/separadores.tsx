@@ -12,12 +12,15 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { Header } from '@/components/Header'
 import { SupervisorNav } from '@/components/SupervisorNav'
 import { useDialog } from '@/components/Dialog'
+import { useToast } from '@/components/Toast'
 import { separadoresApi, SeparadorCadastro } from '@/lib/api'
 
 const TIPO_LABEL: Record<string, string> = { extra: 'Extra', funcionario: 'Funcionário' }
 
 export default function SupervisorSeparadores() {
   const dialog = useDialog()
+  const toast = useToast()
+  const [liberandoTodos, setLiberandoTodos] = useState(false)
   const [lista, setLista] = useState<SeparadorCadastro[]>([])
   const [carregando, setCarregando] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -82,6 +85,24 @@ export default function SupervisorSeparadores() {
     }
   }
 
+  // Liberar todos (2026-11-26, pedido do Pátio): libera de uma vez os ativos da lista que ainda
+  // não estão liberados hoje — quem não veio é desmarcado um a um. Com busca, vale só o que aparece.
+  async function liberarTodos() {
+    const ids = lista.filter((s) => s.ativo && !s.liberado_hoje).map((s) => s.id)
+    if (!ids.length) return
+    setLiberandoTodos(true)
+    try {
+      const r = await separadoresApi.liberar(ids)
+      const feitos = new Set<number>(r.liberados ?? ids)
+      setLista((prev) => prev.map((x) => (feitos.has(x.id) ? { ...x, liberado_hoje: true } : x)))
+      toast.ok(`${feitos.size} separador${feitos.size === 1 ? '' : 'es'} liberado${feitos.size === 1 ? '' : 's'} hoje`)
+    } catch {
+      toast.erro('Não foi possível liberar os separadores')
+    } finally {
+      setLiberandoTodos(false)
+    }
+  }
+
   async function alternarAtivo(s: SeparadorCadastro) {
     if (s.ativo) {
       const ok = await dialog.confirm({
@@ -105,19 +126,31 @@ export default function SupervisorSeparadores() {
   }
 
   const liberadosHoje = lista.filter((s) => s.ativo && s.liberado_hoje).length
+  const aLiberar = lista.filter((s) => s.ativo && !s.liberado_hoje).length
 
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-surface-bg">
       <Header title="Separadores" />
       <SupervisorNav />
 
-      <View className="px-4 pt-3 pb-2">
-        <Text className="text-sm text-ink-muted">
+      <View className="px-4 pt-3 pb-2 flex-row items-center gap-2">
+        <Text className="flex-1 text-sm text-ink-muted">
           Cadastro e liberação do dia ·{' '}
           <Text className="font-semibold text-emerald-400">
             {liberadosHoje} liberado{liberadosHoje === 1 ? '' : 's'} hoje
           </Text>
         </Text>
+        <Pressable
+          onPress={liberarTodos}
+          disabled={liberandoTodos || aLiberar === 0}
+          className={`h-11 px-3 rounded-lg items-center justify-center ${
+            liberandoTodos || aLiberar === 0 ? 'bg-surface-elev' : 'bg-emerald-600 active:bg-emerald-500'
+          }`}
+        >
+          <Text className={`text-xs font-semibold ${liberandoTodos || aLiberar === 0 ? 'text-ink-subtle' : 'text-white'}`}>
+            {aLiberar === 0 ? 'Todos liberados' : `Liberar todos (${aLiberar})`}
+          </Text>
+        </Pressable>
       </View>
 
       {/* Cadastro rápido */}
@@ -218,7 +251,7 @@ export default function SupervisorSeparadores() {
               {s.ativo && (
                 <Pressable
                   onPress={() => alternarLiberacao(s)}
-                  disabled={agindo === s.id}
+                  disabled={agindo === s.id || liberandoTodos}
                   className={`h-11 px-3 rounded-lg items-center justify-center ${
                     s.liberado_hoje ? 'bg-emerald-600' : 'bg-surface-elev border border-surface-border'
                   }`}

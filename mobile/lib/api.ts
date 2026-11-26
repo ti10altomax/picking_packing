@@ -298,7 +298,8 @@ export const supervisorApi = {
   listarConferentes: () =>
     api.get('/api/users/conferentes/').then((r) => r.data),
   // `transportadora`: 'com' | 'sem' filtra pela presença da transportadora (2026-11-09)
-  listarConferidos: (params: { search?: string; page?: number; transportadora?: 'com' | 'sem' | '' } = {}) =>
+  // `etiqueta`: 'nao_impressa' = sem etiqueta de volume impressa (2026-11-26)
+  listarConferidos: (params: { search?: string; page?: number; transportadora?: 'com' | 'sem' | ''; etiqueta?: 'nao_impressa' | 'impressa' | '' } = {}) =>
     api.get('/api/pedidos/', { params: { status: 'conferido', ...params } }).then((r) => r.data),
   // Embarcados (2026-11-24): nota num embarque do Senior. `conferencia`: 'com' = foi conferido
   // antes de sair | 'sem' = embarcou direto de Pendente/Selecionado.
@@ -385,14 +386,17 @@ export function rotuloBloqueio(b: BloqueioEtiqueta | null | undefined): string {
   if (b.codigo === 'sem_transportadora') return 'sem transportadora'
   if (b.codigo === 'sem_nf') return 'sem NF emitida'
   if (b.codigo === 'volumes_divergentes') return 'volumes ≠ NF'
+  if (b.codigo === 'em_cotacao') return 'em cotação de frete'   // 2026-11-26
   return 'indisponível'
 }
 
 /** Veredito da impressão automática devolvido pelo concluir */
 export type VereditoEtiqueta = {
   resultado: 'enfileirada' | 'sem_transportadora' | 'sem_nf' | 'volumes_divergentes' | 'sem_impressora_padrao' | 'desligada' | 'erro'
-    | 'nao_conferido' | 'pedido_cancelado' | 'sem_volumes'
+    | 'nao_conferido' | 'pedido_cancelado' | 'sem_volumes' | 'em_cotacao'
   impressora: string | null
+  /** a carta de correção dos volumes foi agendada para sair sozinha (2026-11-26) */
+  carta_automatica?: boolean
   impressora_id?: number
   mensagem?: string
   qtd_volumes: number
@@ -402,14 +406,21 @@ export const impressaoApi = {
   // `volumes` (2026-11-19) = "12-30, 35": só esses volumes (reimpressão); sem ele, todos
   imprimir: (pedidoId: number, body: { impressora_id?: number; volumes?: string }) =>
     api.post(`/api/impressao/pedidos/${pedidoId}/imprimir/`, body)
-      .then((r) => r.data as { resultado: string; erro: string | null; impressao: ImpressaoEtiqueta }),
+      // `minha_impressora` vem quando esta foi a primeira impressora escolhida pelo conferente e
+      // ficou gravada como a dele (2026-11-26)
+      .then((r) => r.data as { resultado: string; erro: string | null; impressao: ImpressaoEtiqueta; minha_impressora?: { id: number; nome: string } }),
   pendentes: () =>
     api.get('/api/impressao/pendentes/')
       // `aguardando_transportadora` = aguardando o Senior (transportadora ou, com exige_nf, a NF)
       .then((r) => r.data as { prontas: EtiquetaPendente[]; aguardando_transportadora: EtiquetaPendente[]; exige_nf?: boolean }),
   impressoras: () =>
     api.get('/api/impressao/impressoras/')
-      .then((r) => r.data as { impressoras: ImpressoraEtiqueta[]; impressora_padrao: number | null; automatica: boolean; exige_nf?: boolean }),
+      // `minha` = impressora do próprio usuário (as etiquetas dele saem nela sozinhas)
+      .then((r) => r.data as { impressoras: ImpressoraEtiqueta[]; impressora_padrao: number | null; automatica: boolean; exige_nf?: boolean; minha?: number | null }),
+  // Impressora do conferente (2026-11-26): null = perguntar sempre
+  definirMinhaImpressora: (impressoraId: number | null) =>
+    api.put('/api/impressao/minha-impressora/', { impressora_id: impressoraId })
+      .then((r) => r.data as { impressora: { id: number; nome: string } | null }),
 }
 
 // Painel "agora no galpão" (observabilidade, 2026-10-08)

@@ -18,7 +18,8 @@ export const supervisorSeparadores: AjudaTela = {
     'Preencha o "Nome" (obrigatório). Se quiser, preencha o "Apelido", o nome pelo qual é chamado.',
     'Escolha o "Tipo": Extra ou Funcionário.',
     'Toque em "Cadastrar". O nome aparece na lista.',
-    'Todo dia, toque em "Liberar hoje" no nome de cada separador que vai trabalhar. O botão vira "✓ Liberado hoje".',
+    'Todo dia, toque em "Liberar todos" para liberar de uma vez todos os separadores ativos da lista. Depois, toque em "✓ Liberado hoje" no nome de quem não veio, para tirar.',
+    'Se preferir liberar um a um, toque em "Liberar hoje" no nome de cada separador que vai trabalhar. O botão vira "✓ Liberado hoje".',
     'Para desfazer a liberação do dia, toque em "✓ Liberado hoje".',
     'Para achar alguém, digite na busca "Buscar por nome, apelido ou documento…".',
   ],
@@ -30,6 +31,10 @@ export const supervisorSeparadores: AjudaTela = {
     {
       nome: 'Extra / Funcionário',
       descricao: 'Tipo do separador. Serve só para você se organizar.',
+    },
+    {
+      nome: 'Liberar todos (N)',
+      descricao: 'Verde, no alto. Libera para hoje os N separadores ativos que ainda não estão liberados. Com a busca preenchida, vale só para os que aparecem. Vira "Todos liberados" quando não falta ninguém.',
     },
     {
       nome: 'Liberar hoje / ✓ Liberado hoje',

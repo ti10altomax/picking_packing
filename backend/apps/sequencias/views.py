@@ -166,6 +166,7 @@ def detalhe_ou_excluir(request, pk):
             'qtd_itens': p.qtd_itens,
             # nota já num embarque do Senior (2026-11-24): aviso na linha
             'embarque_numero': p.embarque_numero,
+            'em_cotacao': p.em_cotacao,   # cotação de frete (2026-11-26)
         }
         for p in pedidos
     ]

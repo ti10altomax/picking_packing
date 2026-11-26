@@ -27,6 +27,10 @@ export const supervisorNaoConformes: AjudaTela = {
   ],
   elementos: [
     {
+      nome: 'Colar lista',
+      descricao: 'Recebeu uma relação de notas? Toque em "Colar lista", cole os números (vírgula, espaço ou um por linha; 151281-151290 vale pelo intervalo) ou abra o .txt e toque em "Buscar". O sistema mostra quais estão nesta tela, quais estão em outra (com o botão "Ver") e quais não achou. "Mostrar N na tela" deixa a tela só com essas notas; a faixa azul "Mostrando só a lista colada" tem o botão "Limpar filtro" para voltar ao normal.',
+    },
+    {
       nome: 'Motivo',
       descricao:
         'Divergência de quantidade, produto errado ou item ausente. É o que o conferente escolheu ao marcar o documento.',

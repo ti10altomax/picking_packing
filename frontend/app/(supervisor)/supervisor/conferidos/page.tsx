@@ -3,14 +3,16 @@ import { DocBadges } from '@/components/ui/DocBadges'
 import { OndeEsta } from '@/components/pedidos/OndeEsta'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
-import { supervisorApi, pedidosApi, type Paginado } from '@/lib/api'
-import { ImprimirEtiqueta } from '@/components/etiquetas/ImprimirEtiqueta'
+import { supervisorApi, pedidosApi, impressaoApi, type Paginado, type ImpressoraEtiqueta } from '@/lib/api'
+import { ImprimirEtiqueta, escolhaInicial, guardarUltimaImpressora, rotuloBloqueio } from '@/components/etiquetas/ImprimirEtiqueta'
 import type { BloqueioEtiqueta } from '@/lib/api'
 import { HistoricoBotao } from '@/components/pedidos/HistoricoPedido'
 import { TrocarTransportadora } from '@/components/cce/TrocarTransportadora'
 import { useCcePermissao } from '@/lib/useCcePermissao'
 import { ItensPorVolume, type ItemDoc, type VolumeDoc } from '@/components/pedidos/ItensPorVolume'
 import { MoverLancamentos } from '@/components/pedidos/MoverLancamentos'
+import { CotacaoBotao } from '@/components/pedidos/CotacaoBotao'
+import { ColarListaBotao, FaixaListaColada } from '@/components/pedidos/ListaNotas'
 import { useAuthStore } from '@/stores/authStore'
 import { useDialog } from '@/components/Dialog'
 import { useToast } from '@/components/Toast'
@@ -34,6 +36,7 @@ type Pedido = {
   nf_numero?: string
   etiqueta_volume_em?: string | null
   etiqueta_bloqueio?: BloqueioEtiqueta | null
+  em_cotacao?: boolean
 }
 
 // Detalhe carregado ao abrir a linha: itens + volumes (itens por volume desde 2026-11-06)
@@ -51,6 +54,12 @@ export default function ConferidosPage() {
   // transportadora no Senior (2026-11-09). O ref deixa `carregar` estável (paginação).
   const [transportadora, setTransportadora] = useState<'' | 'com' | 'sem'>('')
   const transportadoraRef = useRef<'' | 'com' | 'sem'>('')
+  // '' | 'nao_impressa' — só o que ainda não teve etiqueta de volume impressa (2026-11-26)
+  const [etiqueta, setEtiqueta] = useState<'' | 'nao_impressa'>('')
+  const etiquetaRef = useRef<'' | 'nao_impressa'>('')
+  // Lista colada (2026-11-26): a tela mostra só essas notas (`?ids=`); null = sem filtro
+  const [listaColada, setListaColada] = useState<number[] | null>(null)
+  const listaRef = useRef<number[] | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const podeCce = useCcePermissao() === true   // Corrigir NF só para os perfis em Configuracao.cce_perfis
   const { user } = useAuthStore()
@@ -66,12 +75,28 @@ export default function ConferidosPage() {
   const [itensCache, setItensCache] = useState<Record<number, Detalhe>>({})
   const [carregandoItens, setCarregandoItens] = useState<Set<number>>(new Set())
 
+  // Etiquetas em massa (2026-11-26): marca os documentos e manda todos para uma impressora.
+  // Só entra quem pode imprimir (sem `etiqueta_bloqueio`); a seleção vale para a lista na tela.
+  const [selecionados, setSelecionados] = useState<Set<number>>(new Set())
+  const [impressoras, setImpressoras] = useState<ImpressoraEtiqueta[]>([])
+  const [destino, setDestino] = useState<number | 'navegador'>('navegador')
+  const [lote, setLote] = useState<{ total: number; feitas: number } | null>(null)
+
+  useEffect(() => {
+    impressaoApi.impressoras()
+      .then((i) => { setImpressoras(i.impressoras); setDestino(escolhaInicial(i.impressoras)) })
+      .catch(() => { /* sem a lista, sobra o navegador */ })
+  }, [])
+
   const carregar = useCallback(async (search: string, page = 1, append = false) => {
     if (page === 1) setCarregando(true)
     else setCarregandoMais(true)
+    if (!append) setSelecionados(new Set())   // lista nova (busca, filtro, Atualizar): a seleção antiga não vale
     try {
       const data: Paginado<Pedido> | Pedido[] = await supervisorApi.listarConferidos({
         search, page, transportadora: transportadoraRef.current || undefined,
+        etiqueta: etiquetaRef.current || undefined,
+        ids: listaRef.current ? (listaRef.current.join(',') || '0') : undefined,
       })
       if (Array.isArray(data)) {
         setPedidos(data)
@@ -98,6 +123,8 @@ export default function ConferidosPage() {
 
   useEffect(() => {
     transportadoraRef.current = transportadora
+    etiquetaRef.current = etiqueta
+    listaRef.current = listaColada
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
       setBuscaAtiva(busca)
@@ -106,7 +133,7 @@ export default function ConferidosPage() {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
     }
-  }, [busca, transportadora, carregar])
+  }, [busca, transportadora, etiqueta, listaColada, carregar])
 
   async function carregarMais() {
     if (proximaPagina) await carregar(buscaAtiva, proximaPagina, true)
@@ -136,6 +163,64 @@ export default function ConferidosPage() {
     }
   }
 
+  function alternarSelecao(id: number) {
+    setSelecionados((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const imprimiveis = pedidos.filter((p) => !p.etiqueta_bloqueio)
+  const marcados = imprimiveis.filter((p) => selecionados.has(p.id))
+  const todosMarcados = imprimiveis.length > 0 && marcados.length === imprimiveis.length
+
+  function alternarTodos() {
+    setSelecionados(todosMarcados ? new Set() : new Set(imprimiveis.map((p) => p.id)))
+  }
+
+  async function imprimirSelecionadas() {
+    const alvo = marcados
+    if (!alvo.length || lote) return
+    if (destino === 'navegador') {
+      // Navegador: uma aba por documento — o usuário imprime cada uma
+      alvo.forEach((p) => window.open(`/etiquetas/${p.id}`, '_blank', 'noopener'))
+      setSelecionados(new Set())
+      return
+    }
+    const nome = impressoras.find((i) => i.id === destino)?.nome ?? 'impressora'
+    const jaImpressas = alvo.filter((p) => p.etiqueta_volume_em).length
+    const ok = await dialog.confirm({
+      title: `Imprimir as etiquetas de ${alvo.length} documento${alvo.length === 1 ? '' : 's'}?`,
+      message: `Impressora: ${nome}.${
+        jaImpressas ? ` ${jaImpressas} já ${jaImpressas === 1 ? 'teve' : 'tiveram'} etiqueta impressa e ${jaImpressas === 1 ? 'será reimpresso' : 'serão reimpressos'}.` : ''
+      }`,
+      confirmText: 'Imprimir',
+      cancelText: 'Voltar',
+    })
+    if (!ok) return
+    guardarUltimaImpressora(String(destino))
+    setLote({ total: alvo.length, feitas: 0 })
+    const erros: string[] = []
+    for (const p of alvo) {
+      try {
+        await impressaoApi.imprimir(p.id, { impressora_id: destino })
+        atualizarLinha(p.id, { etiqueta_volume_em: new Date().toISOString() })
+        setSelecionados((prev) => { const next = new Set(prev); next.delete(p.id); return next })
+      } catch (e: unknown) {
+        const msg = (e as { response?: { data?: { erro?: string } } })?.response?.data?.erro ?? 'falha'
+        erros.push(`${p.numero_externo}: ${msg}`)
+      }
+      setLote((l) => l && { ...l, feitas: l.feitas + 1 })
+    }
+    setLote(null)
+    const feitas = alvo.length - erros.length
+    if (feitas) toast.ok(`Etiquetas de ${feitas} documento${feitas === 1 ? '' : 's'} enviadas`, { detalhe: `Impressora: ${nome}` })
+    // quem falhou continua marcado para tentar de novo
+    if (erros.length) toast.erro(`${erros.length} não ${erros.length === 1 ? 'saiu' : 'saíram'}`, { detalhe: erros.join(' · '), duracao: 15000 })
+  }
+
   async function alternarExpansao(id: number) {
     setExpandidos((prev) => {
       const next = new Set(prev)
@@ -161,7 +246,7 @@ export default function ConferidosPage() {
   }
 
   return (
-    <div className="p-4">
+    <div className={`p-4 ${marcados.length > 0 ? 'pb-28' : ''}`}>
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-2xl font-semibold text-ink">Pedidos conferidos</h1>
@@ -175,26 +260,34 @@ export default function ConferidosPage() {
           >
             Relatório sem transportadora
           </Link>
+          <ColarListaBotao nomeTela="Conferidos" naTela={(d) => d.lista === 'conferidos'} onFiltrar={setListaColada} />
           <button onClick={() => carregar(buscaAtiva, 1, false)} className="text-sm text-blue-600 dark:text-blue-400 min-h-[44px] px-2">
             Atualizar
           </button>
         </div>
       </div>
 
-      <div className="mb-3 flex flex-col sm:flex-row gap-2">
+      <div className="mb-3 flex flex-col sm:flex-row sm:flex-wrap gap-2">
         <input
           type="text"
           placeholder="Buscar por pedido, NF ou cliente"
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
-          className="flex-1 bg-surface-card border border-surface-border text-ink placeholder:text-ink-subtle rounded-lg px-3 py-2 text-sm min-h-[44px] focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-300"
+          className="flex-1 sm:min-w-[240px] bg-surface-card border border-surface-border text-ink placeholder:text-ink-subtle rounded-lg px-3 py-2 text-sm min-h-[44px] focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-300"
         />
         <FiltroChips
           valor={transportadora}
           onChange={(v) => setTransportadora(v as '' | 'com' | 'sem')}
           opcoes={[['', 'Todos'], ['com', 'Com transportadora'], ['sem', 'Sem transportadora']]}
         />
+        <FiltroChips
+          valor={etiqueta}
+          onChange={(v) => setEtiqueta(v as '' | 'nao_impressa')}
+          opcoes={[['', 'Etiqueta: todas'], ['nao_impressa', 'Etiqueta não impressa']]}
+        />
       </div>
+
+      <FaixaListaColada ids={listaColada} mostrando={carregando ? undefined : pedidos.length} onLimpar={() => setListaColada(null)} />
 
       {carregando ? (
         <p className="text-ink-muted">Carregando…</p>
@@ -211,7 +304,16 @@ export default function ConferidosPage() {
         <>
           <div className="bg-surface-card rounded-xl border border-surface-border overflow-hidden">
             <div className="px-4 py-2 border-b border-surface-border bg-surface-elev/50 flex items-center gap-3 text-xs text-ink-muted font-medium">
-              <span>Pedido</span>
+              <label className="inline-flex items-center gap-3 min-h-[32px] cursor-pointer" title="Marca todos os documentos da lista que podem ter etiqueta">
+                <input
+                  type="checkbox"
+                  checked={todosMarcados}
+                  onChange={alternarTodos}
+                  disabled={imprimiveis.length === 0 || !!lote}
+                  className="w-5 h-5 accent-emerald-600"
+                />
+                <span>Marcar todos para etiqueta</span>
+              </label>
               <span className="ml-auto">{pedidos.length} de {count}</span>
             </div>
             <ul>
@@ -222,9 +324,23 @@ export default function ConferidosPage() {
                 return (
                   <li key={p.id} className="border-b border-surface-border last:border-b-0">
                     <div className="flex items-start">
+                    {/* Seleção para a impressão em massa — desabilitada quando a etiqueta está bloqueada */}
+                    <label
+                      className={`pl-4 pr-1 pt-3 min-h-[44px] shrink-0 flex items-start ${p.etiqueta_bloqueio ? 'opacity-40' : 'cursor-pointer'}`}
+                      title={p.etiqueta_bloqueio ? `Etiqueta indisponível: ${rotuloBloqueio(p.etiqueta_bloqueio)}` : 'Marcar para imprimir a etiqueta'}
+                    >
+                      <input
+                        type="checkbox"
+                        aria-label={`Marcar ${p.numero_externo} para etiqueta`}
+                        checked={selecionados.has(p.id) && !p.etiqueta_bloqueio}
+                        onChange={() => alternarSelecao(p.id)}
+                        disabled={!!p.etiqueta_bloqueio || !!lote}
+                        className="w-5 h-5 mt-0.5 accent-emerald-600"
+                      />
+                    </label>
                     <button
                       onClick={() => alternarExpansao(p.id)}
-                      className="flex-1 min-w-0 px-4 py-3 text-left hover:bg-surface-elev/40 transition-colors"
+                      className="flex-1 min-w-0 pl-2 pr-4 py-3 text-left hover:bg-surface-elev/40 transition-colors"
                     >
                       <div className="flex items-start gap-3">
                         <div className="flex-1 min-w-0">
@@ -284,6 +400,13 @@ export default function ConferidosPage() {
                         bloqueio={p.etiqueta_bloqueio ?? null}
                         onImpresso={() => atualizarLinha(p.id, { etiqueta_volume_em: new Date().toISOString() })}
                       />
+                      {/* Em cotação de frete (2026-11-26): segura a etiqueta até a transportadora mudar */}
+                      <CotacaoBotao
+                        pedidoId={p.id}
+                        numero={p.numero_externo}
+                        emCotacao={!!p.em_cotacao}
+                        onMudou={(r) => atualizarLinha(p.id, { em_cotacao: r.em_cotacao, etiqueta_bloqueio: r.etiqueta_bloqueio })}
+                      />
                       <HistoricoBotao pedidoId={p.id} />
                       {/* Carta de correção (ponto 6): transportadora/frete/volumes da NF — NF própria ou a do pedido faturado */}
                       {podeCce && (
@@ -293,6 +416,8 @@ export default function ConferidosPage() {
                           onAlterado={(a) => atualizarLinha(a.id, {
                             transportadora: a.transportadora, nf_numero: a.nf_numero,
                             ...(a.etiqueta_bloqueio !== undefined ? { etiqueta_bloqueio: a.etiqueta_bloqueio } : {}),
+                            // a troca da transportadora tira a nota de cotação no servidor
+                            ...(a.etiqueta_bloqueio !== undefined && a.etiqueta_bloqueio?.codigo !== 'em_cotacao' ? { em_cotacao: false } : {}),
                           })}
                         />
                       )}
@@ -366,6 +491,44 @@ export default function ConferidosPage() {
             </div>
           )}
         </>
+      )}
+
+      {/* Barra da impressão em massa: aparece com pelo menos um documento marcado */}
+      {marcados.length > 0 && (
+        <div className="fixed bottom-0 inset-x-0 z-30 bg-surface-card border-t border-surface-border shadow-[0_-4px_16px_rgba(0,0,0,0.12)] print:hidden">
+          <div className="px-4 py-3 flex items-center gap-2 flex-wrap">
+            <p className="text-sm text-ink mr-auto">
+              <strong>{marcados.length}</strong> marcado{marcados.length === 1 ? '' : 's'} para etiqueta
+              {lote && <span className="text-ink-muted"> · enviando {lote.feitas}/{lote.total}…</span>}
+            </p>
+            <select
+              value={String(destino)}
+              onChange={(e) => setDestino(e.target.value === 'navegador' ? 'navegador' : Number(e.target.value))}
+              disabled={!!lote}
+              aria-label="Impressora"
+              className="bg-surface-card border border-surface-border text-ink rounded-lg px-2 min-h-[44px] text-sm"
+            >
+              {impressoras.map((i) => <option key={i.id} value={i.id}>{i.nome}{i.padrao ? ' (padrão)' : ''}</option>)}
+              <option value="navegador">Navegador</option>
+            </select>
+            <button
+              type="button"
+              onClick={imprimirSelecionadas}
+              disabled={!!lote}
+              className="bg-emerald-600 text-white px-4 min-h-[44px] rounded-lg text-sm font-semibold disabled:opacity-50"
+            >
+              Imprimir etiquetas
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelecionados(new Set())}
+              disabled={!!lote}
+              className="text-sm text-ink-muted min-h-[44px] px-2 disabled:opacity-50"
+            >
+              Limpar
+            </button>
+          </div>
+        </div>
       )}
     </div>
   )

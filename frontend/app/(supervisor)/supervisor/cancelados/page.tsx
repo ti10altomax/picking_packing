@@ -6,6 +6,7 @@ import { supervisorApi } from '@/lib/api'
 import { useAuthStore } from '@/stores/authStore'
 import { useDialog } from '@/components/Dialog'
 import { useToast } from '@/components/Toast'
+import { ColarListaBotao, FaixaListaColada } from '@/components/pedidos/ListaNotas'
 
 // Documento cancelado no Senior (sitPed=5 / sitNfv=9) ou pelo supervisor, que tinha
 // conferência em andamento ou concluída. As caixas continuam montadas: o Sup. Pátio
@@ -87,7 +88,10 @@ export default function CanceladosPage() {
   const { user } = useAuthStore()
   const podeTransferir = user?.perfil === 'supervisor_patio' || user?.perfil === 'admin'
 
-  const [lista, setLista] = useState<Cancelado[]>([])
+  // Lista colada (2026-11-26): a tela mostra só essas notas; null = sem filtro
+  const [listaTodos, setLista] = useState<Cancelado[]>([])
+  const [listaColada, setListaColada] = useState<number[] | null>(null)
+  const lista = listaColada ? listaTodos.filter((p) => listaColada.includes(p.id)) : listaTodos
   const [carregando, setCarregando] = useState(true)
   const toast = useToast()
   const [transferindo, setTransferindo] = useState<Cancelado | null>(null)
@@ -115,10 +119,15 @@ export default function CanceladosPage() {
             Documentos cancelados com conferência já feita — transfira para a nota reemitida
           </p>
         </div>
-        <button onClick={carregar} className="text-sm text-blue-600 dark:text-blue-400 min-h-[44px] px-2">
-          Atualizar
-        </button>
+        <div className="flex items-center gap-1 shrink-0">
+          <ColarListaBotao nomeTela="Cancelados" naTela={(d) => d.lista === 'cancelados'} onFiltrar={setListaColada} />
+          <button onClick={carregar} className="text-sm text-blue-600 dark:text-blue-400 min-h-[44px] px-2">
+            Atualizar
+          </button>
+        </div>
       </div>
+
+      <FaixaListaColada ids={listaColada} mostrando={carregando ? undefined : lista.length} onLimpar={() => setListaColada(null)} />
 
       {carregando ? (
         <p className="text-ink-muted">Carregando…</p>

@@ -183,6 +183,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'apps.senior.tasks.sincronizar_embarques',
         'schedule': 120.0,  # nota que entrou num embarque no Senior (E145EBQ/E145NFV) → Embarcado
     },
+    'verificar-cotacoes': {
+        'task': 'apps.senior.tasks.verificar_cotacoes',
+        'schedule': 300.0,  # nota em cotação de frete: a transportadora já mudou no Senior? (2026-11-26)
+    },
     'verificar-cartas-pendentes': {
         'task': 'apps.carta_correcao.tasks.verificar_cartas_pendentes',
         'schedule': 120.0,  # carta gravada/aguardando SDE → confere no eDocs se a SEFAZ autorizou (10 min até 2026-11-23)

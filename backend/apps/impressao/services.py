@@ -41,7 +41,7 @@ PREFIXO_ZPL = b'~JX\r\n'
 from apps.pedidos.models import Impressora, Pedido, PedidoLog, PrintJob
 
 from .etiqueta import dados_etiquetas, filtrar_volumes, formatar_volumes, normalizar_modelo
-from .models import ImpressaoEtiqueta
+from .models import ImpressaoEtiqueta, ImpressoraUsuario
 from .zpl import gerar_zpl
 
 logger = logging.getLogger(__name__)
@@ -63,6 +63,28 @@ def impressora_padrao() -> Impressora | None:
     if not valor or not str(valor).isdigit():
         return None
     return Impressora.objects.filter(pk=int(valor), ativa=True).first()
+
+
+def impressora_do_usuario(usuario) -> Impressora | None:
+    """Impressora de etiquetas do conferente (2026-11-26), se ele tem uma e ela está ativa."""
+    if usuario is None:
+        return None
+    pref = ImpressoraUsuario.objects.select_related('impressora').filter(usuario=usuario).first()
+    return pref.impressora if pref and pref.impressora.ativa else None
+
+
+def definir_impressora_usuario(usuario, impressora: Impressora | None, por=None) -> None:
+    """Grava (ou, com None, apaga) a impressora do usuário."""
+    if impressora is None:
+        ImpressoraUsuario.objects.filter(usuario=usuario).delete()
+        return
+    ImpressoraUsuario.objects.update_or_create(
+        usuario=usuario, defaults={'impressora': impressora, 'definido_por': por})
+
+
+def trocar_impressora_usuarios(de: Impressora, para: Impressora, por=None) -> int:
+    """Impressora parada: passa de uma vez todo mundo que imprime em `de` para `para`."""
+    return ImpressoraUsuario.objects.filter(impressora=de).update(impressora=para, definido_por=por)
 
 
 def impressao_automatica_ligada() -> bool:
@@ -116,6 +138,11 @@ def verificar_elegivel(pedido: Pedido, *, exige_nf: bool | None = None,
             'nao_conferido',
             f'etiqueta só depois da conferência concluída (status atual: "{pedido.get_status_display()}")',
         )
+    # Em cotação de frete (2026-11-26): a transportadora da nota vai mudar — nada de etiqueta
+    # com a transportadora errada. Vem antes dos outros motivos: é o que a tela precisa mostrar.
+    if pedido.em_cotacao:
+        from apps.pedidos.cotacao import MENSAGEM_BLOQUEIO
+        raise ErroImpressao('em_cotacao', MENSAGEM_BLOQUEIO)
     if exige_nf is None:
         exige_nf = etiqueta_exige_nf()
     if exige_nf and pedido.identificacao_nf is None:
@@ -153,7 +180,7 @@ def motivo_bloqueio(pedido: Pedido, *, exige_nf: bool | None = None,
 def filtro_pronta() -> Q:
     """Q equivalente a `motivo_bloqueio(p) is None` num queryset de Conferidos anotado por
     `anotar_volumes` (contagens do painel Agora; `pendentes_qs` já vem anotado)."""
-    q = Q(transportadora__gt='')
+    q = Q(transportadora__gt='') & Q(em_cotacao=False)
     if etiqueta_exige_nf():
         q &= Q(tipo=Pedido.Tipo.NOTA_FISCAL) | Q(nf_numero__gt='')
     if etiqueta_exige_volumes():
@@ -332,12 +359,21 @@ def disparar_automatica(pedido: Pedido) -> dict:
     do conferente mostrar o que aconteceu.
     """
     base = {'qtd_volumes': qtd_volumes_com_itens(pedido), 'impressora': None}
-    if not impressao_automatica_ligada():
+    # Em cotação (2026-11-26): antes do "desligada", senão a tela do conferente ofereceria
+    # escolher impressora para uma etiqueta que o servidor vai recusar.
+    if pedido.em_cotacao:
+        from apps.pedidos.cotacao import MENSAGEM_BLOQUEIO
+        return {**base, 'resultado': 'em_cotacao', 'mensagem': MENSAGEM_BLOQUEIO}
+    # Impressora do conferente (2026-11-26): quem conferiu tem a sua → sai nela, sem pergunta,
+    # mesmo com a impressão automática geral desligada (que é a da impressora padrão única).
+    imp = impressora_do_usuario(pedido.conferente)
+    if imp is None and not impressao_automatica_ligada():
         return {**base, 'resultado': 'desligada'}
     bloqueio = motivo_bloqueio(pedido)
     if bloqueio:
         return {**base, 'resultado': bloqueio['codigo'], 'mensagem': bloqueio['mensagem']}
-    imp = impressora_padrao()
+    if imp is None:
+        imp = impressora_padrao()
     if imp is None:
         return {
             **base, 'resultado': 'sem_impressora_padrao',

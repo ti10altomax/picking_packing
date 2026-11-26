@@ -166,6 +166,18 @@ class Pedido(models.Model):
     embarque_motorista = models.CharField(max_length=120, blank=True)
     embarcado_em = models.DateTimeField(null=True, blank=True)   # saída do embarque (ou fechamento/geração)
 
+    # Em cotação de frete (2026-11-26): a nota já tem transportadora, mas ela vai mudar.
+    # Enquanto marcado, a etiqueta de volume não sai (bloqueio `em_cotacao`). Termina sozinho
+    # quando a transportadora fica diferente de `cotacao_codtra` (a que tinha na marcação) ou
+    # pelo botão. Regra em apps/pedidos/cotacao.py.
+    em_cotacao = models.BooleanField(default=False, db_index=True)
+    cotacao_em = models.DateTimeField(null=True, blank=True)
+    cotacao_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='cotacoes_marcadas',
+    )
+    cotacao_codtra = models.CharField(max_length=20, blank=True)
+
     # Senior — atualização pós-conferência (WS a definir)
     senior_atualizado_em = models.DateTimeField(null=True, blank=True)
     senior_tentativas = models.IntegerField(default=0)

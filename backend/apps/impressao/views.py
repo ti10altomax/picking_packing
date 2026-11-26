@@ -155,10 +155,14 @@ def imprimir(request, pk):
     # `na_fila` (agente USB) é sucesso do ponto de vista de quem clicou: o job está na fila
     # e o agente confirma depois (o toast já diz "na fila do agente").
     ok = reg.status in (ImpressaoEtiqueta.Status.OK, ImpressaoEtiqueta.Status.NA_FILA)
-    return Response(
-        {'resultado': reg.status if ok else 'erro', 'erro': reg.erro or None, 'impressao': _serializar_impressao(reg)},
-        status=http_status.HTTP_200_OK if ok else http_status.HTTP_502_BAD_GATEWAY,
-    )
+    corpo = {'resultado': reg.status if ok else 'erro', 'erro': reg.erro or None, 'impressao': _serializar_impressao(reg)}
+    # Impressora do conferente (2026-11-26): a primeira que ele escolhe fica sendo a dele —
+    # as próximas etiquetas saem nela sozinhas. Ele troca quando quiser na tela dele.
+    if (ok and impressora is not None and request.user.perfil == 'conferente'
+            and services.impressora_do_usuario(request.user) is None):
+        services.definir_impressora_usuario(request.user, impressora, por=request.user)
+        corpo['minha_impressora'] = {'id': impressora.id, 'nome': impressora.nome}
+    return Response(corpo, status=http_status.HTTP_200_OK if ok else http_status.HTTP_502_BAD_GATEWAY)
 
 
 # ---------------------------------------------------------------------------
@@ -218,7 +222,9 @@ def impressoras(request):
     """Impressoras ativas para o seletor (todos os perfis) + padrão + automática."""
     padrao = services.impressora_padrao()
     padrao_id = padrao.id if padrao else None
+    minha = services.impressora_do_usuario(request.user)
     return Response({
+        'minha': minha.id if minha else None,   # impressora do próprio usuário (2026-11-26)
         'impressoras': [
             _serializar_impressora(i, padrao_id)
             for i in Impressora.objects.filter(ativa=True).order_by('mesa', 'nome')
@@ -227,6 +233,87 @@ def impressoras(request):
         'automatica': services.impressao_automatica_ligada(),
         'exige_nf': services.etiqueta_exige_nf(),
     })
+
+
+# ---------------------------------------------------------------------------
+# Impressora de cada conferente (2026-11-26)
+# ---------------------------------------------------------------------------
+
+def _impressora_pedida(request):
+    """`impressora_id` do corpo → (Impressora|None, resposta de erro|None). Vazio/None = nenhuma."""
+    valor = request.data.get('impressora_id')
+    if valor in (None, '', 0, '0'):
+        return None, None
+    imp = Impressora.objects.filter(pk=valor, ativa=True).first() if str(valor).isdigit() else None
+    if imp is None:
+        return None, Response({'erro': 'impressora não encontrada ou inativa'}, status=http_status.HTTP_404_NOT_FOUND)
+    return imp, None
+
+
+@api_view(['GET', 'PUT'])
+def minha_impressora(request):
+    """A impressora em que as etiquetas do usuário saem sozinhas. PUT `{impressora_id}` troca;
+    `null` volta a perguntar a cada conferência."""
+    if request.method == 'PUT':
+        imp, err = _impressora_pedida(request)
+        if err:
+            return err
+        services.definir_impressora_usuario(request.user, imp, por=request.user)
+    minha = services.impressora_do_usuario(request.user)
+    return Response({'impressora': {'id': minha.id, 'nome': minha.nome} if minha else None})
+
+
+def _linha_conferente(u, prefs: dict) -> dict:
+    imp = prefs.get(u.id)
+    return {
+        'id': u.id, 'username': u.username,
+        'nome': (u.get_full_name() or '').strip(),
+        'impressora_id': imp.id if imp else None,
+        'impressora': imp.nome if imp else None,
+        'impressora_ativa': imp.ativa if imp else None,
+    }
+
+
+@api_view(['GET'])
+def conferentes_impressoras(request):
+    """Conferentes ativos e a impressora de cada um (Admin → Impressoras)."""
+    err = _exige(request, ('admin', 'supervisor_patio'))
+    if err:
+        return err
+    from apps.core.models import User
+    from .models import ImpressoraUsuario
+    usuarios = list(User.objects.filter(perfil='conferente', is_active=True).order_by('username'))
+    prefs = {p.usuario_id: p.impressora
+             for p in ImpressoraUsuario.objects.filter(usuario__in=usuarios).select_related('impressora')}
+    return Response({'conferentes': [_linha_conferente(u, prefs) for u in usuarios]})
+
+
+@api_view(['PUT'])
+def impressora_do_conferente(request, user_id):
+    err = _exige(request, ('admin', 'supervisor_patio'))
+    if err:
+        return err
+    from apps.core.models import User
+    usuario = get_object_or_404(User, pk=user_id, perfil='conferente')
+    imp, err = _impressora_pedida(request)
+    if err:
+        return err
+    services.definir_impressora_usuario(usuario, imp, por=request.user)
+    return Response(_linha_conferente(usuario, {usuario.id: imp} if imp else {}))
+
+
+@api_view(['POST'])
+def trocar_impressora_conferentes(request):
+    """Impressora parada: `{de, para}` passa todos os conferentes de uma para a outra."""
+    err = _exige(request, ('admin', 'supervisor_patio'))
+    if err:
+        return err
+    de = Impressora.objects.filter(pk=request.data.get('de')).first()
+    para = Impressora.objects.filter(pk=request.data.get('para'), ativa=True).first()
+    if de is None or para is None or de.id == para.id:
+        return Response({'erro': 'informe duas impressoras diferentes (a de destino ativa)'},
+                        status=http_status.HTTP_400_BAD_REQUEST)
+    return Response({'trocados': services.trocar_impressora_usuarios(de, para, por=request.user)})
 
 
 @api_view(['GET', 'PUT'])

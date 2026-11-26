@@ -1,5 +1,6 @@
 'use client'
 import { DocBadges } from '@/components/ui/DocBadges'
+import { CotacaoBotao, SeloCotacao } from '@/components/pedidos/CotacaoBotao'
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import {
@@ -7,6 +8,7 @@ import {
   type SequenciaResumo, type SequenciaPedido,
 } from '@/lib/api'
 import { useDialog } from '@/components/Dialog'
+import { ColarListaBotao, FaixaListaColada } from '@/components/pedidos/ListaNotas'
 import { useToast } from '@/components/Toast'
 
 type Conferente = { id: number; username: string; first_name: string; last_name: string }
@@ -55,6 +57,8 @@ export default function SequenciaDetalhePage() {
   // Nome livre da sequência (2026-11-17): edição inline no cabeçalho
   const [editandoNome, setEditandoNome] = useState(false)
   const [filtroStatus, setFiltroStatus] = useState('')
+  // Lista colada (2026-11-26): mostra só essas notas da sequência; null = sem filtro
+  const [listaColada, setListaColada] = useState<number[] | null>(null)
   const [busca, setBusca] = useState('')
   const [nome, setNome] = useState('')
   const toast = useToast()
@@ -173,6 +177,7 @@ export default function SequenciaDetalhePage() {
   for (const p of seq.pedidos) porStatus.set(p.status, (porStatus.get(p.status) ?? 0) + 1)
   const termo = semAcento(busca.trim())
   const visiveis = seq.pedidos.filter((p) => {
+    if (listaColada && !listaColada.includes(p.id)) return false
     if (filtroStatus && p.status !== filtroStatus) return false
     if (!termo) return true
     const alvo = semAcento(
@@ -180,7 +185,7 @@ export default function SequenciaDetalhePage() {
     )
     return alvo.includes(termo)
   })
-  const filtrando = !!filtroStatus || !!termo
+  const filtrando = !!filtroStatus || !!termo || !!listaColada
 
   return (
     <div className="p-4 pb-32">
@@ -233,6 +238,11 @@ export default function SequenciaDetalhePage() {
           >
             Relatório
           </button>
+          <ColarListaBotao
+            nomeTela={`Sequência ${seq.numero}`}
+            naTela={(d) => d.sequencia === seq.id}
+            onFiltrar={setListaColada}
+          />
           <button onClick={carregar} className="text-sm text-blue-600 dark:text-blue-400 min-h-[44px] px-2">
             Atualizar
           </button>
@@ -241,6 +251,8 @@ export default function SequenciaDetalhePage() {
       <p className="text-sm text-ink-muted mb-4">
         {seq.qtd_pedidos} pedido(s) · {seq.qtd_sem_conferente} sem conferente · {seq.qtd_pendentes} pendente(s) · {seq.qtd_finalizados} finalizado(s)
       </p>
+
+      <FaixaListaColada ids={listaColada} mostrando={visiveis.length} onLimpar={() => setListaColada(null)} />
 
       {seq.status !== 'concluida' && (
         <div className="bg-surface-card border border-surface-border rounded-xl p-3 mb-4 flex items-center gap-2 flex-wrap">
@@ -362,12 +374,25 @@ export default function SequenciaDetalhePage() {
                           ⚠ Nota já embarcada
                         </span>
                       )}
+                      {p.em_cotacao && <SeloCotacao />}
                     </div>
                     <p className="text-sm text-ink-muted truncate">{p.cliente || '—'}</p>
                     {p.transportadora && (
                       <p className="text-xs text-ink-subtle truncate">{p.transportadora}</p>
                     )}
                   </div>
+                  {/* Em cotação de frete (2026-11-26): marcar antes da conferência segura a etiqueta no fim */}
+                  {p.status !== 'cancelado' && p.status !== 'embarcado' && (
+                    <CotacaoBotao
+                      pedidoId={p.id}
+                      numero={p.numero_externo}
+                      emCotacao={!!p.em_cotacao}
+                      onMudou={(r) => setSeq((atual) => atual && {
+                        ...atual,
+                        pedidos: atual.pedidos.map((x) => (x.id === p.id ? { ...x, em_cotacao: r.em_cotacao } : x)),
+                      })}
+                    />
+                  )}
                   <div className="text-right shrink-0">
                     {p.conferente_username && (
                       <p className="text-xs font-medium text-ink">{p.conferente_username}</p>

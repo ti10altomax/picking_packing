@@ -18,6 +18,8 @@ export const supervisorConferidos: AjudaTela = {
     'Abra Gestão → Conferidos.',
     'Procure por número ou cliente no campo de busca.',
     'Use o filtro ao lado da busca: Todos, Com transportadora ou Sem transportadora. "Sem transportadora" mostra o que ainda não pode sair.',
+    'Para ver só o que ainda está sem etiqueta, toque em "Etiqueta não impressa". Os dois filtros funcionam juntos.',
+    'Para imprimir as etiquetas de vários documentos de uma vez: marque a caixa à esquerda de cada um (ou "Marcar todos para etiqueta"), escolha a impressora na barra que aparece embaixo e toque em "Imprimir etiquetas".',
     'Leia a linha do documento: data, conferente, separador, quantidade de itens e o tempo da conferência.',
     'Toque na linha para abrir os itens agrupados por volume: cada caixa ou fardo mostra o que foi dentro e quantas peças. Item dividido em mais de um volume aparece como "2 de 5". O que ficou em falta, cancelado ou sem lançamento fica no bloco "Fora de volume".',
     'Para imprimir a etiqueta de volume, toque em "Etiqueta", escolha a impressora e toque em "Imprimir". Se já foi impressa, o botão vira "Reimprimir" e mostra quando.',
@@ -28,6 +30,10 @@ export const supervisorConferidos: AjudaTela = {
     'Se a lista tiver mais documentos, toque em "Carregar mais".',
   ],
   elementos: [
+    {
+      nome: 'Colar lista',
+      descricao: 'Recebeu uma relação de notas? Toque em "Colar lista", cole os números (vírgula, espaço ou um por linha; 151281-151290 vale pelo intervalo) ou abra o .txt e toque em "Buscar". O sistema mostra quais estão nesta tela, quais estão em outra (com o botão "Ver") e quais não achou. "Mostrar N na tela" deixa a tela só com essas notas; a faixa azul "Mostrando só a lista colada" tem o botão "Limpar filtro" para voltar ao normal.',
+    },
     {
       nome: 'Relatório sem transportadora',
       descricao:
@@ -66,6 +72,26 @@ export const supervisorConferidos: AjudaTela = {
     {
       nome: 'Todos / Com transportadora / Sem transportadora',
       descricao: 'Filtro da lista. "Sem transportadora" junta os documentos que esperam o Senior; "Com transportadora" o que já pode ser etiquetado.',
+    },
+    {
+      nome: 'EM COTAÇÃO (azul-claro, no lugar do botão Etiqueta)',
+      descricao: 'A nota está em cotação de frete: a transportadora vai mudar e a etiqueta fica segura até lá. Sai sozinha quando a transportadora mudar; "Tirar de cotação", logo abaixo, libera na hora.',
+    },
+    {
+      nome: 'Em cotação / Tirar de cotação',
+      descricao: 'Use quando a nota foi faturada com uma transportadora que ainda vai mudar (o frete está em cotação). Marcada, a etiqueta de volume não sai e as telas mostram "EM COTAÇÃO". A nota sai de cotação sozinha quando a transportadora mudar (carta de correção ou troca no Senior); se a cotação terminar sem troca, toque em "Tirar de cotação".',
+    },
+    {
+      nome: 'Caixa de marcar (à esquerda do documento)',
+      descricao: 'Marca o documento para a impressão em massa. Fica apagada quando a etiqueta não pode sair (sem transportadora, sem NF ou volumes diferentes da nota). "Marcar todos para etiqueta", no alto da lista, marca todos os que podem.',
+    },
+    {
+      nome: 'Barra "N marcados para etiqueta"',
+      descricao: 'Aparece embaixo com pelo menos um documento marcado. Escolha a impressora e toque em "Imprimir etiquetas"; o sistema pede confirmação e avisa quantos já tinham etiqueta (serão reimpressos). Quem der erro continua marcado, com o motivo na mensagem. "Limpar" desmarca todos.',
+    },
+    {
+      nome: 'Etiqueta: todas / Etiqueta não impressa',
+      descricao: 'Filtro da lista. "Etiqueta não impressa" mostra só os documentos que ainda não tiveram etiqueta de volume impressa (os que têm o botão "Etiqueta", e não "Reimprimir").',
     },
     {
       nome: 'Histórico',

@@ -50,6 +50,8 @@ class CartaCorrecao(models.Model):
 
     modo = models.CharField(max_length=30, choices=Modo.choices)
     status = models.CharField(max_length=20, choices=Status.choices)
+    # Carta gerada sozinha pelo sistema (volumes, 2026-11-26 — automatica.py); `usuario` fica vazio.
+    automatica = models.BooleanField(default=False)
 
     # NF alvo: a própria, se o documento é NF; a vinculada (Pedido.nf_*), se é pedido faturado.
     # Fica na carta porque é o que foi mandado ao Senior (2026-10-22).

@@ -90,6 +90,11 @@ def pode_corrigir(user) -> bool:
     return getattr(user, 'perfil', None) in perfis_cce()
 
 
+def _automatica_configurada() -> bool:
+    from . import automatica   # lazy: automatica importa este módulo
+    return automatica.configurada()
+
+
 def configuracao() -> dict:
     from django.conf import settings
     return {
@@ -97,6 +102,9 @@ def configuracao() -> dict:
         'tipger': tipger_atual(),
         'texto': texto_modo_atual(),
         'perfis': list(perfis_cce()),   # só leitura no painel; muda no Django Admin
+        # carta dos volumes gerada sozinha (2026-11-26) — automatica.py
+        'volumes_automatica': _automatica_configurada(),
+        'volumes_automatica_desde': Configuracao.obter(Configuracao.Chave.CCE_VOLUMES_AUTOMATICA_DESDE) or None,
         'dry_run': senior.dry_run(),
         'wsdl_carta_configurado': bool(getattr(settings, 'SENIOR_WSDL_CARTA_CORRECAO', '')),
         'wsdl_documento_configurado': bool(getattr(settings, 'SENIOR_WSDL_DOCUMENTO_FISCAL', '')),
@@ -574,7 +582,10 @@ def _resolver_transportadora(codtra: str) -> dict:
 # Execução
 # ---------------------------------------------------------------------------
 
-def executar(pedido: Pedido, usuario, codtra_novo: str, frete_novo: str, volumes_novo, complemento: str) -> CartaCorrecao:
+def executar(pedido: Pedido, usuario, codtra_novo: str, frete_novo: str, volumes_novo, complemento: str,
+             automatica: bool = False) -> CartaCorrecao:
+    # `automatica` (2026-11-26): carta dos volumes gerada pelo sistema (automatica.py) — sem
+    # usuário e sempre com o texto montado, mesmo se o modo de texto for "livre".
     modo = modo_atual()
     if modo == 'desligado':
         raise ErroCarta('desligado', 'Carta de correção desligada na configuração (Gestão → Cartas de correção).', http=409)
@@ -587,7 +598,7 @@ def executar(pedido: Pedido, usuario, codtra_novo: str, frete_novo: str, volumes
     if frete_novo and frete_novo not in ('C', 'F'):
         raise ErroCarta('frete_invalido', 'Frete deve ser C (entrega) ou F (retira).')
     complemento = (complemento or '').strip()
-    livre = texto_modo_atual() == 'livre'
+    livre = texto_modo_atual() == 'livre' and not automatica
     if livre and not complemento:
         raise ErroCarta('texto_obrigatorio', 'Texto da carta em modo livre: escreva o texto antes de gravar.')
     nova = _resolver_transportadora(codtra_novo) if str(codtra_novo or '').strip() else None
@@ -638,7 +649,7 @@ def executar(pedido: Pedido, usuario, codtra_novo: str, frete_novo: str, volumes
         payload['qtdEmb'] = str(vol_novo)
 
     carta = CartaCorrecao(
-        pedido=pedido, usuario=usuario,
+        pedido=pedido, usuario=usuario, automatica=automatica,
         modo=CartaCorrecao.Modo.DRY_RUN if senior.dry_run() else modo,
         status=CartaCorrecao.Status.SIMULADA,
         nf_codfil=nf_codfil, nf_codsnf=nf_codsnf, nf_numero=nf_numero,
@@ -1085,6 +1096,7 @@ def _log(pedido, usuario, carta: CartaCorrecao, acao='carta_correcao'):
         'volumes_de': carta.volumes_anterior, 'volumes_para': carta.volumes_novo,
         'erro': carta.erro[:300] if carta.erro else '',
         'protocolo': carta.protocolo,
+        **({'automatica': True} if carta.automatica else {}),
     })
 
 
@@ -1093,6 +1105,7 @@ def serializar(c: CartaCorrecao) -> dict:
         'id': c.id,
         'criado_em': c.criado_em,
         'usuario': c.usuario.username if c.usuario else None,
+        'automatica': c.automatica,
         'pedido_id': c.pedido_id,
         'numero_externo': c.pedido.numero_externo,
         'tipo': c.pedido.tipo,

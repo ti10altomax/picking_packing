@@ -5,10 +5,14 @@ import { fechamentosApi, pedidosApi, type Fechamento } from '@/lib/api'
 import { useDialog } from '@/components/Dialog'
 import { MoverLancamentos } from '@/components/pedidos/MoverLancamentos'
 import type { ItemDoc, VolumeDoc } from '@/components/pedidos/ItensPorVolume'
+import { ColarListaBotao, FaixaListaColada } from '@/components/pedidos/ListaNotas'
 
 export default function FechamentosPage() {
   const dialog = useDialog()
-  const [lista, setLista] = useState<Fechamento[]>([])
+  // Lista colada (2026-11-26): a tela mostra só essas notas; null = sem filtro
+  const [listaTodos, setLista] = useState<Fechamento[]>([])
+  const [listaColada, setListaColada] = useState<number[] | null>(null)
+  const lista = listaColada ? listaTodos.filter((p) => listaColada.includes(p.id)) : listaTodos
   const [carregando, setCarregando] = useState(true)
   const [agindo, setAgindo] = useState<number | null>(null)
   // Mover itens entre volumes antes de fechar (2026-11-19): o conferente esqueceu de abrir volume
@@ -67,10 +71,15 @@ export default function FechamentosPage() {
             Pedidos concluídos com <strong>sobra</strong> aguardando o fechamento do Sup. Pátio
           </p>
         </div>
-        <button onClick={carregar} className="text-sm text-blue-600 dark:text-blue-400 min-h-[44px] px-2">
-          Atualizar
-        </button>
+        <div className="flex items-center gap-1 shrink-0">
+          <ColarListaBotao nomeTela="Fechamentos" naTela={(d) => d.lista === 'fechamentos'} onFiltrar={setListaColada} />
+          <button onClick={carregar} className="text-sm text-blue-600 dark:text-blue-400 min-h-[44px] px-2">
+            Atualizar
+          </button>
+        </div>
       </div>
+
+      <FaixaListaColada ids={listaColada} mostrando={carregando ? undefined : lista.length} onLimpar={() => setListaColada(null)} />
 
       {carregando ? (
         <p className="text-ink-muted">Carregando…</p>
